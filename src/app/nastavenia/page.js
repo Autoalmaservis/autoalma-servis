@@ -7,6 +7,7 @@ export default function NastaveniaPage() {
   const [employees, setEmployees] = useState([]);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('mechanik');
+  const [newColor, setNewColor] = useState('#dc2626'); // Predvolená červená (AutoAlma farba)
   
   // Stavy pre pracovnú dobu
   const [workStart, setWorkStart] = useState('07:00');
@@ -42,11 +43,21 @@ export default function NastaveniaPage() {
   // 2. Logika pre zamestnancov
   const addEmployee = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.from('employees').insert([{ name: newName, role: newRole }]);
+    // Pridávame aj zvolenú farbu (newColor)
+    const { error } = await supabase.from('employees').insert([
+      { name: newName, role: newRole, color: newColor, active: true }
+    ]);
     if (!error) {
       setNewName('');
+      setNewColor('#dc2626'); // Reset na základnú červenú
       fetchData();
     }
+  };
+
+  // Nová funkcia: Zmena farby už existujúceho mechanika
+  const updateEmployeeColor = async (id, color) => {
+    await supabase.from('employees').update({ color }).eq('id', id);
+    fetchData();
   };
 
   const deleteEmployee = async (id) => {
@@ -86,7 +97,7 @@ export default function NastaveniaPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         
-        {/* SEKCIJA 1: PRACOVNÁ DOBA (To nové, čo si chcel) */}
+        {/* SEKCIJA 1: PRACOVNÁ DOBA */}
         <section className="space-y-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">🕒</span>
@@ -94,7 +105,7 @@ export default function NastaveniaPage() {
           </div>
           
           <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[2.5rem] shadow-2xl">
-            <p className="text-zinc-400 text-xs mb-6 italic">Nastavte rozsah hodín, ktoré uvidíte v kalendári. Kalendár sa automaticky roztiahne na celú výšku podľa tohto času.</p>
+            <p className="text-zinc-400 text-xs mb-6 italic">Nastavte rozsah hodín, ktoré uvidíte v kalendári.</p>
             
             <div className="grid grid-cols-2 gap-6 mb-8">
               <div>
@@ -103,7 +114,7 @@ export default function NastaveniaPage() {
                   type="time" 
                   value={workStart} 
                   onChange={(e) => setWorkStart(e.target.value)}
-                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xl font-black text-white focus:border-red-600 outline-none transition-all"
+                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xl font-black text-white focus:border-red-600 outline-none"
                 />
               </div>
               <div>
@@ -112,7 +123,7 @@ export default function NastaveniaPage() {
                   type="time" 
                   value={workEnd} 
                   onChange={(e) => setWorkEnd(e.target.value)}
-                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xl font-black text-white focus:border-red-600 outline-none transition-all"
+                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xl font-black text-white focus:border-red-600 outline-none"
                 />
               </div>
             </div>
@@ -133,14 +144,24 @@ export default function NastaveniaPage() {
             <h2 className="text-xl font-black uppercase tracking-tight text-red-500">Tím a mechanici</h2>
           </div>
 
-          {/* Form na pridanie */}
-          <form onSubmit={addEmployee} className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-[2rem] mb-6">
-            <div className="flex gap-3">
+          {/* Form na pridanie s výberom farby */}
+          <form onSubmit={addEmployee} className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-[2rem] mb-6 shadow-xl">
+            <div className="flex flex-wrap gap-3">
               <input 
                 required type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-                placeholder="Meno nového kolegu"
-                className="flex-grow bg-black border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600"
+                placeholder="Meno"
+                className="flex-grow bg-black border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600 min-w-[150px]"
               />
+              
+              {/* Color Picker pre nového mechanika */}
+              <input 
+                type="color" 
+                value={newColor} 
+                onChange={(e) => setNewColor(e.target.value)}
+                className="w-12 h-12 bg-black border border-zinc-800 p-1 rounded-xl cursor-pointer"
+                title="Vyberte farbu"
+              />
+
               <select 
                 value={newRole} onChange={(e) => setNewRole(e.target.value)}
                 className="bg-black border border-zinc-800 p-3 rounded-xl text-white outline-none"
@@ -149,7 +170,7 @@ export default function NastaveniaPage() {
                 <option value="diagnostik">Diagnostik</option>
                 <option value="prijem">Príjem</option>
               </select>
-              <button type="submit" className="bg-red-600 px-6 rounded-xl font-black">+</button>
+              <button type="submit" className="bg-red-600 px-6 rounded-xl font-black hover:bg-red-700 transition-colors">+</button>
             </div>
           </form>
 
@@ -158,14 +179,22 @@ export default function NastaveniaPage() {
             {employees.map((emp) => (
               <div key={emp.id} className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-2xl group transition-all hover:border-zinc-700">
                 <div className="flex items-center gap-4">
-                  <div className={`w-2 h-2 rounded-full ${emp.active ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-zinc-700'}`}></div>
+                  {/* Farebný Picker pre existujúceho mechanika - zmení farbu hneď po výbere */}
+                  <div className="relative">
+                    <input 
+                      type="color" 
+                      value={emp.color || '#dc2626'} 
+                      onChange={(e) => updateEmployeeColor(emp.id, e.target.value)}
+                      className="w-10 h-10 bg-transparent border-none cursor-pointer rounded-full overflow-hidden border-2 border-zinc-800"
+                    />
+                  </div>
                   <div>
                     <p className="font-bold uppercase text-sm tracking-tight">{emp.name}</p>
                     <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{emp.role}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => toggleActive(emp.id, emp.active)} className="text-[9px] font-black uppercase bg-black px-3 py-1.5 rounded-lg hover:bg-zinc-800 border border-zinc-800 transition-all">
+                  <button onClick={() => toggleActive(emp.id, emp.active)} className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border border-zinc-800 transition-all ${emp.active ? 'bg-green-600/10 text-green-500 border-green-500/20' : 'bg-black text-zinc-600'}`}>
                     {emp.active ? 'Deaktivovať' : 'Aktivovať'}
                   </button>
                   <button onClick={() => deleteEmployee(emp.id)} className="text-zinc-700 hover:text-red-500 transition-colors px-2">
