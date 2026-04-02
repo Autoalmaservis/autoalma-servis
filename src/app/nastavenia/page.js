@@ -199,7 +199,7 @@ export default function NastaveniaPage() {
                   </button>
                   <button onClick={() => deleteEmployee(emp.id)} className="text-zinc-700 hover:text-red-500 transition-colors px-2">
                     🗑️
-                  </button>
+                  </button>test
                 </div>
               </div>
             ))}
