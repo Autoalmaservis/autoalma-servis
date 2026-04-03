@@ -38,6 +38,7 @@ export default function RootLayout({ children }) {
             <MenuLink href="/" icon="🏠" label="Prehľad" collapsed={isCollapsed} />
             <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} />
             <MenuLink href="/kalendar" icon="📅" label="Kalendár / Plán" collapsed={isCollapsed} />
+            <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} />
             
             <div className={`pt-4 mt-4 border-t border-zinc-900`}>
               {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2">Správa</p>}

@@ -5,12 +5,12 @@ import daygridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { supabase } from '../lib/supabase';
+import Link from 'next/link';
 
 export default function KalendarPage() {
   const [events, setEvents] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
   const [editingEventId, setEditingEventId] = useState(null);
 
   const [allClients, setAllClients] = useState([]); 
@@ -31,7 +31,7 @@ export default function KalendarPage() {
   const [plannedWork, setPlannedWork] = useState('');
 
   const [isKnown, setIsKnown] = useState(false);
-  const [carData, setCarData] = useState(null);
+  const [carData, setCarData] = useState(null); // Tu budeme držať technické info z garáže
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -53,7 +53,6 @@ export default function KalendarPage() {
       setAllClients(uniqueNames.sort());
     }
 
-    // ÚPRAVA: Teraz ťaháme aj farbu (color) zo spojenej tabuľky employees
     const { data: evData } = await supabase.from('calendar_events').select('*, employees(name, color)');
     
     const formattedEvents = (evData || []).map(ev => {
@@ -66,7 +65,6 @@ export default function KalendarPage() {
         title: displayTitle,
         start: ev.start_datetime,
         end: ev.end_datetime,
-        // ÚPRAVA: Použijeme farbu mechanika z databázy, ak ju nemá, dáme AutoAlma červenú
         backgroundColor: ev.employees?.color || '#dc2626',
         borderColor: 'transparent',
         extendedProps: { 
@@ -85,6 +83,27 @@ export default function KalendarPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // FUNKCIA NA NAČÍTANIE TECHNICKÝCH DÁT Z GARÁŽE (JOB_TICKETS)
+  const loadCarDetails = async (spz) => {
+    if (!spz || spz.length < 5) return;
+    const { data } = await supabase
+      .from('job_tickets')
+      .select('*')
+      .eq('plate_number', spz.toUpperCase())
+      .neq('car_brand_model', null) // Chceme tie záznamy, kde sú technické dáta
+      .limit(1)
+      .single();
+
+    if (data) {
+      setCarData(data);
+      setIsKnown(true);
+      setSelectedClientName(data.customer_name);
+    } else {
+      setCarData(null);
+      setIsKnown(false);
+    }
+  };
 
   const handleEventChange = async (changeInfo) => {
     const { event } = changeInfo;
@@ -107,7 +126,6 @@ export default function KalendarPage() {
     const props = ev.extendedProps;
 
     setEditingEventId(ev.id);
-    
     setTitle(props.pureTitle || ev.title);
     setSelectedDate(ev.startStr.split('T')[0]);
     setStartTime(ev.startStr.split('T')[1].substring(0, 5));
@@ -118,7 +136,14 @@ export default function KalendarPage() {
     setIssueDescription(props.issueDescription || '');
     setPlannedWork(props.plannedWork || '');
     
+    // Hneď načítame technické info o aute ak máme ŠPZ
+    if (props.plateNumber) loadCarDetails(props.plateNumber);
+    
     setIsModalOpen(true);
+  };
+
+  const handlePlateBlur = async (spz) => {
+    loadCarDetails(spz);
   };
 
   const handleClientChange = async (meno) => {
@@ -140,25 +165,6 @@ export default function KalendarPage() {
     setIsKnown(true);
   };
 
-  const handlePlateBlur = async (spz) => {
-    if (spz.length < 5) return;
-    const { data } = await supabase
-      .from('job_tickets')
-      .select('*')
-      .eq('plate_number', spz.toUpperCase())
-      .limit(1);
-
-    if (data && data.length > 0) {
-      setIsKnown(true);
-      setCarData(data[0]);
-      setSelectedClientName(data[0].customer_name);
-      setTitle(`${data[0].customer_name} - ${data[0].car_brand_model || data[0].car_model}`);
-    } else {
-      setIsKnown(false);
-      setCarData(null);
-    }
-  };
-
   const handleDateClick = (arg) => {
     setEditingEventId(null);
     const datePart = arg.dateStr.split('T')[0];
@@ -171,18 +177,14 @@ export default function KalendarPage() {
     setSelectedClientName('');
     setIssueDescription('');
     setPlannedWork('');
+    setCarData(null);
     
     setIsModalOpen(true);
   };
 
   const deleteReservation = async () => {
     if (!confirm("Naozaj chcete zmazať túto rezerváciu?")) return;
-    
-    const { error } = await supabase
-      .from('calendar_events')
-      .delete()
-      .eq('id', editingEventId);
-
+    const { error } = await supabase.from('calendar_events').delete().eq('id', editingEventId);
     if (!error) {
       setIsModalOpen(false);
       setEditingEventId(null);
@@ -208,27 +210,16 @@ export default function KalendarPage() {
 
     let error;
     if (editingEventId) {
-      const result = await supabase
-        .from('calendar_events')
-        .update(reservationData)
-        .eq('id', editingEventId);
+      const result = await supabase.from('calendar_events').update(reservationData).eq('id', editingEventId);
       error = result.error;
     } else {
-      const result = await supabase
-        .from('calendar_events')
-        .insert([reservationData]);
+      const result = await supabase.from('calendar_events').insert([reservationData]);
       error = result.error;
     }
     
     if (!error) {
       setIsModalOpen(false);
       setEditingEventId(null);
-      setPlate('');
-      setTitle('');
-      setSelectedClientName('');
-      setIssueDescription(''); 
-      setPlannedWork('');      
-      setClientCars([]);
       fetchData();
     } else {
         alert("Chyba pri ukladaní: " + error.message);
@@ -246,11 +237,7 @@ export default function KalendarPage() {
         .fc-button-active { background: #dc2626 !important; border-color: #dc2626 !important; }
         .fc-toolbar-title { font-weight: 900 !important; text-transform: uppercase; font-size: 1.1rem !important; font-style: italic; letter-spacing: -0.025em; }
         .fc-view-harness { background: #09090b; border-radius: 2rem; overflow: hidden; border: 1px solid #18181b; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
-        .fc-timegrid-slot { height: 4em !important; } 
-        .fc-event { border-radius: 12px !important; padding: 6px !important; font-weight: 700 !important; font-size: 0.75rem !important; cursor: pointer; transition: transform 0.1s; border: none !important; }
-        .fc-event:active { transform: scale(0.98); }
-        .fc-v-event { border-left: 5px solid rgba(255,255,255,0.3) !important; }
-        .fc-now-indicator { border-color: #dc2626 !important; }
+        .fc-event { border-radius: 12px !important; padding: 6px !important; font-weight: 700 !important; font-size: 0.75rem !important; cursor: pointer; border: none !important; }
       `}</style>
       
       <div className="pb-6 flex justify-between items-end bg-black">
@@ -260,166 +247,182 @@ export default function KalendarPage() {
           </h1>
           <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em] mt-2">AutoAlma Capacity Management</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest bg-zinc-900/50 px-5 py-2.5 rounded-2xl border border-zinc-800 flex items-center gap-2">
-            <span className="w-2 h-2 bg-zinc-600 rounded-full animate-pulse"></span>
-            Režim: <span className="text-white">{workStart} — {workEnd}</span>
-          </div>
-        </div>
       </div>
 
       <div className="flex-grow relative bg-black mb-6">
         <FullCalendar
           plugins={[daygridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
-          headerToolbar={{
-            left: 'prev,next today',
-            center: 'title',
-            right: 'timeGridDay,timeGridWeek,dayGridMonth'
-          }}
-          buttonText={{ today: 'Dnes', month: 'Mesiac', week: 'Týždeň', day: 'Deň' }}
+          headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek,dayGridMonth' }}
           locale="sk"
-          firstDay={1}
           events={events}
           dateClick={handleDateClick}
-          editable={true}
-          eventStartEditable={true}
-          eventDurationEditable={true}
           eventDrop={handleEventChange}
           eventResize={handleEventChange}
           eventClick={handleEventClick}
-          height="100%"
-          expandRows={true}
-          allDaySlot={false}
           slotMinTime={`${workStart}:00`}
           slotMaxTime={`${workEnd}:00`}
-          nowIndicator={true}
+          height="100%"
         />
       </div>
 
+      {/* MODAL OKNO - ZVÄČŠENÉ NA CELÚ OBRAZOVKU */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-10 rounded-[3rem] w-full max-w-lg shadow-2xl overflow-y-auto max-h-[95vh]">
-            <div className="flex justify-between items-start mb-8">
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col">
+          {/* HLAVIČKA MODALU */}
+          <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950">
+            <div>
               <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">
-                {editingEventId ? 'Upraviť rezerváciu' : 'Nová rezervácia'}
+                {editingEventId ? 'Detail Rezervácie' : 'Nová Rezervácia'}
               </h2>
-              <button onClick={() => { setIsModalOpen(false); setSelectedClientName(''); setClientCars([]); setEditingEventId(null); }} className="text-zinc-500 hover:text-white text-2xl transition-colors">✕</button>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mt-1">
+                {plate || 'Zadajte ŠPZ pre technické detaily'}
+              </p>
             </div>
+            <button 
+              onClick={() => { setIsModalOpen(false); setEditingEventId(null); setCarData(null); }} 
+              className="bg-zinc-900 hover:bg-white hover:text-black p-4 rounded-full transition-all"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="flex-grow overflow-y-auto grid grid-cols-1 lg:grid-cols-2">
             
-            <form onSubmit={saveReservation} className="space-y-6">
-              {!editingEventId && (
+            {/* ĽAVÁ STRANA: FORMULÁR */}
+            <form onSubmit={saveReservation} className="p-8 md:p-12 space-y-8 border-r border-zinc-900">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-[10px] font-black text-zinc-500 uppercase mb-2 ml-1 tracking-[0.2em]">Rýchly výber podľa klienta</label>
+                  <label className="block text-[10px] font-black text-zinc-500 uppercase mb-2 ml-1 tracking-widest">ŠPZ Vozidla</label>
+                  <input 
+                    required 
+                    type="text" 
+                    value={plate} 
+                    onChange={(e) => setPlate(e.target.value.toUpperCase())}
+                    onBlur={(e) => handlePlateBlur(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white font-black text-3xl tracking-widest focus:border-red-600 outline-none transition-all" 
+                    placeholder="SPZ..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Pridelený mechanik</label>
                   <select 
-                    value={selectedClientName}
-                    onChange={(e) => handleClientChange(e.target.value)}
-                    className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-red-600 appearance-none cursor-pointer"
+                    required 
+                    value={selectedEmployee} 
+                    onChange={(e) => setSelectedEmployee(e.target.value)} 
+                    className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none cursor-pointer appearance-none focus:border-red-600"
                   >
-                    <option value="">-- Vyhladať v databáze --</option>
-                    {allClients.map(name => (
-                      <option key={name} value={name}>{name.toUpperCase()}</option>
+                    <option value="">-- Vyberte kolegu --</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>
                     ))}
                   </select>
                 </div>
-              )}
+              </div>
 
-              {clientCars.length > 0 && !editingEventId && (
-                <div className="p-4 bg-zinc-800/30 border border-zinc-700 rounded-2xl animate-in fade-in zoom-in duration-300">
-                  <p className="text-[10px] font-black text-zinc-500 uppercase mb-3 text-center tracking-widest">Vozidlá v garáži klienta:</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {clientCars.map(car => (
-                      <button 
-                        key={car.id} 
-                        type="button"
-                        onClick={() => handleCarSelect(car)}
-                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border ${plate === car.plate_number ? 'bg-red-600 border-red-600 text-white' : 'bg-black border-zinc-800 text-zinc-400 hover:border-zinc-500'}`}
-                      >
-                        {car.plate_number} • {car.car_brand_model}
-                      </button>
-                    ))}
-                  </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Čas príchodu</label>
+                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white font-bold outline-none focus:border-red-600" />
                 </div>
-              )}
-
-              <hr className="border-zinc-800 my-4" />
-
-              <div>
-                <label className="block text-[10px] font-black text-zinc-500 uppercase mb-2 ml-1 tracking-[0.2em]">ŠPZ Vozidla</label>
-                <input 
-                  required 
-                  type="text" 
-                  value={plate} 
-                  onChange={(e) => setPlate(e.target.value.toUpperCase())}
-                  onBlur={(e) => handlePlateBlur(e.target.value)}
-                  className={`w-full bg-black border ${isKnown ? 'border-green-600' : 'border-zinc-800'} p-5 rounded-2xl text-white font-black text-2xl tracking-widest focus:border-red-600 outline-none transition-all`} 
-                  placeholder="SPZ..."
-                />
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Predpokladaný koniec</label>
+                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white font-bold outline-none focus:border-red-600" />
+                </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Popis závady / nahlásený problém</label>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Popis závady (čo hlási zákazník)</label>
                   <textarea 
                     value={issueDescription}
                     onChange={(e) => setIssueDescription(e.target.value)}
-                    className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white text-sm outline-none focus:border-red-600 h-20 resize-none"
-                    placeholder="Čo hlási zákazník?"
+                    className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-red-600 h-24 resize-none"
+                    placeholder="Opíšte problém..."
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Plánované úkony mechanika</label>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Interný plán prác</label>
                   <textarea 
                     value={plannedWork}
                     onChange={(e) => setPlannedWork(e.target.value)}
-                    className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white text-sm outline-none focus:border-red-600 h-20 resize-none"
-                    placeholder="Čo sa bude na aute robiť?"
+                    className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-blue-600 h-24 resize-none"
+                    placeholder="Čo presne budeme na aute robiť?"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Čas príchodu</label>
-                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Predpokladaný koniec</label>
-                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Zobrazenie v kalendári</label>
-                <input required type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Pridelený mechanik</label>
-                <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none cursor-pointer appearance-none">
-                  <option value="">-- Vyberte kolegu --</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-3 pt-4">
-                <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-5 rounded-3xl shadow-xl shadow-red-600/20 uppercase text-xs tracking-[0.3em] transition-all">
-                  {editingEventId ? 'Uložiť zmeny' : 'Potvrdiť rezerváciu'}
-                </button>
-                
+              <div className="flex flex-col gap-4 pt-4">
                 {editingEventId && (
-                  <button 
-                    type="button"
-                    onClick={deleteReservation}
-                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold py-4 rounded-3xl uppercase text-[9px] tracking-[0.3em] transition-all border border-zinc-700"
+                  <Link 
+                    href={{ pathname: '/prijem', query: { klient: selectedClientName, spz: plate, popis: issueDescription } }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-3xl uppercase text-xs tracking-[0.3em] transition-all text-center shadow-lg"
                   >
-                    Zmazať rezerváciu
+                    📋 Vytvoriť zákazkový list
+                  </Link>
+                )}
+                <button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-5 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl shadow-red-600/20 transition-all">
+                  {editingEventId ? 'Uložiť zmeny rezervácie' : 'Potvrdiť rezerváciu'}
+                </button>
+                {editingEventId && (
+                  <button type="button" onClick={deleteReservation} className="text-zinc-600 hover:text-red-500 font-bold uppercase text-[9px] tracking-widest transition-all">
+                    Odstrániť tento záznam
                   </button>
                 )}
               </div>
             </form>
+
+            {/* PRAVÁ STRANA: INFORMÁCIE Z GARÁŽE */}
+            <div className="bg-zinc-950 p-8 md:p-12 space-y-10">
+              <h3 className="text-sm font-black uppercase text-zinc-600 tracking-[0.4em] border-b border-zinc-900 pb-4">Technická vizitka z garáže</h3>
+              
+              {carData ? (
+                <div className="space-y-12 animate-in fade-in slide-in-from-right duration-500">
+                  {/* AUTO INFO */}
+                  <div className="bg-zinc-900/40 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-red-600/5 rounded-full -mr-16 -mt-16 blur-3xl transition-all group-hover:bg-red-600/10"></div>
+                    <span className="bg-white text-black px-4 py-1.5 rounded-lg font-black text-lg tracking-widest mb-4 inline-block shadow-xl">{carData.plate_number}</span>
+                    <h4 className="text-4xl font-black uppercase italic mb-8">{carData.car_brand_model}</h4>
+                    
+                    <div className="grid grid-cols-2 gap-y-8 gap-x-12">
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">VIN Číslo</p>
+                        <p className="font-mono text-sm text-zinc-300 tracking-tighter">{carData.vin_number || 'Nezadané'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Rok výroby</p>
+                        <p className="text-sm font-bold text-white italic">{carData.year_produced || '---'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Špecifikácia motora</p>
+                        <p className="text-sm font-bold text-white">{carData.engine_volume} / {carData.engine_power} kW</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Palivo</p>
+                        <p className="text-sm font-bold text-white uppercase italic">{carData.fuel_type || '---'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MAJITEĽ INFO */}
+                  <div className="border-l-2 border-red-600 pl-8 space-y-4">
+                    <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Registrovaný majiteľ</p>
+                    <div>
+                      <p className="text-2xl font-black uppercase italic text-white leading-none">{carData.customer_name}</p>
+                      <p className="text-zinc-500 font-bold mt-2">{carData.customer_phone || 'Telefón chýba'}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12">
+                  <div className="text-5xl mb-6 opacity-10">🚗</div>
+                  <p className="uppercase font-black tracking-[0.3em] text-xs max-w-xs leading-loose">
+                    Zadajte platnú ŠPZ vľavo pre načítanie technickej karty vozidla z databázy garáže.
+                  </p>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       )}
