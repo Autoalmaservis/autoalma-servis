@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/app/lib/supabase';
 import { useParams } from 'next/navigation';
 
 export default function HistoriaVozidla() {

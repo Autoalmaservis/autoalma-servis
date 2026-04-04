@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase } from '@/app/lib/supabase';
 import Link from 'next/link';
 
 export default function Dashboard() {

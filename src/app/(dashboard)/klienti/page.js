@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/app/lib/supabase';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 
@@ -12,6 +12,7 @@ export default function KlientiPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [originalName, setOriginalName] = useState('');
 
+  const [confirmDeleteName, setConfirmDeleteName] = useState(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isCarModalOpen, setIsCarModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -29,9 +30,13 @@ export default function KlientiPage() {
 
   const fetchKlienti = async () => {
     setLoading(true);
-    const { data } = await supabase.from('job_tickets').select('*').order('customer_name');
-    if (data) {
-      const unique = data.reduce((acc, current) => {
+    const { data: ticketsData } = await supabase.from('job_tickets').select('*').order('customer_name');
+    const { data: webProfiles } = await supabase.from('user_profiles').select('*');
+
+    let combined = [];
+
+    if (ticketsData) {
+      combined = ticketsData.reduce((acc, current) => {
         const x = acc.find(item => item.customer_name === current.customer_name);
         if (!x) {
           return acc.concat([{
@@ -49,17 +54,136 @@ export default function KlientiPage() {
           return acc;
         }
       }, []);
-      setKlienti(unique);
     }
+
+    if (webProfiles) {
+      webProfiles.forEach(profile => {
+        const nameToLow = (profile.full_name || '').toLowerCase();
+        const exists = combined.find(c => (c.customer_name || '').toLowerCase() === nameToLow);
+        if (!exists) {
+          combined.push({
+            customer_name: profile.full_name || 'Registrovaný cez web',
+            customer_phone: profile.phone || '',
+            customer_email: profile.email || '',
+            client_type: 'Osoba',
+            all_plates: [],
+            all_vins: [],
+            is_web_only: true
+          });
+        }
+      });
+    }
+
+    setKlienti(combined.sort((a, b) => a.customer_name.localeCompare(b.customer_name)));
     setLoading(false);
   };
 
   const nacitajVozidla = async (meno) => {
     setSelectedKlient(meno);
-    const { data } = await supabase.from('job_tickets').select('*').eq('customer_name', meno).neq('plate_number', 'NOVÝ-KLIENT');
-    if (data) {
-      const uniqueVozidla = Array.from(new Set(data.map(a => a.plate_number))).map(plate => data.find(a => a.plate_number === plate));
-      setVozidla(uniqueVozidla);
+    const { data: ticketCars } = await supabase
+      .from('job_tickets')
+      .select('*, job_items(unit_price, quantity)')
+      .eq('customer_name', meno)
+      .neq('plate_number', 'NOVÝ-KLIENT')
+      .order('created_at', { ascending: false });
+
+    const { data: webCars } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('owner_name', meno);
+
+    let finalVehicles = [];
+
+    if (ticketCars) {
+      const uniquePlates = Array.from(new Set(ticketCars.map(a => a.plate_number)));
+      finalVehicles = uniquePlates.map(plate => {
+        const history = ticketCars.filter(d => d.plate_number === plate).map(h => {
+           const subtotal = h.job_items?.reduce((acc, item) => acc + (item.unit_price * item.quantity), 0) || 0;
+           return { ...h, total_price: subtotal * 1.23 };
+        });
+        return { ...history[0], full_history: history };
+      });
+    }
+
+    if (webCars) {
+      webCars.forEach(wc => {
+        const plateToLow = (wc.license_plate || '').toLowerCase();
+        const exists = finalVehicles.find(fv => (fv.plate_number || '').toLowerCase() === plateToLow);
+        if (!exists) {
+          finalVehicles.push({
+            id: wc.id,
+            plate_number: wc.license_plate,
+            car_brand_model: wc.brand_model,
+            vin_number: wc.vin,
+            year_produced: wc.year || '',
+            full_history: []
+          });
+        }
+      });
+    }
+    setVozidla(finalVehicles);
+  };
+
+  // --- LOGIKA BEZPEČNÉHO MAZANIA KLIENTA ---
+  const handleDeleteKlient = async (klient) => {
+    console.log("Pokus o zmazanie klienta:", klient.customer_name);
+    if (confirmDeleteName !== klient.customer_name) {
+      setConfirmDeleteName(klient.customer_name);
+      return;
+    }
+
+    try {
+      // 1. Kontrola vozidiel v tabuľke vehicles
+      const { data: vCount } = await supabase.from('vehicles').select('id').eq('owner_name', klient.customer_name).limit(1);
+      // 2. Kontrola histórie v job_tickets (okrem dočasného riadku NOVÝ-KLIENT)
+      const { data: jCount } = await supabase.from('job_tickets').select('id').eq('customer_name', klient.customer_name).neq('plate_number', 'NOVÝ-KLIENT').limit(1);
+
+      if ((vCount && vCount.length > 0) || (jCount && jCount.length > 0)) {
+        alert(`KLIENTA NIE JE MOŽNÉ VYMAZAŤ: ${klient.customer_name} má v systéme stále priradené vozidlá alebo servisnú históriu. Najprv vymažte jeho autá.`);
+        setConfirmDeleteName(null);
+        return;
+      }
+
+      // Ak je systém "čistý", vymažeme zvyšné systémové záznamy (napr. NOVÝ-KLIENT riadok a profil)
+      await supabase.from('job_tickets').delete().eq('customer_name', klient.customer_name);
+      if (klient.customer_email) {
+        await supabase.from('user_profiles').delete().eq('email', klient.customer_email);
+      }
+
+      setConfirmDeleteName(null);
+      if (selectedKlient === klient.customer_name) setSelectedKlient(null);
+      fetchKlienti();
+    } catch (err) {
+      alert("Chyba: " + err.message);
+    }
+  };
+
+  // --- LOGIKA BEZPEČNÉHO MAZANIA VOZIDLA ---
+  const handleDeleteCar = async (v) => {
+    try {
+      // Kontrola, či má vozidlo históriu zákaziek
+      const { data: history } = await supabase
+        .from('job_tickets')
+        .select('id')
+        .eq('plate_number', v.plate_number)
+        .limit(1);
+
+      if (history && history.length > 0) {
+        alert(`VOZIDLO NIE JE MOŽNÉ VYMAZAŤ: ŠPZ ${v.plate_number} má v systéme servisnú históriu. Najprv vymažte všetky zákazky priradené k tomuto autu.`);
+        return;
+      }
+
+      if (confirm(`Naozaj chcete vymazať vozidlo ${v.plate_number}?`)) {
+        // Mažeme z tabuľky vehicles (webová registrácia)
+        await supabase.from('vehicles').delete().eq('license_plate', v.plate_number);
+        // Mažeme prípadný prázdny záznam z job_tickets
+        await supabase.from('job_tickets').delete().eq('plate_number', v.plate_number);
+        
+        nacitajVozidla(selectedKlient);
+        fetchKlienti();
+      }
+    } catch (err) {
+      alert("Chyba pri mazaní auta: " + err.message);
     }
   };
 
@@ -152,45 +276,6 @@ export default function KlientiPage() {
     setIsCarModalOpen(true);
   };
 
-  const handleDeleteCar = async (carId) => {
-    if (confirm('Naozaj vymazať toto vozidlo?')) {
-      const { error } = await supabase.from('job_tickets').delete().eq('id', carId);
-      if (!error) { nacitajVozidla(selectedKlient); fetchKlienti(); }
-    }
-  };
-
-  const handleExcelImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
-      const formattedData = data.map(row => ({
-        customer_name: String(row.Meno || row.Firma || ''),
-        customer_phone: String(row.Telefon || ''),
-        customer_email: String(row.Email || ''),
-        client_type: row.ICO ? 'Firma' : 'Osoba',
-        address: String(row.Adresa || ''),
-        city: String(row.Mesto || ''),
-        zip: String(row.PSC || ''),
-        ico: String(row.ICO || ''),
-        dic: String(row.DIC || ''),
-        ic_dph: String(row.ICDPH || ''),
-        plate_number: 'NOVÝ-KLIENT',
-        status: 'Archivované'
-      })).filter(item => item.customer_name !== '');
-      if (formattedData.length > 0) {
-        const { error } = await supabase.from('job_tickets').insert(formattedData);
-        if (error) alert("Chyba: " + error.message); else fetchKlienti();
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
   return (
     <div className="p-6 md:p-10 min-h-screen bg-black text-white select-none">
       <header className="mb-12 border-l-4 border-red-600 pl-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -199,50 +284,98 @@ export default function KlientiPage() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2">Filter: ŠPZ / MENO / VIN / ADRESA</p>
         </div>
         <div className="flex gap-3">
-          <label className="cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-white font-black px-6 py-3.5 rounded-2xl text-[10px] uppercase transition-all flex items-center gap-2 border border-zinc-700">
-            📥 Import Excel
-            <input type="file" accept=".xlsx, .xls" onChange={handleExcelImport} className="hidden" />
-          </label>
           <button onClick={() => { setEditMode(false); setClientForm({customer_name:'', customer_phone:'', customer_email:'', client_type:'Osoba', address:'', city:'', zip:'', ico:'', dic:'', ic_dph:''}); setIsClientModalOpen(true); }} className="bg-white text-black font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all shadow-xl">+ Nový Klient</button>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* ZOZNAM KLIENTOV VĽAVO */}
         <div className="lg:col-span-1">
           <input type="text" placeholder="Hľadať čokoľvek..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-6 shadow-inner" />
           <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
             {filteredKlienti.map((k, i) => (
-              <button key={i} onClick={() => nacitajVozidla(k.customer_name)} className={`w-full text-left p-6 rounded-3xl border transition-all relative group ${selectedKlient === k.customer_name ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}`}>
-                <p className="text-2xl font-black uppercase tracking-tight italic">{k.customer_name}</p>
-                <div className="flex flex-wrap gap-1 mt-2">{(k.all_plates || []).map(p => <span key={p} className="text-sm bg-black/30 px-2 py-0.5 rounded text-zinc-400 font-mono">{p}</span>)}</div>
-                <span onClick={(e) => { e.stopPropagation(); openEditClientModal(k); }} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 p-3 rounded-xl text-xs hover:bg-white hover:text-black transition-all border border-zinc-800 cursor-pointer">✏️</span>
-              </button>
+              <div key={i} className="relative group">
+                <button 
+                  onClick={() => nacitajVozidla(k.customer_name)} 
+                  className={`w-full text-left p-6 rounded-3xl border transition-all relative ${selectedKlient === k.customer_name ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}`}
+                >
+                  <p className="text-2xl font-black uppercase tracking-tight italic">{k.customer_name}</p>
+                  <div className="flex flex-wrap gap-1 mt-2">{(k.all_plates || []).map(p => <span key={p} className="text-sm bg-black/30 px-2 py-0.5 rounded text-zinc-400 font-mono">{p}</span>)}</div>
+                </button>
+                
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-2">
+                  <span onClick={(e) => { e.stopPropagation(); openEditClientModal(k); }} className="bg-black/50 p-3 rounded-xl text-xs hover:bg-white hover:text-black transition-all border border-zinc-800 cursor-pointer">✏️</span>
+                  <span 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteKlient(k); }} 
+                    className={`p-3 rounded-xl text-[10px] font-black uppercase transition-all border cursor-pointer ${confirmDeleteName === k.customer_name ? 'bg-white text-red-600 border-white' : 'bg-black/50 text-zinc-600 border-zinc-800 hover:text-red-500'}`}
+                  >
+                    {confirmDeleteName === k.customer_name ? 'ZMAZAŤ?' : '🗑️'}
+                  </span>
+                </div>
+              </div>
             ))}
           </div>
         </div>
 
+        {/* DETAIL VOZIDIEL A HISTÓRIA VPRAVO */}
         <div className="lg:col-span-2">
           {selectedKlient ? (
             <div className="space-y-10 animate-in fade-in duration-500">
               <div className="flex justify-between items-center border-b border-zinc-900 pb-8">
-                <h2 className="text-3xl font-black uppercase tracking-tighter italic text-white leading-none">Vozidlá: <span className="text-red-600">{selectedKlient}</span></h2>
+                <h2 className="text-3xl font-black uppercase tracking-tighter italic text-white leading-none">Karta vozidla: <span className="text-red-600">{selectedKlient}</span></h2>
                 <button onClick={() => { setEditMode(false); setCarForm({id:'', plate_number: '', brand: '', model: '', vin_number: '', engine_volume: '', engine_power: '', year_produced: '', fuel_type: 'Diesel' }); setIsCarModalOpen(true); }} className="bg-zinc-800 hover:bg-zinc-700 text-white font-black px-6 py-3 rounded-2xl text-[10px] uppercase border border-zinc-700 shadow-lg">+ Pridať Vozidlo</button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              
+              <div className="space-y-16">
                 {vozidla.map((v) => (
-                  <div key={v.id} className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] relative group hover:border-red-600 shadow-xl transition-all">
-                    <div className="absolute top-6 right-8 flex gap-2 z-10">
-                      <button onClick={() => openEditCarModal(v)} className="bg-zinc-800/80 hover:bg-white border border-zinc-700 text-white hover:text-black p-3 rounded-xl transition-all text-xs">✏️</button>
-                      <button onClick={() => handleDeleteCar(v.id)} className="bg-red-600/20 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-3 rounded-xl transition-all text-xs">🗑️</button>
+                  <div key={v.id} className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-[3.5rem] relative shadow-xl">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-10">
+                       <div>
+                          <div className="flex items-center gap-3 mb-6">
+                            <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-2xl shadow-2xl tracking-widest">{v.plate_number}</span>
+                            <div className="flex gap-2">
+                               <button onClick={() => openEditCarModal(v)} className="bg-zinc-800 hover:bg-white border border-zinc-700 text-white hover:text-black p-2.5 rounded-xl transition-all text-xs">✏️</button>
+                               <button onClick={() => handleDeleteCar(v)} className="bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-2.5 rounded-xl transition-all text-xs">🗑️</button>
+                            </div>
+                          </div>
+                          <h3 className="text-3xl font-black uppercase italic mb-4">{v.car_brand_model}</h3>
+                          <div className="space-y-2 bg-black/40 p-5 rounded-2xl border border-zinc-800 text-[11px] font-black uppercase tracking-widest text-zinc-400">
+                             <p className="flex justify-between border-b border-zinc-800 pb-2"><span>VIN:</span> <span className="text-white font-mono">{v.vin_number || '---'}</span></p>
+                             <p className="flex justify-between border-b border-zinc-800 py-2"><span>Motor:</span> <span className="text-white">{v.engine_volume} / {v.engine_power} kW</span></p>
+                             <p className="flex justify-between pt-2"><span>Palivo/Rok:</span> <span className="text-white">{v.fuel_type} • {v.year_produced}</span></p>
+                          </div>
+                       </div>
+
+                       <div className="space-y-4">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600 mb-4 flex items-center gap-2">
+                             <span className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></span> História návštev
+                          </h4>
+                          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                             {v.full_history?.length > 0 ? v.full_history.map((h) => (
+                                <Link href={`/zakazky/${h.id}`} key={h.id} className="block group">
+                                   <div className="bg-black/50 border border-zinc-800 p-4 rounded-2xl hover:border-red-600 transition-all flex justify-between items-center">
+                                      <div>
+                                          <p className="text-[10px] font-black text-zinc-500 uppercase">{new Date(h.created_at).toLocaleDateString('sk-SK')}</p>
+                                          <p className="text-xs font-bold text-white group-hover:text-red-500 transition-colors uppercase italic line-clamp-1">{h.description || 'Pravidelný servis'}</p>
+                                      </div>
+                                      <div className="text-right">
+                                          <p className="text-[10px] font-black text-white">{h.total_price?.toFixed(2)} €</p>
+                                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${
+                                            h.status === 'Prebieha' ? 'border-amber-500 text-amber-500' : 
+                                            h.status === 'Dokončené' ? 'border-green-500 text-green-500' : 'border-zinc-700 text-zinc-600'
+                                          }`}>
+                                            {h.status}
+                                          </span>
+                                      </div>
+                                   </div>
+                                </Link>
+                             )) : <p className="text-[10px] uppercase text-zinc-600 font-bold tracking-widest text-center py-4">Zatiaľ žiadne návštevy</p>}
+                          </div>
+                          <Link href={`/prijem`} className="w-full flex items-center justify-center gap-3 bg-red-600 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] hover:bg-red-500 transition-all shadow-lg mt-4">
+                             📋 Vytvoriť novú zákazku
+                          </Link>
+                       </div>
                     </div>
-                    <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-2xl mb-6 inline-block shadow-2xl tracking-widest">{v.plate_number}</span>
-                    <h3 className="text-2xl font-black uppercase italic mb-6">{v.car_brand_model}</h3>
-                    <div className="space-y-3 bg-black/40 p-5 rounded-2xl border border-zinc-800/50 text-[11px] font-black uppercase tracking-widest text-zinc-300 mb-6">
-                      <p className="flex justify-between font-mono border-b border-zinc-800/50 pb-2"><span>VIN:</span> <span>{v.vin_number || '---'}</span></p>
-                      <p className="flex justify-between italic border-b border-zinc-800/50 pb-2"><span>Spec:</span> <span>{v.engine_volume} / {v.engine_power} kW</span></p>
-                      <p className="flex justify-between font-bold italic"><span>Palivo/Rok:</span> <span>{v.fuel_type} • {v.year_produced || '---'}</span></p>
-                    </div>
-                    <Link href={`/zakazky/${v.id}`} className="w-full flex items-center justify-center gap-3 bg-red-600/10 border border-red-600/20 text-red-500 font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] hover:bg-red-600 hover:text-white transition-all shadow-lg">📋 Otvoriť Zákazku</Link>
                   </div>
                 ))}
               </div>
@@ -253,6 +386,7 @@ export default function KlientiPage() {
         </div>
       </div>
 
+      {/* MODAL OKNÁ */}
       {isClientModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-4xl shadow-2xl my-auto">
@@ -295,37 +429,20 @@ export default function KlientiPage() {
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[4rem] w-full max-w-4xl shadow-2xl my-auto">
             <h2 className="text-4xl font-black uppercase italic mb-10 text-white text-center tracking-tighter">Technické údaje</h2>
             <form onSubmit={handleSaveCar} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
               <div className="md:col-span-2 flex flex-col md:flex-row gap-4 items-end">
                 <div className="flex-grow w-full">
                   <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">ŠPZ Vozidla</label>
                   <input required type="text" value={carForm.plate_number || ''} onChange={(e) => setCarForm({...carForm, plate_number: e.target.value.toUpperCase()})} className="w-full bg-black border border-zinc-800 p-5 rounded-3xl text-white font-black text-3xl tracking-widest focus:border-red-600 outline-none shadow-inner uppercase" />
                 </div>
-                <button type="button" className="bg-zinc-800 hover:bg-red-600 text-zinc-400 hover:text-white font-black px-6 py-6 rounded-3xl text-[10px] uppercase transition-all border border-zinc-700 whitespace-nowrap h-[78px]">
-                  🔍 Načítať podľa ŠPZ (čoskoro)
-                </button>
+                <button type="button" className="bg-zinc-800 hover:bg-red-600 text-zinc-400 hover:text-white font-black px-6 py-6 rounded-3xl text-[10px] uppercase transition-all border border-zinc-700 whitespace-nowrap h-[78px]">🔍 Načítať podľa ŠPZ</button>
               </div>
-
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Značka (Brand)</label>
-                <input required type="text" value={carForm.brand || ''} onChange={(e) => setCarForm({...carForm, brand: e.target.value})} placeholder="napr. Škoda" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Model</label>
-                <input required type="text" value={carForm.model || ''} onChange={(e) => setCarForm({...carForm, model: e.target.value})} placeholder="napr. Octavia III" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" />
-              </div>
-
+              <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Značka (Brand)</label><input required type="text" value={carForm.brand || ''} onChange={(e) => setCarForm({...carForm, brand: e.target.value})} placeholder="napr. Škoda" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" /></div>
+              <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Model</label><input required type="text" value={carForm.model || ''} onChange={(e) => setCarForm({...carForm, model: e.target.value})} placeholder="napr. Octavia III" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" /></div>
               <div className="md:col-span-2"><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">VIN Číslo</label><input required type="text" maxLength={17} value={carForm.vin_number || ''} onChange={(e) => setCarForm({...carForm, vin_number: e.target.value.toUpperCase()})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-mono font-bold outline-none tracking-wider focus:border-red-600 shadow-inner" /></div>
-              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Objem (cm³)</label><input type="text" value={carForm.engine_volume || ''} onChange={(e) => setCarForm({...carForm, engine_volume: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"/></div>
-              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Výkon (kW)</label><input type="text" value={carForm.engine_power || ''} onChange={(e) => setCarForm({...carForm, engine_power: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"/></div>
-              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Rok výroby</label><input type="number" value={carForm.year_produced || ''} onChange={(e) => setCarForm({...carForm, year_produced: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"/></div>
-              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Palivo</label><select value={carForm.fuel_type || 'Diesel'} onChange={(e) => setCarForm({...carForm, fuel_type: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none appearance-none focus:border-red-600 shadow-inner"><option value="Diesel">Diesel</option><option value="Benzín">Benzín</option><option value="Hybrid">Hybrid</option><option value="Elektro">Elektro</option></select></div>
-              
               <div className="flex gap-5 pt-8 md:col-span-2">
                 <button type="button" onClick={() => setIsCarModalOpen(false)} className="flex-1 text-zinc-600 font-black uppercase text-xs tracking-widest transition-colors hover:text-white">Zrušiť</button>
                 <button type="submit" className="flex-[2] bg-red-600 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-red-500 transition-all">Uložiť technické zmeny</button>
