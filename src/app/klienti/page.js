@@ -2,21 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import Link from 'next/link';
-import * as XLSX from 'xlsx'; // Import knižnice pre Excel
-
-const CAR_DATABASE = {
-  "Škoda": ["Octavia", "Superb", "Fabia", "Karoq", "Kodiaq", "Scala", "Kamiq", "Enyaq"],
-  "Volkswagen": ["Golf", "Passat", "Tiguan", "Touareg", "Touran", "Polo", "Arteon", "ID.4"],
-  "Audi": ["A3", "A4", "A6", "A8", "Q3", "Q5", "Q7", "Q8", "e-tron"],
-  "BMW": ["Rad 1", "Rad 3", "Rad 5", "Rad 7", "X1", "X3", "X5", "X6"],
-  "Mercedes-Benz": ["Trieda A", "Trieda C", "Trieda E", "Trieda S", "GLC", "GLE"],
-  "Hyundai": ["i20", "i30", "Tucson", "Santa Fe", "Kona"],
-  "Kia": ["Ceed", "Sportage", "Sorento", "Rio", "EV6"],
-  "Toyota": ["Corolla", "Yaris", "RAV4", "Hilux", "C-HR"],
-  "Ford": ["Focus", "Mondeo", "Kuga", "Ranger"],
-  "Peugeot": ["208", "308", "508", "2008", "3008"],
-  "Renault": ["Clio", "Megane", "Captur", "Master"]
-};
+import * as XLSX from 'xlsx';
 
 export default function KlientiPage() {
   const [klienti, setKlienti] = useState([]);
@@ -68,45 +54,6 @@ export default function KlientiPage() {
     setLoading(false);
   };
 
-  const handleExcelImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
-
-      const formattedData = data.map(row => ({
-        customer_name: String(row.Meno || row.Firma || ''),
-        customer_phone: String(row.Telefon || ''),
-        customer_email: String(row.Email || ''),
-        client_type: row.ICO ? 'Firma' : 'Osoba',
-        address: String(row.Adresa || ''),
-        city: String(row.Mesto || ''),
-        zip: String(row.PSC || ''),
-        ico: String(row.ICO || ''),
-        dic: String(row.DIC || ''),
-        ic_dph: String(row.ICDPH || ''),
-        plate_number: 'NOVÝ-KLIENT',
-        status: 'Archivované'
-      })).filter(item => item.customer_name !== '');
-
-      if (formattedData.length > 0) {
-        const { error } = await supabase.from('job_tickets').insert(formattedData);
-        if (error) alert("Chyba pri importe: " + error.message);
-        else {
-          alert(`Úspešne importovaných ${formattedData.length} klientov.`);
-          fetchKlienti();
-        }
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
   const nacitajVozidla = async (meno) => {
     setSelectedKlient(meno);
     const { data } = await supabase.from('job_tickets').select('*').eq('customer_name', meno).neq('plate_number', 'NOVÝ-KLIENT');
@@ -121,11 +68,7 @@ export default function KlientiPage() {
     return (
       (k.customer_name || '').toLowerCase().includes(s) ||
       (k.all_plates || []).some(p => p.toLowerCase().includes(s)) ||
-      (k.all_vins || []).some(v => v.toLowerCase().includes(s)) ||
-      (k.address || '').toLowerCase().includes(s) ||
-      (k.city || '').toLowerCase().includes(s) ||
-      (k.customer_phone || '').toLowerCase().includes(s) ||
-      (k.ico || '').toLowerCase().includes(s)
+      (k.all_vins || []).some(v => v.toLowerCase().includes(s))
     );
   });
 
@@ -157,42 +100,9 @@ export default function KlientiPage() {
     else { setIsClientModalOpen(false); fetchKlienti(); }
   };
 
-  const openEditClientModal = (k) => {
-    setEditMode(true);
-    setOriginalName(k.customer_name);
-    setClientForm({
-      customer_name: k.customer_name || '', customer_phone: k.customer_phone || '', customer_email: k.customer_email || '',
-      client_type: k.client_type || 'Osoba', address: k.address || '', city: k.city || '', zip: k.zip || '',
-      ico: k.ico || '', dic: k.dic || '', ic_dph: k.ic_dph || ''
-    });
-    setIsClientModalOpen(true);
-  };
-
-  const handleDeleteCar = async (carId) => {
-    if (confirm('Naozaj vymazať toto vozidlo?')) {
-      const { error } = await supabase.from('job_tickets').delete().eq('id', carId);
-      if (!error) { nacitajVozidla(selectedKlient); fetchKlienti(); }
-    }
-  };
-
-  const openEditCarModal = (car) => {
-    setEditMode(true);
-    const brandModel = car.car_brand_model || '';
-    const parts = brandModel.split(' ');
-    setCarForm({
-      id: car.id, plate_number: car.plate_number || '', brand: parts[0] || '', model: parts.slice(1).join(' ') || '',
-      vin_number: car.vin_number || '', engine_volume: car.engine_volume || '', engine_power: car.engine_power || '',
-      year_produced: car.year_produced || '', fuel_type: car.fuel_type || 'Diesel'
-    });
-    setIsCarModalOpen(true);
-  };
-
   const handleSaveCar = async (e) => {
     e.preventDefault();
-    
-    // Nájdeme dáta klienta pre prepojenie do zákazky
     const kData = klienti.find(k => k.customer_name === selectedKlient);
-
     const payload = {
       customer_name: selectedKlient,
       customer_phone: kData?.customer_phone || '',
@@ -214,18 +124,71 @@ export default function KlientiPage() {
       status: 'Prebieha',
       updated_at: new Date()
     };
+    const res = carForm.id ? await supabase.from('job_tickets').update(payload).eq('id', carForm.id) : await supabase.from('job_tickets').insert([payload]);
+    if (!res.error) { setIsCarModalOpen(false); nacitajVozidla(selectedKlient); fetchKlienti(); }
+    else { alert("Chyba: " + res.error.message); }
+  };
 
-    const res = carForm.id 
-      ? await supabase.from('job_tickets').update(payload).eq('id', carForm.id) 
-      : await supabase.from('job_tickets').insert([payload]);
+  const openEditClientModal = (k) => {
+    setEditMode(true);
+    setOriginalName(k.customer_name);
+    setClientForm({
+      customer_name: k.customer_name || '', customer_phone: k.customer_phone || '', customer_email: k.customer_email || '',
+      client_type: k.client_type || 'Osoba', address: k.address || '', city: k.city || '', zip: k.zip || '',
+      ico: k.ico || '', dic: k.dic || '', ic_dph: k.ic_dph || ''
+    });
+    setIsClientModalOpen(true);
+  };
 
-    if (!res.error) { 
-      setIsCarModalOpen(false); 
-      nacitajVozidla(selectedKlient); 
-      fetchKlienti(); 
-    } else {
-      alert("Chyba pri ukladaní: " + res.error.message);
+  const openEditCarModal = (car) => {
+    setEditMode(true);
+    const brandModel = car.car_brand_model || '';
+    const parts = brandModel.split(' ');
+    setCarForm({
+      id: car.id, plate_number: car.plate_number || '', brand: parts[0] || '', model: parts.slice(1).join(' ') || '',
+      vin_number: car.vin_number || '', engine_volume: car.engine_volume || '', engine_power: car.engine_power || '',
+      year_produced: car.year_produced || '', fuel_type: car.fuel_type || 'Diesel'
+    });
+    setIsCarModalOpen(true);
+  };
+
+  const handleDeleteCar = async (carId) => {
+    if (confirm('Naozaj vymazať toto vozidlo?')) {
+      const { error } = await supabase.from('job_tickets').delete().eq('id', carId);
+      if (!error) { nacitajVozidla(selectedKlient); fetchKlienti(); }
     }
+  };
+
+  const handleExcelImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data = XLSX.utils.sheet_to_json(ws);
+      const formattedData = data.map(row => ({
+        customer_name: String(row.Meno || row.Firma || ''),
+        customer_phone: String(row.Telefon || ''),
+        customer_email: String(row.Email || ''),
+        client_type: row.ICO ? 'Firma' : 'Osoba',
+        address: String(row.Adresa || ''),
+        city: String(row.Mesto || ''),
+        zip: String(row.PSC || ''),
+        ico: String(row.ICO || ''),
+        dic: String(row.DIC || ''),
+        ic_dph: String(row.ICDPH || ''),
+        plate_number: 'NOVÝ-KLIENT',
+        status: 'Archivované'
+      })).filter(item => item.customer_name !== '');
+      if (formattedData.length > 0) {
+        const { error } = await supabase.from('job_tickets').insert(formattedData);
+        if (error) alert("Chyba: " + error.message); else fetchKlienti();
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
   return (
@@ -250,8 +213,8 @@ export default function KlientiPage() {
           <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
             {filteredKlienti.map((k, i) => (
               <button key={i} onClick={() => nacitajVozidla(k.customer_name)} className={`w-full text-left p-6 rounded-3xl border transition-all relative group ${selectedKlient === k.customer_name ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}`}>
-                <p className="font-black uppercase tracking-tight italic">{k.customer_name}</p>
-                <div className="flex flex-wrap gap-1 mt-2">{(k.all_plates || []).map(p => <span key={p} className="text-[9px] bg-black/30 px-2 py-0.5 rounded text-zinc-400 font-mono">{p}</span>)}</div>
+                <p className="text-2xl font-black uppercase tracking-tight italic">{k.customer_name}</p>
+                <div className="flex flex-wrap gap-1 mt-2">{(k.all_plates || []).map(p => <span key={p} className="text-sm bg-black/30 px-2 py-0.5 rounded text-zinc-400 font-mono">{p}</span>)}</div>
                 <span onClick={(e) => { e.stopPropagation(); openEditClientModal(k); }} className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 p-3 rounded-xl text-xs hover:bg-white hover:text-black transition-all border border-zinc-800 cursor-pointer">✏️</span>
               </button>
             ))}
@@ -272,7 +235,7 @@ export default function KlientiPage() {
                       <button onClick={() => openEditCarModal(v)} className="bg-zinc-800/80 hover:bg-white border border-zinc-700 text-white hover:text-black p-3 rounded-xl transition-all text-xs">✏️</button>
                       <button onClick={() => handleDeleteCar(v.id)} className="bg-red-600/20 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-3 rounded-xl transition-all text-xs">🗑️</button>
                     </div>
-                    <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-xl mb-6 inline-block shadow-2xl tracking-widest">{v.plate_number}</span>
+                    <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-2xl mb-6 inline-block shadow-2xl tracking-widest">{v.plate_number}</span>
                     <h3 className="text-2xl font-black uppercase italic mb-6">{v.car_brand_model}</h3>
                     <div className="space-y-3 bg-black/40 p-5 rounded-2xl border border-zinc-800/50 text-[11px] font-black uppercase tracking-widest text-zinc-300 mb-6">
                       <p className="flex justify-between font-mono border-b border-zinc-800/50 pb-2"><span>VIN:</span> <span>{v.vin_number || '---'}</span></p>
@@ -332,18 +295,41 @@ export default function KlientiPage() {
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[4rem] w-full max-w-4xl shadow-2xl my-auto">
             <h2 className="text-4xl font-black uppercase italic mb-10 text-white text-center tracking-tighter">Technické údaje</h2>
             <form onSubmit={handleSaveCar} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">ŠPZ Vozidla</label>
-                <input required type="text" value={carForm.plate_number || ''} onChange={(e) => setCarForm({...carForm, plate_number: e.target.value.toUpperCase()})} className="w-full bg-black border border-zinc-800 p-5 rounded-3xl text-white font-black text-3xl tracking-widest focus:border-red-600 outline-none shadow-inner" />
+              
+              <div className="md:col-span-2 flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-grow w-full">
+                  <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">ŠPZ Vozidla</label>
+                  <input required type="text" value={carForm.plate_number || ''} onChange={(e) => setCarForm({...carForm, plate_number: e.target.value.toUpperCase()})} className="w-full bg-black border border-zinc-800 p-5 rounded-3xl text-white font-black text-3xl tracking-widest focus:border-red-600 outline-none shadow-inner uppercase" />
+                </div>
+                <button type="button" className="bg-zinc-800 hover:bg-red-600 text-zinc-400 hover:text-white font-black px-6 py-6 rounded-3xl text-[10px] uppercase transition-all border border-zinc-700 whitespace-nowrap h-[78px]">
+                  🔍 Načítať podľa ŠPZ (čoskoro)
+                </button>
               </div>
-              <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Značka</label><select required value={carForm.brand || ''} onChange={(e) => setCarForm({...carForm, brand: e.target.value, model: ''})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none appearance-none focus:border-red-600 shadow-inner"><option value="">-- Značka --</option>{Object.keys(CAR_DATABASE).map(brand => <option key={brand} value={brand}>{brand}</option>)}</select></div>
-              <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Model</label><select required value={carForm.model || ''} onChange={(e) => setCarForm({...carForm, model: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none appearance-none focus:border-red-600 shadow-inner" disabled={!carForm.brand}><option value="">-- Model --</option>{carForm.brand && CAR_DATABASE[carForm.brand].map(model => <option key={model} value={model}>{model}</option>)}</select></div>
+
+              <div>
+                <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Značka (Brand)</label>
+                <input required type="text" value={carForm.brand || ''} onChange={(e) => setCarForm({...carForm, brand: e.target.value})} placeholder="napr. Škoda" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Model</label>
+                <input required type="text" value={carForm.model || ''} onChange={(e) => setCarForm({...carForm, model: e.target.value})} placeholder="napr. Octavia III" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" />
+              </div>
+
               <div className="md:col-span-2"><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">VIN Číslo</label><input required type="text" maxLength={17} value={carForm.vin_number || ''} onChange={(e) => setCarForm({...carForm, vin_number: e.target.value.toUpperCase()})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-mono font-bold outline-none tracking-wider focus:border-red-600 shadow-inner" /></div>
+              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Objem (cm³)</label><input type="text" value={carForm.engine_volume || ''} onChange={(e) => setCarForm({...carForm, engine_volume: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"/></div>
+              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Výkon (kW)</label><input type="text" value={carForm.engine_power || ''} onChange={(e) => setCarForm({...carForm, engine_power: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"/></div>
+              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Rok výroby</label><input type="number" value={carForm.year_produced || ''} onChange={(e) => setCarForm({...carForm, year_produced: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"/></div>
+              
               <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-3 ml-2 block tracking-widest">Palivo</label><select value={carForm.fuel_type || 'Diesel'} onChange={(e) => setCarForm({...carForm, fuel_type: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none appearance-none focus:border-red-600 shadow-inner"><option value="Diesel">Diesel</option><option value="Benzín">Benzín</option><option value="Hybrid">Hybrid</option><option value="Elektro">Elektro</option></select></div>
-              <div className="flex gap-5 pt-8 md:col-span-2"><button type="button" onClick={() => setIsCarModalOpen(false)} className="flex-1 text-zinc-600 font-black uppercase text-xs tracking-widest transition-colors hover:text-white">Zrušiť</button><button type="submit" className="flex-[2] bg-red-600 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-red-500 transition-all">Uložiť technické zmeny</button></div>
+              
+              <div className="flex gap-5 pt-8 md:col-span-2">
+                <button type="button" onClick={() => setIsCarModalOpen(false)} className="flex-1 text-zinc-600 font-black uppercase text-xs tracking-widest transition-colors hover:text-white">Zrušiť</button>
+                <button type="submit" className="flex-[2] bg-red-600 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-widest shadow-xl hover:bg-red-500 transition-all">Uložiť technické zmeny</button>
+              </div>
             </form>
           </div>
         </div>

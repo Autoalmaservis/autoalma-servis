@@ -120,7 +120,7 @@ export default function ZakazkyPage() {
                     </p>
                     
                     <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-3">
-                      <span className="text-[10px] bg-black/50 px-3 py-1 rounded-full text-zinc-400 font-bold border border-zinc-800 uppercase">
+                      <span className="text-base bg-black/50 px-3 py-1 rounded-full text-zinc-400 font-bold border border-zinc-800 uppercase">
                         📞 {z.customer_phone || '---'}
                       </span>
                       {z.city && (
