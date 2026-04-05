@@ -87,6 +87,9 @@ export default function DashboardLayout({ children }) {
 
           <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname === '/zakazky'} />
           
+          {/* PRIDANÁ SEKCOA FAKTÚRY */}
+          <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
+          
           <div className={`pt-4 mt-4 border-t border-zinc-900`}>
             {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2">Správa</p>}
             <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
@@ -121,14 +124,15 @@ export default function DashboardLayout({ children }) {
   );
 }
 
-// Pomocný komponent MenuLink ostáva rovnaký ako predtým
+// Pomocný komponent MenuLink ostáva rovnaký
 function MenuLink({ href, icon, label, collapsed, active, badge }) {
   return (
-    <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
+    <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
       <div className={`flex items-center gap-4 ${collapsed ? 'justify-center' : ''}`}>
         <span className="text-xl group-hover:scale-110 transition-transform shrink-0">{icon}</span> 
         {!collapsed && <span className="font-bold text-sm whitespace-nowrap tracking-tight">{label}</span>}
       </div>
+      
       {!collapsed && badge > 0 && (
         <div className="flex items-center gap-1">
            <span className="relative flex h-2 w-2">
@@ -138,6 +142,7 @@ function MenuLink({ href, icon, label, collapsed, active, badge }) {
            <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{badge}</span>
         </div>
       )}
+      
       {collapsed && badge > 0 && (
         <span className="absolute top-2 right-2 flex h-2 w-2">
            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
