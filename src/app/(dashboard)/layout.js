@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 
 export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false); // NOVÉ: Stav pre mobilné menu
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const pathname = usePathname();
 
@@ -56,10 +56,10 @@ export default function DashboardLayout({ children }) {
       
       {/* --- MOBILNÁ HORNÁ LIŠTA (Len pre mobil) --- */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950 border-b border-zinc-800 px-4 flex items-center justify-between z-[100] no-print">
-        <h1 className="font-black italic text-red-600 uppercase tracking-tighter text-xl">AutoAlma</h1>
+        <h1 className="font-black italic text-red-600 uppercase tracking-tighter text-xl text-white">AutoAlma</h1>
         <button 
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-xl"
+          className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-xl text-white"
         >
           {isMobileOpen ? '✕' : '☰'}
         </button>
@@ -80,9 +80,9 @@ export default function DashboardLayout({ children }) {
           <span className="text-[10px] text-white font-bold">{isCollapsed ? '→' : '←'}</span>
         </button>
 
-        {/* LOGO */}
+        {/* LOGO - Smeruje na štatistický prehľad */}
         <div className={`mb-10 transition-all ${isCollapsed ? 'text-center' : 'px-2'} ${isMobileOpen ? 'mt-10 md:mt-0' : ''}`}>
-          <Link href="/">
+          <Link href="/dashboard">
             <h1 className={`font-black italic text-red-600 uppercase tracking-tighter transition-all ${isCollapsed ? 'text-xl' : 'text-2xl'}`}>
               A{isCollapsed ? '' : 'utoAlma'}
             </h1>
@@ -92,9 +92,11 @@ export default function DashboardLayout({ children }) {
         
         {/* HLAVNÁ NAVIGÁCIA */}
         <nav className="space-y-2 flex-grow overflow-y-auto pr-1">
-          {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2">Hlavné Menu</p>}
+          {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Hlavné Menu</p>}
           
-          <MenuLink href="/" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/'} />
+          {/* PREHĽAD - Teraz smeruje na tvoj štatistický dashboard */}
+          <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
+          
           <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
           
           <MenuLink 
@@ -106,14 +108,13 @@ export default function DashboardLayout({ children }) {
             badge={pendingCount} 
           />
 
-          <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname === '/zakazky'} />
+          <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname.startsWith('/zakazky')} />
           
           <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
           
           <div className={`pt-4 mt-4 border-t border-zinc-900`}>
             {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
             
-            {/* PRIDANÁ ZÁLOŽKA DATABÁZA */}
             <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
             
             <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
@@ -130,7 +131,7 @@ export default function DashboardLayout({ children }) {
                   <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
                   <div className="flex items-center gap-1 mt-1 font-bold">
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                    <p className="text-[9px] text-zinc-500 font-bold uppercase font-bold">Admin</p>
+                    <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
                   </div>
                 </div>
               )}
@@ -138,7 +139,7 @@ export default function DashboardLayout({ children }) {
         </div>
       </aside>
 
-      {/* --- POZADIE PRE MOBIL (Overlay pri otvorenom menu) --- */}
+      {/* --- POZADIE PRE MOBIL --- */}
       {isMobileOpen && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[140] md:hidden"
@@ -159,10 +160,10 @@ export default function DashboardLayout({ children }) {
 // Pomocný komponent MenuLink
 function MenuLink({ href, icon, label, collapsed, active, badge }) {
   return (
-    <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
+    <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 font-bold' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
       <div className={`flex items-center gap-4 ${collapsed ? 'justify-center' : ''}`}>
         <span className="text-xl group-hover:scale-110 transition-transform shrink-0">{icon}</span> 
-        {!collapsed && <span className="font-bold text-sm whitespace-nowrap tracking-tight font-bold">{label}</span>}
+        {!collapsed && <span className="font-bold text-sm whitespace-nowrap tracking-tight">{label}</span>}
       </div>
       
       {!collapsed && badge > 0 && (
@@ -171,14 +172,14 @@ function MenuLink({ href, icon, label, collapsed, active, badge }) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
            </span>
-           <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center font-bold font-bold font-bold">{badge}</span>
+           <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center font-bold">{badge}</span>
         </div>
       )}
       
       {collapsed && badge > 0 && (
-        <span className="absolute top-2 right-2 flex h-2 w-2 font-bold font-bold font-bold">
-           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 font-bold font-bold font-bold"></span>
-           <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 font-bold font-bold font-bold"></span>
+        <span className="absolute top-2 right-2 flex h-2 w-2 font-bold">
+           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+           <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
         </span>
       )}
     </Link>
