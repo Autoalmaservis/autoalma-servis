@@ -19,9 +19,10 @@ export default function ZakazkyZoznamPage() {
   const fetchJobs = async () => {
     setLoading(true);
     try {
+      // Rozšírený select o cenové ponuky (price_offers)
       const { data, error } = await supabase
         .from('job_tickets')
-        .select('*, job_items(quantity, unit_price, type)')
+        .select('*, job_items(quantity, unit_price, type), price_offers(status)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -31,11 +32,17 @@ export default function ZakazkyZoznamPage() {
         const workSubtotal = job.job_items?.filter(i => i.type === 'Práca').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
         const subtotal = materialSubtotal + workSubtotal;
         
+        // Zisťujeme stav ponuky (ak existuje)
+        const offerStatus = job.price_offers && job.price_offers.length > 0 
+          ? job.price_offers[job.price_offers.length - 1].status 
+          : null;
+
         return { 
           ...job, 
           materialPrice: materialSubtotal * 1.23,
           workPrice: workSubtotal * 1.23,
-          totalPrice: subtotal * 1.23 
+          totalPrice: subtotal * 1.23,
+          offerStatus: offerStatus // Pridaný stav ponuky do objektu
         };
       });
 
@@ -62,7 +69,6 @@ export default function ZakazkyZoznamPage() {
     }
   };
 
-  // --- LOGIKA FILTROVANIA A VÝPOČTU ŠTATISTÍK BEZ EFFECTU ---
   const filteredJobs = jobs.filter(job => {
     const s = searchTerm.toLowerCase();
     const matchesSearch = 
@@ -74,7 +80,6 @@ export default function ZakazkyZoznamPage() {
     return matchesSearch && matchesFilter;
   });
 
-  // Tieto premenné sa prepočítajú automaticky pri každom prekreslení (žiadny loop)
   const materialSum = filteredJobs.reduce((acc, j) => acc + (j.materialPrice || 0), 0);
   const workSum = filteredJobs.reduce((acc, j) => acc + (j.workPrice || 0), 0);
   const totalSum = materialSum + workSum;
@@ -117,7 +122,7 @@ export default function ZakazkyZoznamPage() {
         </div>
       </div>
 
-      {/* STATS PANEL - Teraz ťahá dáta z priamych premenných */}
+      {/* STATS PANEL */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-[2.5rem] shadow-xl">
           <p className="text-zinc-600 text-[9px] font-black uppercase tracking-widest mb-1 font-bold">Materiál</p>
@@ -145,13 +150,29 @@ export default function ZakazkyZoznamPage() {
       {/* ZOZNAM ZÁKAZIEK */}
       <div className="space-y-4">
         {filteredJobs.map(job => (
-          <div key={job.id} className="bg-zinc-900/40 border border-zinc-800 p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group hover:border-zinc-700 transition-all relative overflow-hidden gap-6 shadow-lg">
+          <div 
+            key={job.id} 
+            className={`
+              p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border
+              ${job.offerStatus === 'Schválené' ? 'bg-green-900/10 border-green-600/30' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}
+            `}
+          >
             
             <div className="flex items-center gap-6 w-full md:w-auto">
               <div className={`w-1.5 h-16 rounded-full ${getStatusColor(job.status || 'Prebieha')}`} />
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-red-500 font-black italic text-sm uppercase tracking-wider">{job.plate_number}</span>
+                  
+                  {/* ZOBRAZENIE STAVU PONUKY */}
+                  {job.offerStatus && (
+                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase border ${
+                      job.offerStatus === 'Schválené' ? 'bg-green-600 text-white border-green-400' : 'bg-amber-600/20 text-amber-500 border-amber-600/50'
+                    }`}>
+                      {job.offerStatus === 'Schválené' ? '✅ Ponuka Schválená' : '📩 Ponuka Odoslaná'}
+                    </span>
+                  )}
+
                   <div className="flex items-center gap-1.5 bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
                     <span className="text-[10px]">👤</span>
                     <span className="text-[8px] font-black uppercase text-blue-400">
@@ -201,7 +222,7 @@ export default function ZakazkyZoznamPage() {
       {/* MODÁLNE OKNO PRE POTVRDENIE MAZANIA */}
       {deleteModal.isOpen && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
-          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-w-md w-full text-center shadow-2xl border-t-4 border-t-red-600">
+          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-md w-full text-center shadow-2xl border-t-4 border-t-red-600">
             <div className="text-6xl mb-6">⚠️</div>
             <h3 className="text-2xl font-black uppercase italic mb-2 tracking-tighter">Odstrániť zákazku?</h3>
             <p className="text-zinc-500 text-xs mb-8 font-bold uppercase tracking-widest leading-relaxed">
