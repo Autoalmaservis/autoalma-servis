@@ -9,13 +9,22 @@ export default function HistoriaVozidlaPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [ticketPhotos, setTicketPhotos] = useState([]); // Nový stav pre fotky konkrétnej zákazky
 
   useEffect(() => {
     if (spz) fetchHistory();
   }, [spz]);
 
+  // Keď zákazník klikne na detail zákazky, načítame k nej prislúchajúce fotky
+  useEffect(() => {
+    if (selectedTicket) {
+      fetchTicketPhotos(selectedTicket.id);
+    } else {
+      setTicketPhotos([]);
+    }
+  }, [selectedTicket]);
+
   const fetchHistory = async () => {
-    // Načítame zákazky pre danú ŠPZ
     const { data, error } = await supabase
       .from('job_tickets')
       .select('*')
@@ -28,12 +37,9 @@ export default function HistoriaVozidlaPage() {
       return;
     }
 
-    // Pre každú zákazku dotiahneme položky (ceny) a úlohy (popis)
     const formattedData = await Promise.all(data.map(async (t) => {
       const { data: items } = await supabase.from('job_items').select('*').eq('job_id', t.id);
       const { data: tasks } = await supabase.from('job_tasks').select('*').eq('job_id', t.id);
-
-      // Výpočet ceny s DPH 23%
       const subtotal = items?.reduce((acc, item) => acc + (Number(item.unit_price) * Number(item.quantity)), 0) || 0;
       
       return { 
@@ -46,6 +52,18 @@ export default function HistoriaVozidlaPage() {
 
     setTickets(formattedData);
     setLoading(false);
+  };
+
+  const fetchTicketPhotos = async (jobId) => {
+    const { data, error } = await supabase
+      .from('job_photos')
+      .select('*')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setTicketPhotos(data);
+    }
   };
 
   if (loading) return (
@@ -71,7 +89,7 @@ export default function HistoriaVozidlaPage() {
           </h1>
         </div>
 
-        {/* ZOZNAM RIADKOV NA CELÚ OBRAZOVKU */}
+        {/* ZOZNAM RIADKOV */}
         <div className="space-y-4">
           <div className="hidden md:grid grid-cols-4 px-8 text-zinc-500 text-[10px] font-black uppercase tracking-widest italic mb-2">
             <span>Dátum</span>
@@ -113,10 +131,10 @@ export default function HistoriaVozidlaPage() {
         </div>
       </div>
 
-      {/* MODAL: DETAIL ZÁKAZKY (READ-ONLY) */}
+      {/* MODAL: DETAIL ZÁKAZKY */}
       {selectedTicket && (
         <div className="fixed inset-0 bg-black/98 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[3.5rem] p-8 md:p-12 shadow-2xl relative custom-scrollbar">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[3.5rem] p-8 md:p-12 shadow-2xl relative custom-scrollbar">
             
             <button 
               onClick={() => setSelectedTicket(null)}
@@ -137,9 +155,8 @@ export default function HistoriaVozidlaPage() {
             </header>
 
             <div className="grid md:grid-cols-2 gap-12 font-bold italic uppercase">
-              {/* STĽPEC 1: ÚKONY A ZÁVADY */}
+              {/* --- STĽPEC 1: ÚKONY A ZÁVADY --- */}
               <div className="space-y-10">
-                {/* CHECKLIST */}
                 <div className="space-y-6">
                   <h3 className="text-blue-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Vykonané úkony</h3>
                   <div className="space-y-3">
@@ -154,7 +171,6 @@ export default function HistoriaVozidlaPage() {
                   </div>
                 </div>
 
-                {/* DOPLNENÉ: NEODSÚHLASENÉ ZÁVADY */}
                 {selectedTicket.complaints && (
                   <div className="space-y-6">
                     <h3 className="text-amber-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Zistené závady (Neopravené)</h3>
@@ -162,15 +178,39 @@ export default function HistoriaVozidlaPage() {
                       <pre className="text-[11px] font-sans text-amber-200/70 whitespace-pre-wrap leading-relaxed">
                         {selectedTicket.complaints}
                       </pre>
-                      <p className="mt-4 text-[9px] text-amber-600 font-black tracking-widest italic">
-                        POZNÁMKA: TIETO ÚKONY BOLI V CENOVEJ PONUKE ODMIETNUTÉ A NEBOLI REALIZOVANÉ.
-                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {/* --- NOVÁ SEKČIA: FOTODOKUMENTÁCIA --- */}
+                {ticketPhotos.length > 0 && (
+                  <div className="space-y-6">
+                    <h3 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Fotodokumentácia z opravy</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {ticketPhotos.map((photo) => (
+                        <a 
+                          key={photo.id} 
+                          href={photo.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="relative aspect-video rounded-2xl overflow-hidden border border-zinc-800 bg-black group"
+                        >
+                          <img 
+                            src={photo.url} 
+                            alt="Foto z opravy" 
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-[8px] font-black uppercase tracking-widest bg-white text-black px-3 py-1 rounded-full">Zväčšiť 🔍</span>
+                          </div>
+                        </a>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* STĽPEC 2: ROZPIS CIEN (READ-ONLY) */}
+              {/* --- STĽPEC 2: ROZPIS CIEN --- */}
               <div className="space-y-6">
                 <h3 className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Materiál a položky</h3>
                 <div className="bg-black/20 rounded-[2.5rem] border border-zinc-800 overflow-hidden shadow-inner">
