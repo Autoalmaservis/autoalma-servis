@@ -17,6 +17,10 @@ export default function DetailZakazkyPage() {
   const [globalRates, setGlobalRates] = useState({ m1: 0, m2: 0, e1: 0, e2: 0 });
   const [activeOffer, setActiveOffer] = useState(null);
 
+  // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ---
+  const [photos, setPhotos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
@@ -42,6 +46,8 @@ export default function DetailZakazkyPage() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'job_items', filter: `job_id=eq.${id}` }, () => { fetchItems(); })
         // Sledovanie zmien v ponukách
         .on('postgres_changes', { event: '*', schema: 'public', table: 'price_offers', filter: `job_id=eq.${id}` }, () => { fetchCurrentOffer(); })
+        // DOPLNENÉ: Sledovanie zmien vo fotkách
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'job_photos', filter: `job_id=eq.${id}` }, () => { fetchPhotos(); })
         .subscribe();
 
       return () => { supabase.removeChannel(subscription); };
@@ -57,7 +63,8 @@ export default function DetailZakazkyPage() {
       fetchEmployees(), 
       fetchCatalog(),
       fetchSettings(),
-      fetchCurrentOffer()
+      fetchCurrentOffer(),
+      fetchPhotos() // DOPLNENÉ NAČÍTANIE FOTIEK
     ]);
     setLoading(false);
   };
@@ -114,6 +121,70 @@ export default function DetailZakazkyPage() {
   const fetchCatalog = async () => {
     const { data } = await supabase.from('inventory_catalog').select('*').order('name', { ascending: true });
     if (data) setCatalog(data);
+  };
+
+  // --- DOPLNENÁ LOGIKA PRE FOTKY (Načítanie, Nahrávanie, Mazanie) ---
+  const fetchPhotos = async () => {
+    try {
+      const { data, error } = await supabase.from('job_photos').select('*').eq('job_id', id).order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setPhotos(data);
+    } catch (err) { console.error("Chyba fotiek:", err.message); }
+  };
+
+  const handleUploadPhoto = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${id}/${Math.random()}.${fileExt}`;
+      const filePath = fileName;
+
+      const { error: uploadError } = await supabase.storage
+        .from('service-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('service-images')
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from('job_photos').insert([{
+        job_id: id,
+        url: publicUrl,
+        storage_path: filePath
+      }]);
+
+      if (dbError) throw dbError;
+      fetchPhotos();
+    } catch (err) {
+      alert("Chyba pri nahrávaní: " + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deletePhoto = async (photo) => {
+    if (!confirm("Naozaj chcete vymazať túto fotografiu?")) return;
+    try {
+      const { error: storageError } = await supabase.storage
+        .from('service-images')
+        .remove([photo.storage_path]);
+
+      if (storageError) throw storageError;
+
+      const { error: dbError } = await supabase
+        .from('job_photos')
+        .delete()
+        .eq('id', photo.id);
+
+      if (dbError) throw dbError;
+      fetchPhotos();
+    } catch (err) {
+      alert("Chyba pri mazaní fotky: " + err.message);
+    }
   };
 
   // --- LOGIKA CENOVÝCH PONÚK (Nová časť) ---
@@ -556,6 +627,41 @@ export default function DetailZakazkyPage() {
               <div className="flex justify-between w-72 text-zinc-400 text-[11px] font-black uppercase tracking-widest border-b-2 border-zinc-800 pb-3 font-bold font-bold"><span>DPH (23%):</span><span className="text-white font-bold font-bold">{tax.toFixed(2)} €</span></div>
               <div className="flex justify-between w-80 pt-4 font-bold font-bold font-bold font-bold font-bold font-bold font-bold font-bold font-bold font-bold font-bold"><span className="text-red-600 font-black uppercase italic tracking-tighter text-xl leading-none font-bold font-bold font-bold">Spolu k úhrade:</span><span className="text-4xl font-black italic tracking-tighter leading-none font-bold font-bold font-bold font-bold">{total.toFixed(2)} €</span></div>
             </div>
+          </div>
+        </div>
+
+        {/* --- NOVÁ SEKCIJA: FOTODOKUMENTÁCIA (Pozícia B) --- */}
+        <div className="space-y-4 mb-12 no-print font-bold">
+          <div className="flex justify-between items-center">
+            <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic font-bold">3. Fotodokumentácia opravy</h2>
+            <label className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer inline-block shadow-lg">
+              {uploading ? 'Nahrávam...' : '📸 Pridať fotografiu'}
+              <input type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} disabled={uploading} />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {photos.map((photo) => (
+              <div key={photo.id} className="relative group aspect-square rounded-[2rem] overflow-hidden border border-zinc-800 bg-black shadow-xl">
+                <img src={photo.url} alt="Servisná fotka" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <button 
+                    onClick={() => deletePhoto(photo)}
+                    className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-500 transition-all shadow-2xl transform translate-y-4 group-hover:translate-y-0 duration-300"
+                    title="Vymazať fotku"
+                  >
+                    🗑️ Vymazať
+                  </button>
+                </div>
+              </div>
+            ))}
+            
+            {photos.length === 0 && !uploading && (
+              <div className="col-span-full py-12 border-2 border-dashed border-zinc-800 rounded-[2.5rem] flex flex-col items-center justify-center text-zinc-600 opacity-50">
+                <span className="text-3xl mb-2">📸</span>
+                <p className="text-[10px] font-black uppercase tracking-widest italic">Zatiaľ neboli nahrané žiadne fotografie</p>
+              </div>
+            )}
           </div>
         </div>
 

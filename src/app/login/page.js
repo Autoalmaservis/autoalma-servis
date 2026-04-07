@@ -44,7 +44,7 @@ function LoginFormContent() {
 
     if (data.user) {
       // LOGIKA PRESMEROVANIA:
-      // Ak sa email zhoduje s tvojím admin mailom, ideš na zákazky
+      // Ak sa email zhoduje s tvojím admin mailom, ideš na ROZHRANIE MECHANIKA
       if (email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
         router.push('/zakazky'); 
       } else {

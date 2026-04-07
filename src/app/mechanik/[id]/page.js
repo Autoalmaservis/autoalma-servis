@@ -13,6 +13,10 @@ export default function PracovnyList() {
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
 
+  // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ---
+  const [photos, setPhotos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+
   // Zisťujeme, či je zákazka už uzavretá (Audit podľa statusu v DB)
   const isLocked = job?.status === 'Dokončené' || job?.status === 'Archivované';
 
@@ -27,10 +31,67 @@ export default function PracovnyList() {
     // Načítame materiál
     const { data: i } = await supabase.from('job_items').select('*').eq('job_id', id);
     
+    // NAČÍTAME AJ FOTKY
+    fetchPhotos();
+
     setJob(j); 
     setTasks(t || []); 
     setItems(i || []);
     setLoading(false);
+  };
+
+  // --- DOPLNENÉ FUNKCIE PRE SPRÁVU FOTIEK ---
+  const fetchPhotos = async () => {
+    try {
+      const { data, error } = await supabase.from('job_photos').select('*').eq('job_id', id).order('created_at', { ascending: false });
+      if (error) throw error;
+      if (data) setPhotos(data);
+    } catch (err) { console.error("Chyba fotiek:", err.message); }
+  };
+
+  const handleUploadPhoto = async (e) => {
+    const file = e.target.files[0];
+    if (!file || isLocked) return;
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${id}/${Math.random()}.${fileExt}`;
+      const filePath = fileName;
+
+      const { error: uploadError } = await supabase.storage
+        .from('service-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('service-images')
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from('job_photos').insert([{
+        job_id: id,
+        url: publicUrl,
+        storage_path: filePath
+      }]);
+
+      if (dbError) throw dbError;
+      fetchPhotos();
+    } catch (err) {
+      alert("Chyba pri nahrávaní fotky: " + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deletePhoto = async (photo) => {
+    if (isLocked || !confirm("Naozaj vymazať túto fotku?")) return;
+    try {
+      await supabase.storage.from('service-images').remove([photo.storage_path]);
+      await supabase.from('job_photos').delete().eq('id', photo.id);
+      fetchPhotos();
+    } catch (err) {
+      alert("Chyba pri mazaní: " + err.message);
+    }
   };
 
   const handleToggle = async (taskId, status) => {
@@ -186,6 +247,40 @@ export default function PracovnyList() {
               <span className="text-[10px] font-black bg-zinc-800 px-3 py-1 rounded-lg text-orange-400">{i.quantity} {i.unit}</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* --- DOPLNENÁ SEKCIJA: FOTODOKUMENTÁCIA PRE MECHANIKA --- */}
+      <section className="bg-zinc-900/20 p-8 rounded-[3rem] border border-zinc-800">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-[10px] font-black uppercase text-red-500 tracking-[0.3em] italic ml-2">Fotodokumentácia opravy</h3>
+          {!isLocked && (
+            <label className="bg-zinc-800 hover:bg-red-600 text-white px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-lg">
+              {uploading ? 'Nahrávam...' : '📸 Odfotiť / Nahrať'}
+              <input type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} disabled={uploading} />
+            </label>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {photos.map((photo) => (
+            <div key={photo.id} className="relative aspect-square rounded-3xl overflow-hidden border border-zinc-800 bg-black shadow-xl">
+              <img src={photo.url} alt="Servis" className="w-full h-full object-cover" />
+              {!isLocked && (
+                <button 
+                  onClick={() => deletePhoto(photo)}
+                  className="absolute top-2 right-2 bg-red-600/80 p-2 rounded-xl text-white backdrop-blur-sm"
+                >
+                  🗑️
+                </button>
+              )}
+            </div>
+          ))}
+          {photos.length === 0 && (
+            <div className="col-span-full py-8 text-center text-zinc-600 italic text-[10px] font-black uppercase tracking-widest border border-dashed border-zinc-800 rounded-3xl">
+              Zatiaľ žiadne fotky
+            </div>
+          )}
         </div>
       </section>
 
