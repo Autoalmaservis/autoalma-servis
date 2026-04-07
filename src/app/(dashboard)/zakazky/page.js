@@ -154,7 +154,7 @@ export default function ZakazkyZoznamPage() {
             key={job.id} 
             className={`
               p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border
-              ${job.offerStatus === 'Schválené' ? 'bg-green-900/10 border-green-600/30' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}
+              ${job.offerStatus === 'Schválené' ? 'bg-blue-900/10 border-blue-600/30' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}
             `}
           >
             
@@ -164,12 +164,12 @@ export default function ZakazkyZoznamPage() {
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-red-500 font-black italic text-sm uppercase tracking-wider">{job.plate_number}</span>
                   
-                  {/* ZOBRAZENIE STAVU PONUKY */}
+                  {/* ZOBRAZENIE STAVU PONUKY - MODRÁ PRE SCHVÁLENÉ */}
                   {job.offerStatus && (
                     <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase border ${
-                      job.offerStatus === 'Schválené' ? 'bg-green-600 text-white border-green-400' : 'bg-amber-600/20 text-amber-500 border-amber-600/50'
+                      job.offerStatus === 'Schválené' ? 'bg-blue-600 text-white border-blue-400' : 'bg-amber-600/20 text-amber-500 border-amber-600/50'
                     }`}>
-                      {job.offerStatus === 'Schválené' ? '✅ Ponuka Schválená' : '📩 Ponuka Odoslaná'}
+                      {job.offerStatus === 'Schválené' ? '✅ Zákazník sa vyjadril' : '📩 Ponuka Odoslaná'}
                     </span>
                   )}
 

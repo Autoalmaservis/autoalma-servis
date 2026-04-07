@@ -137,22 +137,40 @@ export default function HistoriaVozidlaPage() {
             </header>
 
             <div className="grid md:grid-cols-2 gap-12 font-bold italic uppercase">
-              {/* CHECKLIST (READ-ONLY) */}
-              <div className="space-y-6">
-                <h3 className="text-blue-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Vykonané úkony</h3>
-                <div className="space-y-3">
-                  {selectedTicket.job_tasks?.map((task) => (
-                    <div key={task.id} className="bg-black/30 border border-zinc-800 p-5 rounded-2xl flex items-center gap-4">
-                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${task.is_completed ? 'bg-green-600 border-green-600' : 'border-zinc-700'}`}>
-                        {task.is_completed && <span className="text-white text-[10px]">✓</span>}
+              {/* STĽPEC 1: ÚKONY A ZÁVADY */}
+              <div className="space-y-10">
+                {/* CHECKLIST */}
+                <div className="space-y-6">
+                  <h3 className="text-blue-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Vykonané úkony</h3>
+                  <div className="space-y-3">
+                    {selectedTicket.job_tasks?.map((task) => (
+                      <div key={task.id} className="bg-black/30 border border-zinc-800 p-5 rounded-2xl flex items-center gap-4">
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center ${task.is_completed ? 'bg-green-600 border-green-600' : 'border-zinc-700'}`}>
+                          {task.is_completed && <span className="text-white text-[10px]">✓</span>}
+                        </div>
+                        <span className="text-xs font-black text-zinc-300">{task.task_description}</span>
                       </div>
-                      <span className="text-xs font-black text-zinc-300">{task.task_description}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+
+                {/* DOPLNENÉ: NEODSÚHLASENÉ ZÁVADY */}
+                {selectedTicket.complaints && (
+                  <div className="space-y-6">
+                    <h3 className="text-amber-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Zistené závady (Neopravené)</h3>
+                    <div className="bg-amber-600/5 border border-amber-600/20 p-6 rounded-[2rem]">
+                      <pre className="text-[11px] font-sans text-amber-200/70 whitespace-pre-wrap leading-relaxed">
+                        {selectedTicket.complaints}
+                      </pre>
+                      <p className="mt-4 text-[9px] text-amber-600 font-black tracking-widest italic">
+                        POZNÁMKA: TIETO ÚKONY BOLI V CENOVEJ PONUKE ODMIETNUTÉ A NEBOLI REALIZOVANÉ.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* ROZPIS CIEN (READ-ONLY) */}
+              {/* STĽPEC 2: ROZPIS CIEN (READ-ONLY) */}
               <div className="space-y-6">
                 <h3 className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Materiál a položky</h3>
                 <div className="bg-black/20 rounded-[2.5rem] border border-zinc-800 overflow-hidden shadow-inner">

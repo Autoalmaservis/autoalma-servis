@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react'; // Pridaný Fragment pre čisté zoskupovanie v tabuľke
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -55,7 +55,8 @@ export default function NovaPonukaPage() {
     const itemToAdd = {
       ...newItem,
       id: crypto.randomUUID(),
-      group_name: newItem.group_name.trim().toUpperCase()
+      group_name: newItem.group_name.trim().toUpperCase(),
+      is_selected: true // DOPLNENÉ: Každá položka začína ako vybratá/schválená
     };
 
     setOfferItems([...offerItems, itemToAdd]);
@@ -206,7 +207,7 @@ export default function NovaPonukaPage() {
             </thead>
             <tbody className="divide-y divide-zinc-800 font-black italic uppercase">
               {Object.keys(groupedItems).map((groupName) => (
-                <div key={groupName} style={{ display: 'contents' }}>
+                <Fragment key={groupName}>
                   <tr className="bg-blue-600/10 border-l-4 border-blue-600">
                     <td colSpan="6" className="p-4 text-blue-400 text-[11px] font-black tracking-widest uppercase italic">
                       📂 {groupName}
@@ -228,7 +229,7 @@ export default function NovaPonukaPage() {
                       </td>
                     </tr>
                   ))}
-                </div>
+                </Fragment>
               ))}
               
               {offerItems.length === 0 && (

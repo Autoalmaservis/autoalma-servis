@@ -218,29 +218,51 @@ export default function DetailZakazkyPage() {
     }
   };
 
+  // --- UPRAVENÁ FUNKCIA PREKLÁPANIA: ROZDELENIE NA PRÁCE A ZÁVADY ---
   const convertOfferToItems = async () => {
     if (!activeOffer || activeOffer.status !== 'Schválené') return;
-    if (!confirm("Položky z ponuky sa pridajú do rozpisu zákazky. Pokračovať?")) return;
+    if (!confirm("Schválené položky sa pridajú do rozpisu a neschválené sa zapíšu ako závady. Pokračovať?")) return;
 
     try {
-      // OČISTA DÁT - FILTROVANIE group_name, ABY DB NEVYHODILA CHYBU
-      const itemsToInsert = activeOffer.items_json.map(item => {
-        const { id: oldId, created_at, job_id: oldJobId, group_name, ...cleanItem } = item;
+      const allOfferItems = activeOffer.items_json;
+      
+      // 1. SCHVÁLENÉ POLOŽKY (is_selected === true)
+      const approvedItems = allOfferItems.filter(item => item.is_selected === true);
+      const itemsToInsert = approvedItems.map(item => {
+        // TU JE OPRAVA: Filtrujeme stĺpce, ktoré job_items nemá
+        const { id: oldId, created_at, job_id: oldJobId, group_name, is_selected, ...cleanItem } = item;
         return {
           ...cleanItem,
-          job_id: id // Priradíme aktuálne ID zákazky z URL
+          job_id: id 
         };
       });
 
-      const { error: insertError } = await supabase.from('job_items').insert(itemsToInsert);
-      if (insertError) throw insertError;
+      if (itemsToInsert.length > 0) {
+        const { error: insertError } = await supabase.from('job_items').insert(itemsToInsert);
+        if (insertError) throw insertError;
+      }
 
-      // Označíme ponuku ako vybavenú/preklopenú
+      // 2. NESCHVÁLENÉ POLOŽKY -> ZÁPIS DO ZÁVAD (complaints)
+      const rejectedItems = allOfferItems.filter(item => item.is_selected === false);
+      if (rejectedItems.length > 0) {
+        const rejectedText = rejectedItems.map(i => `[ODMIETNUTÉ] ${i.group_name || 'Servis'}: ${i.name}`).join('\n');
+        
+        // Získame aktuálne údaje, aby sme neprepísali existujúce závady
+        const { data: jobData } = await supabase.from('job_tickets').select('complaints').eq('id', id).single();
+        const newComplaints = jobData?.complaints 
+          ? `${jobData.complaints}\n\n${rejectedText}` 
+          : rejectedText;
+
+        await supabase.from('job_tickets').update({ complaints: newComplaints }).eq('id', id);
+      }
+
+      // 3. Označíme ponuku ako vybavenú/preklopenú
       await supabase.from('price_offers').update({ status: 'Preklopené' }).eq('id', activeOffer.id);
       
       setActiveOffer(null);
       fetchItems();
-      alert("Položky z ponuky boli úspešne pridané do zákazky.");
+      fetchDetail(); // Obnovíme detail zákazky, aby sa zobrazili nové závady
+      alert("Položky boli úspešne rozdelené.");
     } catch (err) {
       alert("Chyba pri preklápaní: " + err.message);
     }
@@ -464,7 +486,7 @@ export default function DetailZakazkyPage() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 italic font-bold">Cenová ponuka</p>
               <h3 className={`text-2xl font-black uppercase italic tracking-tighter ${activeOffer.status === 'Schválené' ? 'text-green-500' : 'text-blue-500'}`}>
-                {activeOffer.status === 'Schválené' ? '✅ Zákazník schválil ponuku' : '📩 Ponuka odoslaná na schválenie'}
+                {activeOffer.status === 'Schválené' ? '✅ Zákazník sa vyjadril k ponuke' : '📩 Ponuka odoslaná na schválenie'}
               </h3>
             </div>
             <div className="flex gap-3">
@@ -481,7 +503,7 @@ export default function DetailZakazkyPage() {
           </div>
         )}
 
-        {/* KLIENT A CHECKLIST */}
+        {/* KLIENT A CHECKLIST (A NOVÁ SEKČIA ZÁVAD) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-bold">
           <div className="space-y-4">
               <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">Partner a Technika</h2>
@@ -501,7 +523,16 @@ export default function DetailZakazkyPage() {
                   <p className="font-mono text-[10px] text-zinc-500 tracking-widest uppercase mt-1">VIN: {zakazka.vin_number || '---'}</p>
                 </div>
               </div>
+              
+              {/* --- NOVÁ SEKČIA: ZISTENÉ ZÁVADY / ODMIETNUTÉ PRÁCE --- */}
+              <div className="bg-red-600/5 p-8 rounded-[2rem] border border-red-600/20 shadow-inner">
+                <h2 className="text-red-600 font-black uppercase text-[10px] tracking-widest mb-4 italic">Zistené závady / Poznámky</h2>
+                <pre className="text-xs font-sans text-zinc-400 whitespace-pre-wrap font-bold leading-relaxed">
+                  {zakazka.complaints || 'Žiadne zaznamenané závady.'}
+                </pre>
+              </div>
           </div>
+
           <div className="space-y-4 font-bold">
             <div className="flex justify-between items-end">
                 <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] italic">1. Priebeh prác (Checklist)</h2>
@@ -534,7 +565,6 @@ export default function DetailZakazkyPage() {
         <div className="space-y-4 mb-12">
           <div className="flex justify-between items-center font-bold">
             <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">2. Rozpis materiálu a servisných prác</h2>
-            {/* TLAČIDLO PRE NOVÚ STRÁNKU CENOVÝCH PONÚK */}
             {!activeOffer && (
               <button 
                 onClick={() => router.push(`/zakazky/${id}/nova-ponuka`)} 
@@ -687,12 +717,11 @@ export default function DetailZakazkyPage() {
       {/* MODAL FAKTURÁCIA */}
       {isInvoiceModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print">
-          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[4rem] max-w-2xl w-full text-center shadow-2xl">
+          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[4rem] max-w-2xl w-full text-center shadow-2xl font-bold">
             <h3 className="text-4xl font-black uppercase italic mb-6 tracking-tighter text-white">Finalizácia zákazky</h3>
-            <p className="text-zinc-500 text-xs mb-10 font-black uppercase tracking-widest leading-relaxed italic">Chcete vytvoriť oficiálnu faktúru alebo iba odložiť doklad o servise?</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button disabled={invoiceLoading} onClick={() => handleFinalizeJob(true)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all italic shadow-xl flex flex-col items-center gap-2">📄 VYSTAVIŤ FAKTÚRU</button>
-              <button disabled={invoiceLoading} onClick={() => handleFinalizeJob(false)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all italic flex flex-col items-center gap-2">📂 IBA ODLOŽIŤ</button>
+              <button disabled={invoiceLoading} onClick={() => handleFinalizeJob(true)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-xl font-bold font-sans">📄 VYSTAVIŤ FAKTÚRU</button>
+              <button disabled={invoiceLoading} onClick={() => handleFinalizeJob(false)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all font-bold font-sans">📂 IBA ODLOŽIŤ</button>
             </div>
             <button onClick={() => setIsInvoiceModalOpen(false)} className="mt-8 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all italic">Späť k úpravám</button>
           </div>
@@ -701,9 +730,9 @@ export default function DetailZakazkyPage() {
 
       {/* MODAL MAZANIA */}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[200] flex items-center justify-center p-6 no-print">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[200] flex items-center justify-center p-6 no-print font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-sm w-full text-center shadow-2xl">
-            <h3 className="text-xl font-black uppercase italic mb-4 tracking-tighter text-white">Vymazať zákazku?</h3>
+            <h3 className="text-xl font-black uppercase italic mb-4 tracking-tighter text-white font-bold">Vymazať zákazku?</h3>
             <div className="flex flex-col gap-3 font-black">
               <button onClick={deleteWholeJob} className="w-full bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all italic">Definitívne vymazať</button>
               <button onClick={() => setIsDeleteModalOpen(false)} className="w-full bg-zinc-800 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] hover:text-white transition-all italic tracking-widest">Zrušiť</button>
