@@ -4,9 +4,13 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const ecv = searchParams.get('ecv');
 
-  if (!ecv) return NextResponse.json({ error: 'Chýba EČV' }, { status: 400 });
+  // Ak niekto zabudne zadať ŠPZ
+  if (!ecv) {
+    return NextResponse.json({ error: 'Chýba EČV' }, { status: 400 });
+  }
 
   try {
+    // REÁLNA POŽIADAVKA NA API (bez simulovaných dát)
     const response = await fetch(`https://www.databazavozidiel.sk/api/vehicles?ecv=${ecv}`, {
       method: 'GET',
       headers: {
@@ -20,30 +24,19 @@ export async function GET(request) {
 
     const data = await response.json();
 
-    // AK API VRÁTI CHYBU (Limit, IP, čokoľvek), VRÁTIME TESTOVACIE AUTO
-    // Takto môžeš aplikáciu používať a testovať aj bez funkčného API
-    if (!response.ok || data.status === false) {
-      console.log("Externé API má problém, vraciam testovacie dáta pre:", ecv);
-      
-      return NextResponse.json({
-        status: true,
-        car: {
-          znacka: "VOLKSWAGEN (TEST REŽIM)",
-          obch_nazov: "TOUAREG",
-          vin: "WVGZZZCRZKD015273",
-          objem: 2967,
-          vykon: 210,
-          druh_paliva: "Nafta",
-          dat_prva_evid: "15.11.2018"
-        }
-      });
+    // Ak API vráti chybu (napr. neexistujúca ŠPZ)
+    if (!response.ok) {
+      return NextResponse.json({ 
+        error: 'Vozidlo sa nenašlo alebo API odmietlo prístup', 
+        details: data 
+      }, { status: response.status });
     }
 
-    // Ak API funguje, vrátime reálne dáta
+    // VRÁTIME REÁLNE DÁTA, KTORÉ PRIŠLI Z API
     return NextResponse.json(data);
 
   } catch (error) {
-    console.error("Kritická chyba v API Route:", error);
+    console.error("Kritická chyba:", error);
     return NextResponse.json({ error: 'Interná chyba servera' }, { status: 500 });
   }
 }
