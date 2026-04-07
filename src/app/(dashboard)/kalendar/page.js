@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import daygridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -10,9 +11,11 @@ import { useRouter } from 'next/navigation';
 
 export default function KalendarPage() {
   const router = useRouter();
+  const calendarRef = useRef(null); // Ref na ovládanie kalendára
   const [events, setEvents] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isInboxOpen, setIsInboxOpen] = useState(false); // Stav pre bočný panel
   const [selectionMode, setSelectionMode] = useState(null); // 'ask', 'order', 'block'
   const [editingEventId, setEditingEventId] = useState(null);
   const [isConfirmed, setIsConfirmed] = useState(true);
@@ -33,7 +36,7 @@ export default function KalendarPage() {
   const [issueDescription, setIssueDescription] = useState('');
   const [plannedWork, setPlannedWork] = useState('');
   
-  const [tempCustomerContact, setTempCustomerContact] = useState({ phone: '', email: '' });
+  const [tempCustomerContact, setTempCustomerContact] = useState({ phone: '', email: '', customerName: '', userId: null });
 
   const [isKnown, setIsKnown] = useState(false);
   const [carData, setCarData] = useState(null);
@@ -88,7 +91,8 @@ export default function KalendarPage() {
           isConfirmed: ev.is_confirmed,
           isBlocked: ev.is_blocked,
           customerPhone: ev.customer_phone,
-          customerEmail: ev.customer_email
+          customerEmail: ev.customer_email,
+          userId: ev.user_id
         }
       };
     });
@@ -97,6 +101,9 @@ export default function KalendarPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Filtrovanie nepotvrdených žiadostí pre Inbox
+  const pendingRequests = events.filter(ev => ev.extendedProps.isConfirmed === false);
 
   // --- 2. LOGIKA VOZIDIEL ---
   const loadCarDetails = async (spz) => {
@@ -155,15 +162,11 @@ export default function KalendarPage() {
     const props = ev.extendedProps;
 
     setEditingEventId(ev.id);
-    
-    // NASTAVENIE MÓDU (Dôležité pre editáciu)
     const currentMode = props.isBlocked ? 'block' : 'order';
     setSelectionMode(currentMode);
-    
     setIsConfirmed(props.isConfirmed !== false);
     setTitle(props.pureTitle || ev.title);
     
-    // Oprava formátu dátumu a času pre inputy
     const startObj = new Date(ev.start);
     const endObj = ev.end ? new Date(ev.end) : startObj;
     
@@ -176,13 +179,26 @@ export default function KalendarPage() {
     setSelectedClientName(props.customerName || '');
     setIssueDescription(props.issueDescription || '');
     setPlannedWork(props.plannedWork || '');
-    setTempCustomerContact({ phone: props.customerPhone || '', email: props.customerEmail || '' });
+    setTempCustomerContact({ 
+      phone: props.customerPhone || '', 
+      email: props.customerEmail || '', 
+      customerName: props.customerName || '',
+      userId: props.userId || null 
+    });
     
     if (props.plateNumber && props.plateNumber !== 'BLOK') {
         loadCarDetails(props.plateNumber);
     }
     
     setIsModalOpen(true);
+  };
+
+  // Otvorenie žiadosti z bočného panelu
+  const openRequestFromPanel = (ev) => {
+    const calendarApi = calendarRef.current.getApi();
+    calendarApi.gotoDate(ev.start); // Skočiť na dátum žiadosti
+    handleEventClick({ event: ev }); // Otvoriť editačné okno
+    setIsInboxOpen(false); // Zavrieť Inbox
   };
 
   const handlePlateBlur = async (spz) => { loadCarDetails(spz); };
@@ -198,14 +214,8 @@ export default function KalendarPage() {
     setStartTime(timeStart);
     setEndTime(timeEnd);
     
-    setPlate('');
-    setTitle('');
-    setSelectedClientName('');
-    setIssueDescription('');
-    setPlannedWork('');
-    setCarData(null);
-    setTempCustomerContact({ phone: '', email: '' });
-    setSelectedEmployee('');
+    setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork('');
+    setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
     
     setSelectionMode('ask');
     setIsModalOpen(true);
@@ -225,21 +235,34 @@ export default function KalendarPage() {
       plate_number: isBlocking ? 'BLOK' : plate,
       issue_description: isBlocking ? 'Blokovaný čas technikom' : issueDescription,
       planned_work: plannedWork,
-      is_confirmed: true,
+      is_confirmed: true, // Ak to ukladá technik, je to potvrdené
       is_blocked: isBlocking,
       status: isBlocking ? 'Blokované' : 'Naplánované'
     };
 
     let error;
+    let savedId = editingEventId;
+
     if (editingEventId) {
       const result = await supabase.from('calendar_events').update(reservationData).eq('id', editingEventId);
       error = result.error;
     } else {
-      const result = await supabase.from('calendar_events').insert([reservationData]);
+      const result = await supabase.from('calendar_events').insert([reservationData]).select();
       error = result.error;
+      savedId = result.data?.[0]?.id;
     }
     
     if (!error) {
+      // --- AUTOMATICKÁ NOTIFIKÁCIA PRE ZVONČEK ---
+      if (tempCustomerContact.userId && !isBlocking) {
+        await supabase.from('notifications').insert([{
+          user_id: tempCustomerContact.userId,
+          title: 'Termín potvrdený',
+          content: `Váš termín pre vozidlo ${plate} bol potvrdený na ${new Date(selectedDate).toLocaleDateString('sk-SK')} o ${startTime}.`,
+          type: 'success'
+        }]);
+      }
+
       setIsModalOpen(false);
       setEditingEventId(null);
       setSelectionMode(null);
@@ -279,11 +302,58 @@ export default function KalendarPage() {
           </h1>
           <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em] mt-2 italic">AutoAlma Capacity Management</p>
         </div>
-        <button onClick={() => router.back()} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">← Späť</button>
+        
+        <div className="flex gap-4">
+          <button 
+            onClick={() => setIsInboxOpen(true)}
+            className={`relative px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${pendingRequests.length > 0 ? 'bg-red-600 animate-pulse text-white shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}
+          >
+            🔔 Online Žiadosti
+            {pendingRequests.length > 0 && (
+              <span className="bg-white text-red-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">
+                {pendingRequests.length}
+              </span>
+            )}
+          </button>
+          <button onClick={() => router.back()} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">← Späť</button>
+        </div>
       </div>
+
+      {isInboxOpen && (
+        <div className="fixed inset-0 z-[150] flex justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsInboxOpen(false)}></div>
+          <div className="relative w-full max-w-md bg-zinc-950 border-l border-zinc-900 shadow-2xl h-full flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-8 border-b border-zinc-900 flex justify-between items-center bg-black font-black">
+              <h2 className="text-xl uppercase italic text-red-600 tracking-widest">Nové požiadavky</h2>
+              <button onClick={() => setIsInboxOpen(false)} className="text-zinc-500 hover:text-white text-2xl font-bold">✕</button>
+            </div>
+            <div className="flex-grow overflow-y-auto p-4 space-y-4 font-bold">
+              {pendingRequests.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-zinc-700 italic text-sm">Žiadne nové žiadosti</div>
+              ) : (
+                pendingRequests.map(req => (
+                  <div 
+                    key={req.id} 
+                    onClick={() => openRequestFromPanel(req)}
+                    className="bg-zinc-900 border border-zinc-800 p-6 rounded-[2.5rem] hover:border-red-600 transition-all cursor-pointer group font-bold"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-xs uppercase">{req.extendedProps.plateNumber}</span>
+                      <span className="text-[9px] text-zinc-500 font-bold uppercase">{new Date(req.start).toLocaleDateString('sk-SK')}</span>
+                    </div>
+                    <p className="font-black text-white uppercase italic group-hover:text-red-500 transition-colors">{req.extendedProps.customerName}</p>
+                    <p className="text-[10px] text-zinc-500 mt-2 line-clamp-2 italic leading-relaxed">{req.extendedProps.pureTitle}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-grow relative bg-black mb-6">
         <FullCalendar
+          ref={calendarRef}
           plugins={[daygridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
           headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek,dayGridMonth' }}
@@ -303,131 +373,150 @@ export default function KalendarPage() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black z-[100] flex flex-col animate-in fade-in duration-200 font-bold italic uppercase">
-          
-          {/* HEADER MODALU */}
-          <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950 font-black font-bold">
-            <div>
-              <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">
-                {selectionMode === 'ask' ? 'Vyberte akciu' : (selectionMode === 'block' ? 'Blokovanie času' : (editingEventId ? 'Úprava Rezervácie' : 'Nová Rezervácia'))}
-              </h2>
-            </div>
-            <button onClick={() => { setIsModalOpen(false); setSelectionMode(null); setEditingEventId(null); }} className="bg-zinc-900 hover:bg-white hover:text-black p-4 rounded-full transition-all">✕</button>
-          </div>
-
-          <div className="flex-grow overflow-y-auto">
-            {selectionMode === 'ask' ? (
-              <div className="h-full flex items-center justify-center p-12 gap-8 font-bold">
-                <button 
-                  onClick={() => setSelectionMode('order')}
-                  className="group flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-red-600 transition-all w-80 aspect-square shadow-2xl"
-                >
-                  <span className="text-5xl mb-6">🚗</span>
-                  <span className="font-black uppercase tracking-widest group-hover:text-white font-bold">Nová Objednávka</span>
-                </button>
-                <button 
-                  onClick={() => setSelectionMode('block')}
-                  className="group flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-zinc-700 transition-all w-80 aspect-square shadow-2xl"
-                >
-                  <span className="text-5xl mb-6">🚫</span>
-                  <span className="font-black uppercase tracking-widest group-hover:text-white font-bold">Blokovať Čas</span>
-                </button>
+        <div className="fixed inset-0 bg-black/50 z-[100] flex animate-in fade-in duration-200 font-bold italic uppercase pl-[260px]">
+          <div className="flex-grow flex flex-col bg-black border-l border-zinc-900">
+            <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950 font-black font-bold">
+              <div>
+                <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter leading-none">
+                  {!isConfirmed ? '🔔 NOVÁ ŽIADOSŤ OD KLIENTA' : (selectionMode === 'ask' ? 'Vyberte akciu' : (selectionMode === 'block' ? 'Blokovanie času' : (editingEventId ? 'Úprava Rezervácie' : 'Nová Rezervácia')))}
+                </h2>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 h-full font-bold">
-                <form onSubmit={saveReservation} className="p-8 md:p-12 space-y-8 border-r border-zinc-900 font-bold">
-                  <div className="bg-zinc-900/30 p-6 rounded-[2rem] border border-zinc-800 space-y-6">
-                    <div>
-                      <label className="block text-[10px] font-black text-red-500 uppercase mb-2 ml-1 tracking-widest font-bold">Dátum opravy</label>
-                      <input required type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all"/>
-                    </div>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Príchod</label>
-                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Odchod (odhad)</label>
-                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600" />
-                      </div>
-                    </div>
-                  </div>
+              <button onClick={() => { setIsModalOpen(false); setSelectionMode(null); setEditingEventId(null); }} className="bg-zinc-900 hover:bg-white hover:text-black p-4 rounded-full transition-all font-bold">✕</button>
+            </div>
 
-                  {selectionMode === 'order' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top duration-300 font-bold">
+            <div className="flex-grow overflow-y-auto">
+              {selectionMode === 'ask' ? (
+                <div className="h-full flex items-center justify-center p-12 gap-8 font-bold">
+                  <button 
+                    onClick={() => setSelectionMode('order')}
+                    className="group flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-red-600 transition-all w-80 aspect-square shadow-2xl"
+                  >
+                    <span className="text-5xl mb-6">🚗</span>
+                    <span className="font-black uppercase tracking-widest group-hover:text-white font-bold">Nová Objednávka</span>
+                  </button>
+                  <button 
+                    onClick={() => setSelectionMode('block')}
+                    className="group flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-zinc-700 transition-all w-80 aspect-square shadow-2xl"
+                  >
+                    <span className="text-5xl mb-6">🚫</span>
+                    <span className="font-black uppercase tracking-widest group-hover:text-white font-bold">Blokovať Čas</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 h-full font-bold">
+                  <form onSubmit={saveReservation} className="p-8 md:p-12 space-y-8 border-r border-zinc-900 font-bold">
+                    <div className="bg-zinc-900/30 p-6 rounded-[2rem] border border-zinc-800 space-y-6">
                       <div>
-                        <label className="block text-[10px] font-black text-zinc-500 uppercase mb-2 ml-1 tracking-widest">ŠPZ Vozidla</label>
-                        <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-5 rounded-3xl font-black text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
+                        <label className="block text-[10px] font-black text-red-500 uppercase mb-2 ml-1 tracking-widest font-bold">Dátum opravy</label>
+                        <input required type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold"/>
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Pridelený mechanik</label>
-                        <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer">
-                          <option value="">-- Kolega --</option>
-                          {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest">Dôvod návštevy / Popis</label>
-                    <input 
-                      type="text" 
-                      value={title} 
-                      onChange={(e) => setTitle(e.target.value)} 
-                      placeholder={selectionMode === 'block' ? "Napr. Dovolenka, Školenie..." : "Napr. Brzdy, Olej..."}
-                      className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-4 uppercase italic" 
-                    />
-                    {selectionMode === 'order' && (
-                      <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti o závade..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-red-600 h-24 resize-none uppercase" />
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-4 pt-4 font-bold">
-                    {selectionMode === 'order' && editingEventId && isConfirmed && (
-                      <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] text-center shadow-lg transition-all italic font-bold font-bold font-bold">
-                        📋 Otvoriť Zákazkový list
-                      </Link>
-                    )}
-                    <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold font-bold`}>
-                      {editingEventId ? 'Uložiť zmeny' : (selectionMode === 'block' ? 'Zablokovať čas v dielni' : 'Potvrdiť termín')}
-                    </button>
-                    {editingEventId && (
-                      <button type="button" onClick={deleteReservation} className="text-zinc-600 hover:text-red-500 font-bold uppercase text-[9px] tracking-widest transition-all mt-4 font-bold">Odstrániť z harmonogramu</button>
-                    )}
-                  </div>
-                </form>
-
-                {/* PRAVÝ PANEL - DETAIL VOZIDLA */}
-                <div className="bg-zinc-950 p-8 md:p-12 space-y-10 border-l border-zinc-900 font-bold">
-                  <h3 className="text-sm font-black uppercase text-zinc-600 tracking-[0.4em] border-b border-zinc-900 pb-4 italic font-black font-bold font-bold">Detail Vozidla a Partnera</h3>
-                  {selectionMode === 'block' ? (
-                    <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-[4rem] text-zinc-600 text-center p-12">
-                      <span className="text-6xl mb-4">🔒</span>
-                      <p className="font-black uppercase tracking-widest text-xs">Termín je nedostupný</p>
-                      <p className="text-[10px] mt-2 italic font-bold">Pre online rezervácie bude tento čas neviditeľný.</p>
-                    </div>
-                  ) : carData ? (
-                    <div className="space-y-12 animate-in slide-in-from-right duration-500 font-bold">
-                      <div className="bg-zinc-900/40 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group font-bold">
-                        <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-xl tracking-widest mb-6 inline-block shadow-2xl font-bold uppercase">{carData.license_plate || carData.plate_number}</span>
-                        <h4 className="text-4xl font-black uppercase italic mb-8 tracking-tighter leading-tight font-bold">{carData.brand_model || carData.car_brand_model}</h4>
-                        <div className="grid grid-cols-2 gap-y-10 gap-x-12 text-zinc-300 italic">
-                          <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest">Identifikácia VIN</p><span className="font-mono text-xs font-bold">{carData.vin_number || '---'}</span></div>
-                          <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest">Partner / Majiteľ</p>{carData.owner_name || carData.customer_name}</div>
-                          <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest">Telefónny kontakt</p>{carData.customer_phone || '---'}</div>
-                          <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest font-bold">Zodpovedný kolega</p>{employees.find(e => e.id === selectedEmployee)?.name || '---'}</div>
+                      <div className="grid grid-cols-2 gap-6 font-bold">
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Príchod</label>
+                          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 font-bold" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Odchod (odhad)</label>
+                          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 font-bold" />
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12 italic text-[10px] uppercase tracking-[0.5em] leading-relaxed">
-                      Zadajte platnú ŠPZ<br/>pre načítanie dát z databázy
+
+                    {selectionMode === 'order' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-bold">
+                        <div>
+                          <label className="block text-[10px] font-black text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">ŠPZ Vozidla</label>
+                          <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-5 rounded-3xl font-black text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Pridelený mechanik</label>
+                          <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
+                            <option value="">-- Kolega --</option>
+                            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="font-bold">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Dôvod návštevy / Popis</label>
+                      <input 
+                        type="text" 
+                        value={title} 
+                        onChange={(e) => setTitle(e.target.value)} 
+                        placeholder={selectionMode === 'block' ? "Napr. Dovolenka, Školenie..." : "Napr. Brzdy, Olej..."}
+                        className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-4 uppercase italic font-bold" 
+                      />
+                      {selectionMode === 'order' && (
+                        <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti o závade..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-red-600 h-24 resize-none uppercase font-bold" />
+                      )}
                     </div>
-                  )}
+
+                    <div className="flex flex-col gap-4 pt-4 font-bold">
+                      {selectionMode === 'order' && editingEventId && isConfirmed && (
+                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] text-center shadow-lg transition-all italic font-bold">
+                          📋 Otvoriť Zákazkový list
+                        </Link>
+                      )}
+                      <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold`}>
+                        {!isConfirmed ? '✅ Potvrdiť a zapísať do harmonogramu' : (editingEventId ? 'Uložiť zmeny' : 'Zapísať do harmonogramu')}
+                      </button>
+                      {editingEventId && (
+                        <button type="button" onClick={deleteReservation} className="text-zinc-600 hover:text-red-500 font-bold uppercase text-[9px] tracking-widest transition-all mt-4 font-bold">Odstrániť z harmonogramu</button>
+                      )}
+                    </div>
+                  </form>
+
+                  {/* PRAVÝ PANEL - DETAIL VOZIDLA A KLIENTA */}
+                  <div className="bg-zinc-950 p-8 md:p-12 space-y-10 border-l border-zinc-900 font-bold">
+                    <h3 className="text-sm font-black uppercase text-zinc-600 tracking-[0.4em] border-b border-zinc-900 pb-4 italic font-black">Detail Vozidla a Partnera</h3>
+                    
+                    {selectionMode === 'block' ? (
+                      <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-[4rem] text-zinc-600 text-center p-12">
+                        <span className="text-6xl mb-4">🔒</span>
+                        <p className="font-black uppercase tracking-widest text-xs">Termín je nedostupný</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-8 animate-in slide-in-from-right duration-500 font-bold">
+                        {/* KONTAKT NA KLIENTA (Zobrazené ak ide o Online žiadosť) */}
+                        {!isConfirmed && (
+                           <div className="bg-red-600/10 border border-red-600/20 p-8 rounded-[3rem] shadow-xl space-y-4 font-bold">
+                              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest font-bold">Kontaktné údaje žiadateľa</p>
+                              <h4 className="text-2xl font-black text-white uppercase italic">{tempCustomerContact.customerName || selectedClientName || 'Neznámy klient'}</h4>
+                              <div className="space-y-2">
+                                 <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold">
+                                    📞 <span className="text-white text-lg tracking-widest font-bold">{tempCustomerContact.phone || '---'}</span>
+                                 </p>
+                                 <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold">
+                                    ✉️ <span className="text-white font-bold">{tempCustomerContact.email || '---'}</span>
+                                 </p>
+                              </div>
+                              <div className="pt-2 font-bold">
+                                 <a href={`tel:${tempCustomerContact.phone}`} className="inline-block bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 transition-all font-bold">Zavolať ihneď</a>
+                              </div>
+                           </div>
+                        )}
+
+                        {carData ? (
+                          <div className="bg-zinc-900/40 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group font-bold">
+                            <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-xl tracking-widest mb-6 inline-block shadow-2xl font-bold uppercase">{carData.license_plate}</span>
+                            <h4 className="text-4xl font-black uppercase italic mb-8 tracking-tighter leading-tight font-bold">{carData.brand_model}</h4>
+                            <div className="grid grid-cols-2 gap-y-10 gap-x-12 text-zinc-300 italic font-bold">
+                              <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest font-bold">VIN</p><span className="font-mono text-xs font-bold">{carData.vin_number || '---'}</span></div>
+                              <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest font-bold">Majiteľ v DB</p>{carData.owner_name}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12 italic text-[10px] uppercase tracking-[0.5em] leading-relaxed font-bold">
+                            Vozidlo nenájdené v DB<br/>preverte podľa ŠPZ
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
