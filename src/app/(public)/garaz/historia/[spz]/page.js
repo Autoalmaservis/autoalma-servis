@@ -9,22 +9,25 @@ export default function HistoriaVozidlaPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [ticketPhotos, setTicketPhotos] = useState([]); // Nový stav pre fotky konkrétnej zákazky
+  const [ticketPhotos, setTicketPhotos] = useState([]); // Stav pre fotky konkrétnej zákazky
+  const [ticketInvoice, setTicketInvoice] = useState(null); // Nový stav pre faktúru
 
   useEffect(() => {
     if (spz) fetchHistory();
   }, [spz]);
 
-  // Keď zákazník klikne na detail zákazky, načítame k nej prislúchajúce fotky
+  // Keď zákazník klikne na detail zákazky, načítame fotky a faktúru
   useEffect(() => {
     if (selectedTicket) {
-      fetchTicketPhotos(selectedTicket.id);
+      fetchTicketDetails(selectedTicket.id);
     } else {
       setTicketPhotos([]);
+      setTicketInvoice(null);
     }
   }, [selectedTicket]);
 
   const fetchHistory = async () => {
+    // Načítame zákazky pre danú ŠPZ
     const { data, error } = await supabase
       .from('job_tickets')
       .select('*')
@@ -37,9 +40,12 @@ export default function HistoriaVozidlaPage() {
       return;
     }
 
+    // Pre každú zákazku dotiahneme položky (ceny) a úlohy (popis)
     const formattedData = await Promise.all(data.map(async (t) => {
       const { data: items } = await supabase.from('job_items').select('*').eq('job_id', t.id);
       const { data: tasks } = await supabase.from('job_tasks').select('*').eq('job_id', t.id);
+
+      // Výpočet ceny s DPH 23%
       const subtotal = items?.reduce((acc, item) => acc + (Number(item.unit_price) * Number(item.quantity)), 0) || 0;
       
       return { 
@@ -54,15 +60,27 @@ export default function HistoriaVozidlaPage() {
     setLoading(false);
   };
 
-  const fetchTicketPhotos = async (jobId) => {
-    const { data, error } = await supabase
+  const fetchTicketDetails = async (jobId) => {
+    // 1. Načítanie fotiek
+    const { data: photos, error: pError } = await supabase
       .from('job_photos')
       .select('*')
       .eq('job_id', jobId)
       .order('created_at', { ascending: true });
 
-    if (!error && data) {
-      setTicketPhotos(data);
+    if (!pError && photos) {
+      setTicketPhotos(photos);
+    }
+
+    // 2. Načítanie faktúry spojenej so zákazkou
+    const { data: invoice, error: iError } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('job_id', jobId)
+      .maybeSingle();
+
+    if (!iError && invoice) {
+      setTicketInvoice(invoice);
     }
   };
 
@@ -117,9 +135,9 @@ export default function HistoriaVozidlaPage() {
               </div>
               <div className="flex justify-center">
                 <span className={`text-[9px] px-4 py-1.5 rounded-full border font-black uppercase ${
-                  t.status === 'Dokončené' ? 'border-green-600 text-green-500 bg-green-600/5' : 'border-amber-600 text-amber-500 bg-amber-600/5'
+                  t.status === 'Dokončené' || t.status === 'Archivované' ? 'border-green-600 text-green-500 bg-green-600/5' : 'border-amber-600 text-amber-500 bg-amber-600/5'
                 }`}>
-                  {t.status}
+                  {t.status === 'Archivované' ? 'VYFAKTUROVANÉ' : t.status}
                 </span>
               </div>
             </div>
@@ -148,9 +166,20 @@ export default function HistoriaVozidlaPage() {
                   Dátum: {new Date(selectedTicket.created_at).toLocaleString('sk-SK')}
                 </p>
               </div>
+
+              {/* TLAČIDLO NA FAKTÚRU */}
               <div className="text-right">
-                <p className="text-[10px] text-zinc-600 uppercase font-black mb-1">Evidenčné číslo</p>
-                <p className="text-2xl font-black italic">#{selectedTicket.id.slice(0, 8).toUpperCase()}</p>
+                {ticketInvoice ? (
+                  <button 
+                    onClick={() => window.open(`/faktura-online/${ticketInvoice.id}`, '_blank')}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/40 transition-all flex items-center gap-2 mb-2"
+                  >
+                    📄 Faktúra {ticketInvoice.invoice_number}
+                  </button>
+                ) : (
+                  <p className="text-[10px] text-zinc-600 uppercase font-black mb-1 text-right">Evidenčné číslo</p>
+                )}
+                <p className="text-2xl font-black italic text-right">#{selectedTicket.id.slice(0, 8).toUpperCase()}</p>
               </div>
             </header>
 
@@ -182,7 +211,7 @@ export default function HistoriaVozidlaPage() {
                   </div>
                 )}
                 
-                {/* --- NOVÁ SEKČIA: FOTODOKUMENTÁCIA --- */}
+                {/* --- FOTODOKUMENTÁCIA --- */}
                 {ticketPhotos.length > 0 && (
                   <div className="space-y-6">
                     <h3 className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Fotodokumentácia z opravy</h3>
