@@ -4,39 +4,37 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const ecv = searchParams.get('ecv');
 
-  // Ak niekto zabudne zadať ŠPZ
-  if (!ecv) {
-    return NextResponse.json({ error: 'Chýba EČV' }, { status: 400 });
-  }
+  if (!ecv) return NextResponse.json({ error: 'Chýba EČV' }, { status: 400 });
+
+  console.log(`--- SKÚŠAM DOTAZ PRE: ${ecv} ---`);
 
   try {
-    // REÁLNA POŽIADAVKA NA API (bez simulovaných dát)
     const response = await fetch(`https://www.databazavozidiel.sk/api/vehicles?ecv=${ecv}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
         'Version': '2',
         'Authorization': 'Bearer JeEwhfoFooklmPqc0brJY5cByzZy0gfEV22QFbCVThlrniGhgJMMIB1egtXh5Rud',
-        'User-Agent': 'AutoAlma-App/1.0'
+        'User-Agent': 'Mozilla/5.0'
       },
       cache: 'no-store'
     });
 
-    const data = await response.json();
+    // POZOR: Najprv načítame odpoveď ako text, aby sme videli, či to nie je náhodou chyba 403 alebo 404
+    const rawText = await response.text();
+    console.log("SUROVÁ ODPOVEĎ ZO SERVERA:", rawText);
 
-    // Ak API vráti chybu (napr. neexistujúca ŠPZ)
-    if (!response.ok) {
-      return NextResponse.json({ 
-        error: 'Vozidlo sa nenašlo alebo API odmietlo prístup', 
-        details: data 
-      }, { status: response.status });
+    // Ak je to prázdne alebo to nie je JSON, tu to uvidíme
+    try {
+      const data = JSON.parse(rawText);
+      return NextResponse.json(data);
+    } catch (parseError) {
+      console.error("CHYBA: Server neposlal JSON, ale niečo iné (napr. HTML chybu)");
+      return NextResponse.json({ error: "Neplatný formát dát", raw: rawText }, { status: 500 });
     }
 
-    // VRÁTIME REÁLNE DÁTA, KTORÉ PRIŠLI Z API
-    return NextResponse.json(data);
-
   } catch (error) {
-    console.error("Kritická chyba:", error);
-    return NextResponse.json({ error: 'Interná chyba servera' }, { status: 500 });
+    console.error("CHYBA SPOJENIA:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
