@@ -463,7 +463,17 @@ export default function KalendarPage() {
                       <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold`}>
                         {editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}
                       </button>
-                      {editingEventId && <button type="button" onClick={deleteReservation} className="text-zinc-600 hover:text-red-500 font-bold uppercase text-[9px] tracking-widest transition-all mt-4 font-bold">Odstrániť záznam</button>}
+                      
+                      {/* PRIDANÉ TLAČIDLO VYMAZAŤ V HLAVNEJ SEKCIÍ */}
+                      {editingEventId && (
+                        <button 
+                          type="button" 
+                          onClick={deleteReservation} 
+                          className="w-full bg-zinc-900 border border-red-900/30 text-red-500 hover:bg-red-600 hover:text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold"
+                        >
+                          🗑️ Vymazať objednávku
+                        </button>
+                      )}
                     </div>
                   </form>
 
