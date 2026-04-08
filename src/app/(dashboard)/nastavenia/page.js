@@ -14,6 +14,11 @@ export default function NastaveniaPage() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   
+  // --- NOVÉ STAVY PRE SMS ŠABLÓNY ---
+  const [smsTemplates, setSmsTemplates] = useState([]);
+  const [newSmsLabel, setNewSmsLabel] = useState('');
+  const [newSmsContent, setNewSmsContent] = useState('');
+
   // Stavy pre MODÁLNE OKNO (Editácia zamestnanca)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', password: '' });
@@ -61,6 +66,13 @@ export default function NastaveniaPage() {
     if (empData) setEmployees(empData);
     if (error) console.error("Chyba načítania zamestnancov:", error);
 
+    // --- NAČÍTANIE SMS ŠABLÓN ---
+    const { data: smsData } = await supabase
+      .from('sms_templates')
+      .select('*')
+      .order('label', { ascending: true });
+    if (smsData) setSmsTemplates(smsData);
+
     // Načítanie nastavení z business_settings
     const { data: setData } = await supabase.from('business_settings').select('*');
     if (setData) {
@@ -96,6 +108,33 @@ export default function NastaveniaPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // --- LOGIKA PRE SMS ŠABLÓNY ---
+  const addSmsTemplate = async (e) => {
+    e.preventDefault();
+    if (!newSmsLabel.trim() || !newSmsContent.trim()) return;
+    setLoading(true);
+    const { error } = await supabase.from('sms_templates').insert([
+      { label: newSmsLabel, content: newSmsContent }
+    ]);
+    if (!error) {
+      setNewSmsLabel('');
+      setNewSmsContent('');
+      fetchData();
+    }
+    setLoading(false);
+  };
+
+  const updateSmsTemplate = async (id, field, value) => {
+    await supabase.from('sms_templates').update({ [field]: value }).eq('id', id);
+  };
+
+  const deleteSmsTemplate = async (id) => {
+    if (confirm('Naozaj vymazať túto šablónu?')) {
+      await supabase.from('sms_templates').delete().eq('id', id);
+      fetchData();
+    }
+  };
 
   // 2. Logika pre pridanie nového zamestnanca
   const addEmployee = async (e) => {
@@ -265,6 +304,12 @@ export default function NastaveniaPage() {
           💰 Hodinové sadzby
         </button>
         <button 
+          onClick={() => setActiveTab('sms_templates')}
+          className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'sms_templates' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
+        >
+          📱 SMS Šablóny
+        </button>
+        <button 
           onClick={() => setActiveTab('fakturacia')}
           className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'fakturacia' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
         >
@@ -320,6 +365,43 @@ export default function NastaveniaPage() {
               <button onClick={saveRates} className="w-full md:w-auto px-12 bg-red-600 text-white hover:bg-red-700 font-black py-5 rounded-2xl transition-all uppercase text-xs tracking-[0.2em] shadow-xl">
                 {ratesSaveStatus || 'Uložiť cenník prác'}
               </button>
+            </div>
+          </section>
+        )}
+
+        {/* --- NOVÁ SEKCIJA: SMS ŠABLÓNY --- */}
+        {activeTab === 'sms_templates' && (
+          <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
+              <h3 className="text-sm font-black uppercase text-red-600 tracking-widest italic mb-6 ml-1">Vytvoriť novú SMS šablónu</h3>
+              <form onSubmit={addSmsTemplate} className="space-y-4 mb-10">
+                <input required type="text" value={newSmsLabel} onChange={(e) => setNewSmsLabel(e.target.value)} placeholder="Názov (napr. Vozidlo hotové)" className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600" />
+                <textarea required value={newSmsContent} onChange={(e) => setNewSmsContent(e.target.value)} placeholder="Samotný text správy..." className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 h-24 resize-none" />
+                <button type="submit" disabled={loading} className="w-full md:w-auto px-10 bg-white text-black font-black py-4 rounded-xl uppercase text-[10px] tracking-widest hover:bg-red-600 hover:text-white transition-all">Pridať šablónu +</button>
+              </form>
+
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.3em] ml-1">Existujúce šablóny</h3>
+                {smsTemplates.map((sms) => (
+                  <div key={sms.id} className="bg-black/40 border border-zinc-800 p-6 rounded-3xl group">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-grow mr-4">
+                        <input 
+                          className="bg-transparent border-none text-red-600 font-black uppercase text-xs w-full focus:ring-0 mb-1"
+                          defaultValue={sms.label}
+                          onBlur={(e) => updateSmsTemplate(sms.id, 'label', e.target.value)}
+                        />
+                        <textarea 
+                          className="bg-transparent border-none text-zinc-400 text-sm w-full focus:ring-0 resize-none h-16"
+                          defaultValue={sms.content}
+                          onBlur={(e) => updateSmsTemplate(sms.id, 'content', e.target.value)}
+                        />
+                      </div>
+                      <button onClick={() => deleteSmsTemplate(sms.id)} className="p-3 bg-zinc-800 rounded-xl hover:text-red-500 transition-colors">🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         )}

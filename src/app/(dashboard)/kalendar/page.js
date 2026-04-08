@@ -11,12 +11,12 @@ import { useRouter } from 'next/navigation';
 
 export default function KalendarPage() {
   const router = useRouter();
-  const calendarRef = useRef(null); // Ref na ovládanie kalendára
+  const calendarRef = useRef(null); 
   const [events, setEvents] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isInboxOpen, setIsInboxOpen] = useState(false); // Stav pre bočný panel
-  const [selectionMode, setSelectionMode] = useState(null); // 'ask', 'order', 'block'
+  const [isInboxOpen, setIsInboxOpen] = useState(false); 
+  const [selectionMode, setSelectionMode] = useState(null); 
   const [editingEventId, setEditingEventId] = useState(null);
   const [isConfirmed, setIsConfirmed] = useState(true);
 
@@ -66,18 +66,18 @@ export default function KalendarPage() {
     
     const formattedEvents = (evData || []).map(ev => {
       const isOnlinePending = ev.is_confirmed === false;
-      const isBlocked = ev.is_blocked === true;
+      const isActuallyBlocked = ev.is_blocked === true || ev.plate_number === 'BLOK';
       
       let displayTitle = ev.title;
-      if (isBlocked) displayTitle = `🚫 BLOKOVANÝ ČAS: ${ev.title}`;
+      if (isActuallyBlocked) displayTitle = `🚫 BLOKOVANÉ: ${ev.title}`;
       else if (ev.issue_description) displayTitle = `${ev.title} (${ev.issue_description})`;
 
       return {
         id: ev.id,
-        title: isOnlinePending ? `⚠️ NOVÁ ŽIADOSŤ: ${ev.plate_number}` : displayTitle,
+        title: isOnlinePending ? `⚠️ ŽIADOSŤ: ${ev.plate_number}` : displayTitle,
         start: ev.start_datetime,
         end: ev.end_datetime,
-        backgroundColor: isBlocked ? '#3f3f46' : (isOnlinePending ? '#f59e0b' : (ev.employees?.color || '#dc2626')),
+        backgroundColor: isActuallyBlocked ? '#3f3f46' : (isOnlinePending ? '#f59e0b' : (ev.employees?.color || '#dc2626')),
         borderColor: isOnlinePending ? '#ffffff' : 'transparent',
         classNames: isOnlinePending ? ['animate-pulse', 'border-2'] : [],
         extendedProps: { 
@@ -89,7 +89,7 @@ export default function KalendarPage() {
           issueDescription: ev.issue_description,
           plannedWork: ev.planned_work,
           isConfirmed: ev.is_confirmed,
-          isBlocked: ev.is_blocked,
+          isBlocked: isActuallyBlocked,
           customerPhone: ev.customer_phone,
           customerEmail: ev.customer_email,
           userId: ev.user_id
@@ -102,12 +102,10 @@ export default function KalendarPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Filtrovanie nepotvrdených žiadostí pre Inbox
   const pendingRequests = events.filter(ev => ev.extendedProps.isConfirmed === false);
 
-  // --- 2. LOGIKA VOZIDIEL ---
   const loadCarDetails = async (spz) => {
-    if (!spz || spz.length < 5 || spz === 'BLOK') return;
+    if (!spz || spz === 'BLOK' || spz === '') return;
     const { data } = await supabase
       .from('vehicles')
       .select('*')
@@ -118,6 +116,13 @@ export default function KalendarPage() {
       setCarData(data);
       setIsKnown(true);
       setSelectedClientName(data.owner_name);
+      setTempCustomerContact(prev => ({
+        ...prev,
+        phone: prev.phone || data.owner_phone || '',
+        email: prev.email || data.owner_email || '',
+        customerName: prev.customerName || data.owner_name || '',
+        userId: prev.userId || data.owner_id || null
+      }));
     } else {
       const { data: fallback } = await supabase.from('job_tickets').select('*').eq('plate_number', spz.toUpperCase()).limit(1).maybeSingle();
       if (fallback) {
@@ -137,14 +142,20 @@ export default function KalendarPage() {
     }
   };
 
-  // --- 3. MANIPULÁCIA S KALENDÁROM ---
+  // --- 3. MANIPULÁCIA S KALENDÁROM (OPRAVA DRAG & DROP) ---
   const handleEventChange = async (changeInfo) => {
     const { event } = changeInfo;
+    
+    if (!changeInfo.event.startStr || !changeInfo.event.endStr) return;
+
+    const startStr = changeInfo.event.startStr.split('+')[0].split('Z')[0];
+    const endStr = changeInfo.event.endStr.split('+')[0].split('Z')[0];
+
     const { error } = await supabase
       .from('calendar_events')
       .update({
-        start_datetime: event.start.toISOString(),
-        end_datetime: event.end ? event.end.toISOString() : event.start.toISOString(),
+        start_datetime: startStr,
+        end_datetime: endStr,
       })
       .eq('id', event.id);
 
@@ -156,23 +167,46 @@ export default function KalendarPage() {
     }
   };
 
-  // --- 4. KLIKNUTIE NA UDALOSŤ (EDITÁCIA) ---
   const handleEventClick = (clickInfo) => {
     const ev = clickInfo.event;
     const props = ev.extendedProps;
 
     setEditingEventId(ev.id);
-    const currentMode = props.isBlocked ? 'block' : 'order';
-    setSelectionMode(currentMode);
+    const isOrder = props.plateNumber && props.plateNumber !== 'BLOK' && props.plateNumber !== '';
+    
+    if (isOrder) {
+      setSelectionMode('order');
+      loadCarDetails(props.plateNumber);
+    } else {
+      setSelectionMode('block');
+      setCarData(null);
+    }
+    
     setIsConfirmed(props.isConfirmed !== false);
     setTitle(props.pureTitle || ev.title);
     
-    const startObj = new Date(ev.start);
-    const endObj = ev.end ? new Date(ev.end) : startObj;
+    // OPRAVA: Prenos času aj z Inboxu (ak startStr nie je dostupné, použijeme objekt start)
+    let startStr = ev.startStr;
+    let endStr = ev.endStr;
+
+    if (!startStr && ev.start) {
+        const d = new Date(ev.start);
+        const offset = d.getTimezoneOffset() * 60000;
+        startStr = new Date(d.getTime() - offset).toISOString();
+    }
+    if (!endStr && ev.end) {
+        const d = new Date(ev.end);
+        const offset = d.getTimezoneOffset() * 60000;
+        endStr = new Date(d.getTime() - offset).toISOString();
+    }
     
-    setSelectedDate(startObj.toISOString().split('T')[0]);
-    setStartTime(startObj.toTimeString().substring(0, 5));
-    setEndTime(endObj.toTimeString().substring(0, 5));
+    if (startStr && startStr.includes('T')) {
+      setSelectedDate(startStr.split('T')[0]);
+      setStartTime(startStr.split('T')[1].substring(0, 5));
+    }
+    if (endStr && endStr.includes('T')) {
+      setEndTime(endStr.split('T')[1].substring(0, 5));
+    }
     
     setPlate(props.plateNumber || '');
     setSelectedEmployee(props.employeeId || '');
@@ -186,33 +220,34 @@ export default function KalendarPage() {
       userId: props.userId || null 
     });
     
-    if (props.plateNumber && props.plateNumber !== 'BLOK') {
-        loadCarDetails(props.plateNumber);
-    }
-    
     setIsModalOpen(true);
   };
 
-  // Otvorenie žiadosti z bočného panelu
   const openRequestFromPanel = (ev) => {
     const calendarApi = calendarRef.current.getApi();
-    calendarApi.gotoDate(ev.start); // Skočiť na dátum žiadosti
-    handleEventClick({ event: ev }); // Otvoriť editačné okno
-    setIsInboxOpen(false); // Zavrieť Inbox
+    calendarApi.gotoDate(ev.start); 
+    handleEventClick({ event: ev }); 
+    setIsInboxOpen(false); 
   };
 
   const handlePlateBlur = async (spz) => { loadCarDetails(spz); };
 
+  // --- OPRAVA VÝBERU NOVÉHO TERMÍNU (SELECT) ---
   const handleSelect = (arg) => {
     setEditingEventId(null);
     setIsConfirmed(true);
-    const datePart = arg.startStr.split('T')[0];
-    const timeStart = arg.startStr.split('T')[1]?.substring(0, 5) || '08:00';
-    const timeEnd = arg.endStr.split('T')[1]?.substring(0, 5) || '10:00';
     
-    setSelectedDate(datePart);
-    setStartTime(timeStart);
-    setEndTime(timeEnd);
+    // OPRAVA: Bezpečné získanie dátumu a času
+    const startStr = arg.startStr || "";
+    const endStr = arg.endStr || "";
+    
+    if (startStr.includes('T')) {
+      setSelectedDate(startStr.split('T')[0]);
+      setStartTime(startStr.split('T')[1].substring(0, 5));
+    }
+    if (endStr.includes('T')) {
+      setEndTime(endStr.split('T')[1].substring(0, 5));
+    }
     
     setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork('');
     setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
@@ -221,39 +256,43 @@ export default function KalendarPage() {
     setIsModalOpen(true);
   };
 
-  // --- 5. UKLADANIE / MAZANIE ---
+  // --- 5. UKLADANIE ---
   const saveReservation = async (e) => {
     if (e) e.preventDefault();
     
     const isBlocking = selectionMode === 'block';
+    
+    const finalStart = `${selectedDate}T${startTime}:00`;
+    const finalEnd = `${selectedDate}T${endTime}:00`;
+
     const reservationData = {
-      title: isBlocking ? (title || 'Servisná pauza / Blokované') : (title || `Zákazka ${plate}`),
-      start_datetime: `${selectedDate}T${startTime}:00`,
-      end_datetime: `${selectedDate}T${endTime}:00`,
+      // Ak potvrdzujeme flexi termín, odstránime značku FLEXI z titulku
+      title: isBlocking ? (title || 'Servisná pauza') : (title.replace('FLEXI:', 'ZÁKAZKA:').replace('⚠️ ŽIADOSŤ:', 'ZÁKAZKA:') || `Zákazka ${plate}`),
+      start_datetime: finalStart,
+      end_datetime: finalEnd,
       employee_id: selectedEmployee || null,
-      customer_name: isBlocking ? 'INTERNÉ' : (selectedClientName || (carData ? (carData.owner_name || carData.customer_name) : '')),
+      customer_name: isBlocking ? 'INTERNÉ' : (selectedClientName || tempCustomerContact.customerName || 'Neznámy'),
       plate_number: isBlocking ? 'BLOK' : plate,
-      issue_description: isBlocking ? 'Blokovaný čas technikom' : issueDescription,
+      issue_description: isBlocking ? 'Blokovaný čas' : issueDescription,
       planned_work: plannedWork,
-      is_confirmed: true, // Ak to ukladá technik, je to potvrdené
+      is_confirmed: true, // Zmeníme na true, čo spustí Realtime zvonček v garáži
       is_blocked: isBlocking,
-      status: isBlocking ? 'Blokované' : 'Naplánované'
+      status: isBlocking ? 'Blokované' : 'Naplánované',
+      customer_phone: tempCustomerContact.phone,
+      customer_email: tempCustomerContact.email,
+      user_id: tempCustomerContact.userId
     };
 
     let error;
-    let savedId = editingEventId;
-
     if (editingEventId) {
       const result = await supabase.from('calendar_events').update(reservationData).eq('id', editingEventId);
       error = result.error;
     } else {
       const result = await supabase.from('calendar_events').insert([reservationData]).select();
       error = result.error;
-      savedId = result.data?.[0]?.id;
     }
     
     if (!error) {
-      // --- AUTOMATICKÁ NOTIFIKÁCIA PRE ZVONČEK ---
       if (tempCustomerContact.userId && !isBlocking) {
         await supabase.from('notifications').insert([{
           user_id: tempCustomerContact.userId,
@@ -262,7 +301,6 @@ export default function KalendarPage() {
           type: 'success'
         }]);
       }
-
       setIsModalOpen(false);
       setEditingEventId(null);
       setSelectionMode(null);
@@ -281,82 +319,63 @@ export default function KalendarPage() {
   if (loading) return <div className="h-screen bg-black flex items-center justify-center text-red-600 font-black animate-pulse uppercase tracking-[0.3em]">Načítavam systém...</div>;
 
   return (
-    <div className="h-screen flex flex-col bg-black overflow-hidden select-none p-6 text-white font-sans">
+    <div className="h-screen flex flex-col bg-black overflow-hidden select-none p-6 text-white font-sans font-bold">
       <style>{`
         .fc { --fc-border-color: #18181b; }
         .fc-theme-standard td, .fc-theme-standard th { border: 1px solid #18181b !important; }
         .fc-button-primary { background: #18181b !important; border: 1px solid #27272a !important; text-transform: uppercase; font-size: 0.7rem !important; font-weight: bold !important; border-radius: 8px !important; }
         .fc-button-active { background: #dc2626 !important; border-color: #dc2626 !important; }
-        .fc-toolbar-title { font-weight: 900 !important; text-transform: uppercase; font-size: 1.1rem !important; font-style: italic; letter-spacing: -0.025em; }
-        .fc-view-harness { background: #09090b; border-radius: 2rem; overflow: hidden; border: 1px solid #18181b; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
-        .fc-event { border-radius: 12px !important; padding: 6px !important; font-weight: 700 !important; font-size: 0.75rem !important; cursor: pointer; border: none !important; }
+        .fc-view-harness { background: #09090b; border-radius: 2rem; overflow: hidden; border: 1px solid #18181b; }
+        .fc-event { border-radius: 12px !important; padding: 6px !important; font-weight: 700 !important; cursor: pointer; border: none !important; }
         .fc-timegrid-slot { height: 3em !important; }
-        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+          filter: invert(1);
+          cursor: pointer;
+        }
       `}</style>
       
       <div className="pb-6 flex justify-between items-end bg-black font-bold">
         <div className="border-l-4 border-red-600 pl-5">
-          <h1 className="text-3xl font-black uppercase italic text-white tracking-tighter leading-none">
-            Harmonogram <span className="text-red-600">Dielne</span>
-          </h1>
-          <p className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.3em] mt-2 italic">AutoAlma Capacity Management</p>
+          <h1 className="text-3xl font-black uppercase italic text-white tracking-tighter leading-none"> Harmonogram <span className="text-red-600">Dielne</span> </h1>
         </div>
         
         <div className="flex gap-4">
-          <button 
-            onClick={() => setIsInboxOpen(true)}
-            className={`relative px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${pendingRequests.length > 0 ? 'bg-red-600 animate-pulse text-white shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}
-          >
-            🔔 Online Žiadosti
-            {pendingRequests.length > 0 && (
-              <span className="bg-white text-red-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">
-                {pendingRequests.length}
-              </span>
-            )}
+          <button onClick={() => setIsInboxOpen(true)} className={`relative px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${pendingRequests.length > 0 ? 'bg-red-600 animate-pulse text-white shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
+            🔔 Žiadosti {pendingRequests.length > 0 && <span className="bg-white text-red-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">{pendingRequests.length}</span>}
           </button>
           <button onClick={() => router.back()} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">← Späť</button>
         </div>
       </div>
 
       {isInboxOpen && (
-        <div className="fixed inset-0 z-[150] flex justify-end">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsInboxOpen(false)}></div>
-          <div className="relative w-full max-w-md bg-zinc-950 border-l border-zinc-900 shadow-2xl h-full flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-8 border-b border-zinc-900 flex justify-between items-center bg-black font-black">
-              <h2 className="text-xl uppercase italic text-red-600 tracking-widest">Nové požiadavky</h2>
+        <div className="fixed inset-0 z-[150] flex justify-end font-bold">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsInboxOpen(false)}></div>
+          <div className="relative w-full max-w-md bg-zinc-950 border-l border-zinc-900 shadow-2xl h-full flex flex-col">
+            <div className="p-8 border-b border-zinc-900 flex justify-between items-center bg-black">
+              <h2 className="text-xl uppercase italic text-red-600 tracking-widest font-black">Nové požiadavky</h2>
               <button onClick={() => setIsInboxOpen(false)} className="text-zinc-500 hover:text-white text-2xl font-bold">✕</button>
             </div>
-            <div className="flex-grow overflow-y-auto p-4 space-y-4 font-bold">
-              {pendingRequests.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-zinc-700 italic text-sm">Žiadne nové žiadosti</div>
-              ) : (
-                pendingRequests.map(req => (
-                  <div 
-                    key={req.id} 
-                    onClick={() => openRequestFromPanel(req)}
-                    className="bg-zinc-900 border border-zinc-800 p-6 rounded-[2.5rem] hover:border-red-600 transition-all cursor-pointer group font-bold"
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-xs uppercase">{req.extendedProps.plateNumber}</span>
-                      <span className="text-[9px] text-zinc-500 font-bold uppercase">{new Date(req.start).toLocaleDateString('sk-SK')}</span>
-                    </div>
-                    <p className="font-black text-white uppercase italic group-hover:text-red-500 transition-colors">{req.extendedProps.customerName}</p>
-                    <p className="text-[10px] text-zinc-500 mt-2 line-clamp-2 italic leading-relaxed">{req.extendedProps.pureTitle}</p>
+            <div className="flex-grow overflow-y-auto p-4 space-y-4">
+              {pendingRequests.map(req => (
+                <div key={req.id} onClick={() => openRequestFromPanel(req)} className="bg-zinc-900 border border-zinc-800 p-6 rounded-[2.5rem] hover:border-red-600 transition-all cursor-pointer group font-bold">
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-xs uppercase font-bold">{req.extendedProps.plateNumber}</span>
                   </div>
-                ))
-              )}
+                  <p className="font-black text-white uppercase italic group-hover:text-red-500 font-bold">{req.extendedProps.customerName}</p>
+                  <p className="text-[10px] text-zinc-500 mt-1 uppercase">{req.extendedProps.pureTitle}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex-grow relative bg-black mb-6">
+      <div className="flex-grow relative bg-black mb-6 font-bold">
         <FullCalendar
           ref={calendarRef}
-          plugins={[daygridPlugin, timeGridPlugin, interactionPlugin]}
+          plugins={[timeGridPlugin, interactionPlugin]}
           initialView="timeGridWeek"
-          headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek,dayGridMonth' }}
+          headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek' }}
           locale="sk"
           events={events}
           editable={true}
@@ -373,33 +392,23 @@ export default function KalendarPage() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex animate-in fade-in duration-200 font-bold italic uppercase pl-[260px]">
-          <div className="flex-grow flex flex-col bg-black border-l border-zinc-900">
-            <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950 font-black font-bold">
-              <div>
-                <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter leading-none">
-                  {!isConfirmed ? '🔔 NOVÁ ŽIADOSŤ OD KLIENTA' : (selectionMode === 'ask' ? 'Vyberte akciu' : (selectionMode === 'block' ? 'Blokovanie času' : (editingEventId ? 'Úprava Rezervácie' : 'Nová Rezervácia')))}
-                </h2>
-              </div>
+        <div className="fixed inset-0 bg-black/50 z-[100] flex pl-[260px] font-bold uppercase italic">
+          <div className="flex-grow flex flex-col bg-black border-l border-zinc-900 shadow-2xl">
+            <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950 font-bold">
+              <h2 className="text-3xl font-black italic text-white tracking-tighter">
+                {selectionMode === 'block' ? '🚫 BLOKOVANÝ ČAS' : '🚗 SERVISNÁ OBJEDNÁVKA'}
+              </h2>
               <button onClick={() => { setIsModalOpen(false); setSelectionMode(null); setEditingEventId(null); }} className="bg-zinc-900 hover:bg-white hover:text-black p-4 rounded-full transition-all font-bold">✕</button>
             </div>
 
             <div className="flex-grow overflow-y-auto">
               {selectionMode === 'ask' ? (
                 <div className="h-full flex items-center justify-center p-12 gap-8 font-bold">
-                  <button 
-                    onClick={() => setSelectionMode('order')}
-                    className="group flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-red-600 transition-all w-80 aspect-square shadow-2xl"
-                  >
-                    <span className="text-5xl mb-6">🚗</span>
-                    <span className="font-black uppercase tracking-widest group-hover:text-white font-bold">Nová Objednávka</span>
+                  <button onClick={() => setSelectionMode('order')} className="flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-red-600 transition-all w-80 aspect-square shadow-2xl">
+                    <span className="text-5xl mb-6">🚗</span> <span className="font-black tracking-widest font-bold">Nová Objednávka</span>
                   </button>
-                  <button 
-                    onClick={() => setSelectionMode('block')}
-                    className="group flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-zinc-700 transition-all w-80 aspect-square shadow-2xl"
-                  >
-                    <span className="text-5xl mb-6">🚫</span>
-                    <span className="font-black uppercase tracking-widest group-hover:text-white font-bold">Blokovať Čas</span>
+                  <button onClick={() => setSelectionMode('block')} className="flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-zinc-700 transition-all w-80 aspect-square shadow-2xl">
+                    <span className="text-5xl mb-6">🚫</span> <span className="font-black tracking-widest font-bold">Blokovať Čas</span>
                   </button>
                 </div>
               ) : (
@@ -407,31 +416,34 @@ export default function KalendarPage() {
                   <form onSubmit={saveReservation} className="p-8 md:p-12 space-y-8 border-r border-zinc-900 font-bold">
                     <div className="bg-zinc-900/30 p-6 rounded-[2rem] border border-zinc-800 space-y-6">
                       <div>
-                        <label className="block text-[10px] font-black text-red-500 uppercase mb-2 ml-1 tracking-widest font-bold">Dátum opravy</label>
-                        <input required type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold"/>
+                        <label className="block text-[10px] font-black text-red-500 mb-2 ml-1 tracking-widest uppercase font-bold">Dátum opravy</label>
+                        <div className="relative group">
+                          <input 
+                            required 
+                            type="date" 
+                            value={selectedDate} 
+                            onChange={(e) => setSelectedDate(e.target.value)} 
+                            className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold pr-14 cursor-pointer"
+                          />
+                          <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-2xl group-hover:scale-110 transition-transform">📅</div>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-6 font-bold">
-                        <div>
-                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Príchod</label>
-                          <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 font-bold" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Odchod (odhad)</label>
-                          <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 font-bold" />
-                        </div>
+                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none font-bold" />
+                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none font-bold" />
                       </div>
                     </div>
 
                     {selectionMode === 'order' && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-bold">
                         <div>
-                          <label className="block text-[10px] font-black text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">ŠPZ Vozidla</label>
+                          <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">ŠPZ Vozidla</label>
                           <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-5 rounded-3xl font-black text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Pridelený mechanik</label>
+                          <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
                           <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
-                            <option value="">-- Kolega --</option>
+                            <option value="">-- Vybrať --</option>
                             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
                           </select>
                         </div>
@@ -439,77 +451,59 @@ export default function KalendarPage() {
                     )}
 
                     <div className="font-bold">
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-2 ml-1 tracking-widest font-bold">Dôvod návštevy / Popis</label>
-                      <input 
-                        type="text" 
-                        value={title} 
-                        onChange={(e) => setTitle(e.target.value)} 
-                        placeholder={selectionMode === 'block' ? "Napr. Dovolenka, Školenie..." : "Napr. Brzdy, Olej..."}
-                        className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-4 uppercase italic font-bold" 
-                      />
-                      {selectionMode === 'order' && (
-                        <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti o závade..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-red-600 h-24 resize-none uppercase font-bold" />
-                      )}
+                      <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Popis / Dôvod</label>
+                      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Napr. Výmena oleja..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-4 uppercase italic font-bold" />
+                      {selectionMode === 'order' && <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti závady..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-red-600 h-24 resize-none uppercase font-bold" />}
                     </div>
 
                     <div className="flex flex-col gap-4 pt-4 font-bold">
-                      {selectionMode === 'order' && editingEventId && isConfirmed && (
-                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] text-center shadow-lg transition-all italic font-bold">
-                          📋 Otvoriť Zákazkový list
-                        </Link>
+                      {selectionMode === 'order' && editingEventId && (
+                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] text-center shadow-lg transition-all italic font-bold"> 📋 Otvoriť Zákazkový list </Link>
                       )}
                       <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold`}>
-                        {!isConfirmed ? '✅ Potvrdiť a zapísať do harmonogramu' : (editingEventId ? 'Uložiť zmeny' : 'Zapísať do harmonogramu')}
+                        {editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}
                       </button>
-                      {editingEventId && (
-                        <button type="button" onClick={deleteReservation} className="text-zinc-600 hover:text-red-500 font-bold uppercase text-[9px] tracking-widest transition-all mt-4 font-bold">Odstrániť z harmonogramu</button>
-                      )}
+                      {editingEventId && <button type="button" onClick={deleteReservation} className="text-zinc-600 hover:text-red-500 font-bold uppercase text-[9px] tracking-widest transition-all mt-4 font-bold">Odstrániť záznam</button>}
                     </div>
                   </form>
 
-                  {/* PRAVÝ PANEL - DETAIL VOZIDLA A KLIENTA */}
                   <div className="bg-zinc-950 p-8 md:p-12 space-y-10 border-l border-zinc-900 font-bold">
                     <h3 className="text-sm font-black uppercase text-zinc-600 tracking-[0.4em] border-b border-zinc-900 pb-4 italic font-black">Detail Vozidla a Partnera</h3>
                     
                     {selectionMode === 'block' ? (
-                      <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-[4rem] text-zinc-600 text-center p-12">
-                        <span className="text-6xl mb-4">🔒</span>
-                        <p className="font-black uppercase tracking-widest text-xs">Termín je nedostupný</p>
-                      </div>
+                      <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-[4rem] text-zinc-600 text-center p-12 font-bold"> <span className="text-6xl mb-4">🔒</span> <p className="font-black uppercase tracking-widest text-xs font-bold">Termín je zablokovaný</p> </div>
                     ) : (
                       <div className="space-y-8 animate-in slide-in-from-right duration-500 font-bold">
-                        {/* KONTAKT NA KLIENTA (Zobrazené ak ide o Online žiadosť) */}
-                        {!isConfirmed && (
-                           <div className="bg-red-600/10 border border-red-600/20 p-8 rounded-[3rem] shadow-xl space-y-4 font-bold">
-                              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest font-bold">Kontaktné údaje žiadateľa</p>
-                              <h4 className="text-2xl font-black text-white uppercase italic">{tempCustomerContact.customerName || selectedClientName || 'Neznámy klient'}</h4>
-                              <div className="space-y-2">
-                                 <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold">
-                                    📞 <span className="text-white text-lg tracking-widest font-bold">{tempCustomerContact.phone || '---'}</span>
-                                 </p>
-                                 <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold">
-                                    ✉️ <span className="text-white font-bold">{tempCustomerContact.email || '---'}</span>
-                                 </p>
-                              </div>
-                              <div className="pt-2 font-bold">
-                                 <a href={`tel:${tempCustomerContact.phone}`} className="inline-block bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 transition-all font-bold">Zavolať ihneď</a>
-                              </div>
-                           </div>
+                        
+                        {/* NOVÝ BOX: UPOZORNENIE NA FLEXIBILNÚ ŽIADOSŤ */}
+                        {(title?.includes('FLEXI') || title?.includes('ŽIADOSŤ')) && !isConfirmed && (
+                          <div className="bg-amber-600/20 border-2 border-amber-600 p-8 rounded-[3rem] animate-pulse space-y-3 shadow-2xl shadow-amber-600/10">
+                             <p className="text-[10px] font-black text-amber-500 tracking-[0.3em]">⚠️ Akcia vyžaduje pozornosť</p>
+                             <h4 className="text-2xl font-black text-white uppercase italic leading-tight">Zákazník žiada o pridelenie termínu</h4>
+                             <p className="text-xs text-zinc-400 font-bold leading-relaxed uppercase">Skontrolujte voľné kapacity, nastavte presný čas a priraďte mechanika. Po kliknutí na "Uložiť" zazvoní zvonček v garáži.</p>
+                          </div>
+                        )}
+
+                        {(tempCustomerContact.phone || tempCustomerContact.email) && (
+                            <div className="bg-red-600/10 border border-red-600/20 p-8 rounded-[3rem] shadow-xl space-y-4 font-bold">
+                              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest font-bold">Kontakt</p>
+                              <h4 className="text-2xl font-black text-white uppercase italic font-bold">{tempCustomerContact.customerName || selectedClientName || 'Zákazník'}</h4>
+                              <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold"> 📞 <span className="text-white text-lg tracking-widest font-bold">{tempCustomerContact.phone}</span> </p>
+                              <div className="pt-2 font-bold"><a href={`tel:${tempCustomerContact.phone}`} className="inline-block bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest font-bold">Zavolať ihneď</a></div>
+                            </div>
                         )}
 
                         {carData ? (
                           <div className="bg-zinc-900/40 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group font-bold">
-                            <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-xl tracking-widest mb-6 inline-block shadow-2xl font-bold uppercase">{carData.license_plate}</span>
+                            <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-xl tracking-widest mb-6 inline-block uppercase font-bold">{carData.license_plate}</span>
                             <h4 className="text-4xl font-black uppercase italic mb-8 tracking-tighter leading-tight font-bold">{carData.brand_model}</h4>
-                            <div className="grid grid-cols-2 gap-y-10 gap-x-12 text-zinc-300 italic font-bold">
-                              <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest font-bold">VIN</p><span className="font-mono text-xs font-bold">{carData.vin_number || '---'}</span></div>
-                              <div><p className="text-[9px] font-black text-red-600 uppercase mb-2 tracking-widest font-bold">Majiteľ v DB</p>{carData.owner_name}</div>
+                            <div className="grid grid-cols-1 gap-y-4 text-zinc-300 italic font-bold">
+                              <div><p className="text-[9px] font-black text-red-600 uppercase mb-1 font-bold">VIN</p><span className="font-mono text-xs font-bold">{carData.vin_number || '---'}</span></div>
+                              <div><p className="text-[9px] font-black text-red-600 uppercase mb-1 font-bold">Majiteľ</p>{carData.owner_name}</div>
                             </div>
                           </div>
                         ) : (
-                          <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12 italic text-[10px] uppercase tracking-[0.5em] leading-relaxed font-bold">
-                            Vozidlo nenájdené v DB<br/>preverte podľa ŠPZ
-                          </div>
+                          <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12 italic text-[10px] uppercase tracking-[0.5em] leading-relaxed font-bold"> Vozidlo nie je v DB </div>
                         )}
                       </div>
                     )}

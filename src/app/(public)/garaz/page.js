@@ -26,6 +26,7 @@ export default function GarazPage() {
   const [issues, setIssues] = useState(['']); // Pole pre viacero závad
   const [preferredDate, setPreferredDate] = useState(''); // Preferovaný termín zákazníka
   const [orderLoading, setOrderLoading] = useState(false);
+  const [bookingType, setBookingType] = useState('manual'); // NOVÉ: 'manual' alebo 'auto'
 
   // POMOCNÉ STAVY PRE NOVÝ VÝBER TERMÍNU
   const [selectedDay, setSelectedDay] = useState('');
@@ -196,6 +197,7 @@ export default function GarazPage() {
     setPreferredDate('');
     setSelectedDay('');
     setSelectedSlot('');
+    setBookingType('manual');
     setIsOrderModalOpen(true);
   };
 
@@ -215,8 +217,13 @@ export default function GarazPage() {
       return;
     }
     
-    if (!selectedDay || !selectedSlot) {
-      alert("Prosím vyberte si deň aj čas príchodu.");
+    // Kontrola: Ak je manuálne, musí byť čas. Deň musí byť vždy.
+    if (!selectedDay) {
+      alert("Prosím vyberte si deň príchodu.");
+      return;
+    }
+    if (bookingType === 'manual' && !selectedSlot) {
+      alert("Prosím vyberte si konkrétny čas príchodu.");
       return;
     }
 
@@ -224,20 +231,25 @@ export default function GarazPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const fullDescription = filteredIssues.map((text, idx) => `${idx + 1}. ${text}`).join('\n');
-      let estimatedMinutes = 60; 
+      
+      // Ak je 'auto', nastavíme čas na 07:00 ráno
+      const finalDateTime = bookingType === 'manual' 
+        ? `${selectedDay}T${selectedSlot}:00` 
+        : `${selectedDay}T07:00:00`;
 
-      const finalDateTime = `${selectedDay}T${selectedSlot}:00`;
       const startTime = new Date(finalDateTime);
-      const endTime = new Date(startTime.getTime() + estimatedMinutes * 60000);
+      const endTime = new Date(startTime.getTime() + 60 * 60000); 
 
       const { error } = await supabase
         .from('calendar_events')
         .insert([{
-          title: `OBJEDNÁVKA: ${orderingVehicle.brand_model}`,
+          title: bookingType === 'manual' ? `OBJEDNÁVKA: ${orderingVehicle.license_plate}` : `FLEXI: ${orderingVehicle.license_plate}`,
           description: `Zákazník žiada o termín cez Klientsku zónu.`,
           issue_description: fullDescription,
           planned_work: "Bude určené technikom",
-          customer_note: `Zákazník preferuje termín: ${startTime.toLocaleString('sk-SK')}`,
+          customer_note: bookingType === 'auto' 
+            ? `[FLEXIBILNÝ TERMÍN] Zákazník si vybral deň ${new Date(selectedDay).toLocaleDateString('sk-SK')}, ale čas príchodu necháva na Vás.`
+            : `Zákazník si vybral presný čas: ${startTime.toLocaleString('sk-SK')}`,
           start_datetime: startTime.toISOString(), 
           end_datetime: endTime.toISOString(),
           plate_number: orderingVehicle.license_plate,
@@ -383,7 +395,7 @@ export default function GarazPage() {
           </button>
         </header>
 
-        {/* --- ZOZNAM VOZIDIEL - POD SEBOU (FULL WIDTH) --- */}
+        {/* --- ZOZNAM VOZIDIEL --- */}
         <div className="flex flex-col gap-8 font-bold">
           {vehicles.map((vehicle) => (
             <div key={vehicle.id} className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] relative group hover:border-zinc-700 transition-all shadow-xl font-bold w-full">
@@ -437,7 +449,7 @@ export default function GarazPage() {
         </div>
       </div>
 
-      {/* --- MODAL ZOZNAMU FAKTÚR (NOVÉ) --- */}
+      {/* --- MODAL ZOZNAMU FAKTÚR --- */}
       {isInvoiceListOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[85vh]">
@@ -479,102 +491,102 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* --- MODAL OBJEDNÁVKY --- */}
+      {/* --- MODAL OBJEDNÁVKY NA CELÚ ŠÍRKU --- */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]">
-            <h2 className="text-3xl font-black uppercase italic mb-2 tracking-tighter">Nová <span className="text-red-600">Objednávka</span></h2>
+          <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-10 rounded-[3rem] w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[95vh]">
             
-            <div className="grid grid-cols-2 gap-4 bg-black/40 p-6 rounded-3xl border border-zinc-800 mb-8 mt-6 italic">
-              <div>
-                <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Zákazník</p>
-                <p className="text-xs font-black uppercase">{userProfile?.full_name}</p>
-                <p className="text-[10px] text-zinc-400">{userProfile?.phone}</p>
-              </div>
-              <div>
-                <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Vozidlo</p>
-                <p className="text-xs font-black uppercase text-red-600">{orderingVehicle?.brand_model}</p>
-                <p className="text-[10px] font-black uppercase">{orderingVehicle?.license_plate}</p>
-              </div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">Nová <span className="text-red-600">Objednávka</span></h2>
+              <button onClick={() => setIsOrderModalOpen(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
             </div>
             
-            <form onSubmit={handleFinalizeOrder} className="space-y-6 italic font-bold">
-              <div className="space-y-4">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 block tracking-widest uppercase">Zoznam závad / Potrebné úkony</label>
-                {issues.map((issue, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input required className="flex-grow bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold text-xs"
-                      placeholder={`Závada č. ${index + 1}...`} value={issue} onChange={(e) => updateIssue(index, e.target.value)} />
-                    {issues.length > 1 && (
-                      <button type="button" onClick={() => removeIssue(index)} className="px-4 bg-zinc-800 rounded-2xl text-zinc-500 hover:text-red-600 transition-all font-bold">✕</button>
-                    )}
-                  </div>
-                ))}
-                <button type="button" onClick={addIssueField} className="w-full py-3 border-2 border-dashed border-zinc-800 rounded-2xl text-[10px] font-black uppercase text-zinc-500 hover:border-blue-600 hover:text-blue-500 transition-all font-bold tracking-widest font-bold">+ Pridať ďalšiu závadu</button>
-              </div>
-
-              <div className="space-y-6 border-t border-zinc-800 pt-6">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-black uppercase text-blue-500 ml-2 block tracking-widest italic font-bold">Kedy by vám vyhovoval termín?</label>
-                  <button type="button" onClick={() => window.open('/kalendar-verejny', '_blank')} className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-600/40 px-3 py-1 rounded-lg uppercase font-black hover:bg-blue-600 transition-all font-bold">📅 Obsadenosť</button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-bold">
-                  <div className="space-y-2 font-bold">
-                    <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold">1. Vyberte deň</p>
-                    <input 
-                      required 
-                      type="date" 
-                      min={new Date().toISOString().split('T')[0]} 
-                      className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-blue-600 font-bold text-xs text-white uppercase"
-                      value={selectedDay} 
-                      onChange={(e) => setSelectedDay(e.target.value)} 
-                    />
-                  </div>
-
-                  <div className="space-y-2 font-bold">
-                    <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold">2. Vyberte čas</p>
-                    <div className="grid grid-cols-3 gap-2 max-h-[140px] overflow-y-auto p-2 bg-black/30 rounded-2xl border border-zinc-800 scrollbar-hide font-bold custom-scrollbar">
-                      {timeSlots.map((slot) => (
-                        <button
-                          key={slot}
-                          type="button"
-                          onClick={() => setSelectedSlot(slot)}
-                          className={`py-2 rounded-xl text-[10px] font-black transition-all border ${
-                            selectedSlot === slot 
-                              ? 'bg-blue-600 border-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.3)]' 
-                              : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600'
-                          }`}
-                        >
-                          {slot}
-                        </button>
-                      ))}
+            <form onSubmit={handleFinalizeOrder} className="font-bold italic">
+              {/* GRID: Rozdelenie na dva stĺpce */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                
+                {/* ĽAVÁ STRANA: Údaje a Závady */}
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4 bg-black/40 p-5 rounded-2xl border border-zinc-800">
+                    <div>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Zákazník</p>
+                      <p className="text-xs font-black uppercase">{userProfile?.full_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Vozidlo</p>
+                      <p className="text-xs font-black uppercase text-red-600">{orderingVehicle?.brand_model}</p>
+                      <p className="text-[10px] font-black uppercase">{orderingVehicle?.license_plate}</p>
                     </div>
                   </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 block tracking-widest">Zoznam závad / Potrebné úkony</label>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                      {issues.map((issue, index) => (
+                        <div key={index} className="flex gap-2">
+                          <input required className="flex-grow bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs" 
+                            placeholder={`Závada č. ${index + 1}...`} value={issue} onChange={(e) => updateIssue(index, e.target.value)} />
+                          {issues.length > 1 && (<button type="button" onClick={() => removeIssue(index)} className="px-4 bg-zinc-800 rounded-xl text-zinc-500 hover:text-red-600 transition-all font-bold">✕</button>)}
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" onClick={addIssueField} className="w-full py-3 border-2 border-dashed border-zinc-800 rounded-xl text-[10px] font-black uppercase text-zinc-500 hover:border-blue-600 hover:text-blue-500 transition-all font-bold tracking-widest">+ Pridať ďalšiu závadu</button>
+                  </div>
                 </div>
 
-                {selectedDay && selectedSlot && (
-                  <div className="bg-blue-600/10 border border-blue-600/20 p-4 rounded-2xl text-center animate-pulse font-bold">
-                    <p className="text-[9px] text-blue-400 uppercase font-black font-bold">Vybraný príchod</p>
-                    <p className="text-sm font-black text-white italic font-bold">
-                      {new Date(selectedDay).toLocaleDateString('sk-SK')} o {selectedSlot} hod.
-                    </p>
-                  </div>
-                )}
-              </div>
+                {/* PRAVÁ STRANA: Výber termínu a Odoslanie */}
+                <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 flex flex-col justify-between">
+                  <div className="space-y-6">
+                    <div className="flex bg-black p-1 rounded-2xl border border-zinc-800">
+                      <button type="button" onClick={() => setBookingType('manual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'manual' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Presný čas</button>
+                      <button type="button" onClick={() => setBookingType('auto')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'auto' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Navrhnite mi termín</button>
+                    </div>
 
-              <div className="flex gap-4 pt-4 font-bold">
-                <button type="button" onClick={() => setIsOrderModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold tracking-widest font-bold">Zrušiť</button>
-                <button type="submit" disabled={orderLoading} className="flex-[2] bg-red-600 py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-700 shadow-xl transition-all tracking-[0.2em] font-bold">
-                  {orderLoading ? 'Odosielam...' : 'Odoslať požiadavku'}
-                </button>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black uppercase text-blue-500 ml-2 block tracking-widest italic">Kedy by vám vyhovoval termín?</label>
+                      <button type="button" onClick={() => window.open('/kalendar-verejny', '_blank')} className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-600/40 px-3 py-1 rounded-lg uppercase font-black hover:bg-blue-600 transition-all">📅 Obsadenosť</button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest">1. Deň</p>
+                        <input required type="date" min={new Date().toISOString().split('T')[0]} className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-blue-600 font-bold text-xs text-white uppercase" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
+                      </div>
+                      <div className={`space-y-2 transition-all ${bookingType === 'auto' ? 'opacity-30 pointer-events-none' : ''}`}>
+                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest">2. Čas príchodu</p>
+                        <div className="grid grid-cols-3 gap-2 p-2 bg-black/30 rounded-xl border border-zinc-800 max-h-[120px] overflow-y-auto custom-scrollbar">
+                          {timeSlots.map((slot) => (
+                            <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${selectedSlot === slot ? 'bg-blue-600 border-blue-600 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}>{slot}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedDay && (
+                      <div className="bg-blue-600/10 border border-blue-600/20 p-4 rounded-xl text-center animate-pulse">
+                        <p className="text-[9px] text-blue-400 uppercase font-black tracking-widest">Zhrnutie požiadavky</p>
+                        <p className="text-sm font-black text-white italic">
+                          {new Date(selectedDay).toLocaleDateString('sk-SK')} {bookingType === 'manual' ? ` o ${selectedSlot || '...'} hod.` : ' (Čas navrhne technik)'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-4 pt-4 font-bold">
+                    <button type="button" onClick={() => setIsOrderModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs tracking-widest">Zrušiť</button>
+                    <button type="submit" disabled={orderLoading} className="flex-[2] bg-red-600 py-6 rounded-2xl font-black uppercase text-xs hover:bg-red-700 shadow-[0_10px_20px_rgba(220,38,38,0.3)] transition-all tracking-[0.2em]">
+                      {orderLoading ? 'Odosielam...' : 'Odoslať požiadavku'}
+                    </button>
+                  </div>
+                </div>
+
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL PROFILU */}
+      {/* MODAL PROFILU (ZACHOVANÝ) */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-3xl shadow-2xl my-auto font-bold">
@@ -616,7 +628,7 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* MODAL VOZIDLA */}
+      {/* MODAL VOZIDLA (ZACHOVANÝ) */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto font-bold">

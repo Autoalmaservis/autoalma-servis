@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
 export default function SmsPanel({ phone, plate, customerName, userId }) {
@@ -8,6 +8,26 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('09:00');
+  
+  // Stav pre šablóny z databázy
+  const [templates, setTemplates] = useState([]);
+
+  // --- NAČÍTANIE ŠABLÓN Z DB ---
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      const { data, error } = await supabase
+        .from('sms_templates') // Ak máš názov s pomlčkou, zmeň na 'sms-templates'
+        .select('*')
+        .order('label', { ascending: true });
+
+      if (!error && data) {
+        // Vložíme prázdnu možnosť na začiatok pre vlastný text
+        setTemplates([{ id: 'custom', label: '--- VLASTNÝ TEXT ---', content: '' }, ...data]);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
 
   // 1. FIXNÝ ÚVOD
   const baseMessage = `Vazeny zakaznik p. ${customerName || 'klient'}, Vase vozidlo ${plate || '---'}: `;
@@ -15,10 +35,16 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
   // 2. FIXNÝ KONIEC
   const footerMessage = `\nS pozdravom Autoalma - spolahlivy servis pre Vase vozidlo.`;
 
+  const handleTemplateChange = (e) => {
+    const selected = templates.find(t => t.id.toString() === e.target.value.toString());
+    if (selected) {
+      setCustomText(selected.content || ''); // Používame stĺpec 'content' z DB
+    }
+  };
+
   const handleSend = async () => {
     if (!phone) return alert("Chýba telefónne číslo!");
     
-    // POSKLADANIE FINÁLNEJ SPRÁVY (Úvod + tvoj stred + Koniec)
     const finalMessage = baseMessage + customText + footerMessage;
 
     setLoading(true);
@@ -37,7 +63,6 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
         if (error) throw error;
         alert(`SMS naplánovaná na ${scheduledDate}`);
       } else {
-        // Zápis do histórie SMS
         await supabase.from('scheduled_sms').insert([{
           user_id: userId,
           customer_phone: phone,
@@ -48,7 +73,6 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
           status: 'sent'
         }]);
 
-        // Zápis do Zvončeka (Notifikácie)
         if (userId) {
           await supabase.from('notifications').insert([{
             user_id: userId,
@@ -72,7 +96,7 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
 
   return (
     <div className="w-full bg-zinc-900/40 border border-zinc-800 p-8 rounded-[3.5rem] shadow-2xl mb-10">
-      <div className="flex justify-between items-center mb-6 border-b border-zinc-800/50 pb-4">
+      <div className="flex justify-between items-center mb-6 border-b border-zinc-800/50 pb-4 font-bold">
         <div className="flex items-center gap-3">
           <span className="text-xl">📱</span>
           <h3 className="text-[10px] font-black uppercase text-blue-500 tracking-[0.2em] italic">Inteligentný SMS Terminál</h3>
@@ -83,33 +107,45 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 font-bold">
         
-        {/* 1. NÁHĽAD (KOMPLETNÁ SPRÁVA TAK AKO PRÍDE) */}
+        {/* 1. NÁHĽAD (KOMPLETNÁ SPRÁVA) */}
         <div className="space-y-3">
           <p className="text-[9px] text-zinc-500 uppercase font-black ml-2 tracking-widest italic text-blue-500">Celkový náhľad správy</p>
-          <div className="bg-black/60 p-5 rounded-3xl border border-zinc-800 h-[180px] overflow-y-auto shadow-inner">
+          <div className="bg-black/60 p-5 rounded-3xl border border-zinc-800 h-[220px] overflow-y-auto shadow-inner">
             <p className="text-[11px] leading-relaxed italic">
               <span className="text-zinc-500 font-bold">{baseMessage}</span>
-              <span className="text-white font-black mx-1">{customText || '... sem príde Váš text ...'}</span>
+              <span className="text-white font-black mx-1">{customText || '... vyberte šablónu z nastavení alebo píšte ...'}</span>
               <span className="text-zinc-500 font-bold">{footerMessage}</span>
             </p>
           </div>
         </div>
 
-        {/* 2. EDITOR (TU PÍŠEŠ IBA STRED) */}
-        <div className="space-y-3">
-          <p className="text-[9px] text-zinc-500 uppercase font-black ml-2 tracking-widest italic">Váš text (stred správy)</p>
+        {/* 2. EDITOR + VÝBER ŠABLÓNY Z DB */}
+        <div className="space-y-3 font-bold">
+          <p className="text-[9px] text-zinc-500 uppercase font-black ml-2 tracking-widest italic">Výber šablóny z databázy</p>
+          
+          <select 
+            onChange={handleTemplateChange}
+            className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white font-black uppercase text-[10px] outline-none focus:border-blue-600 cursor-pointer mb-2"
+          >
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.label.toUpperCase()}
+              </option>
+            ))}
+          </select>
+
           <textarea
             value={customText}
             onChange={(e) => setCustomText(e.target.value)}
-            placeholder="Napr.: je pripravené na vyzdvihnutie po servisnej prehliadke."
-            className="w-full bg-black border border-zinc-800 p-6 rounded-3xl text-white text-xs outline-none focus:border-blue-600 h-[180px] resize-none shadow-2xl uppercase font-bold transition-all placeholder:text-zinc-800"
+            placeholder="Napr.: je pripravené na vyzdvihnutie..."
+            className="w-full bg-black border border-zinc-800 p-6 rounded-3xl text-white text-xs outline-none focus:border-blue-600 h-[155px] resize-none shadow-2xl uppercase font-bold transition-all placeholder:text-zinc-800"
           />
         </div>
 
         {/* 3. PLÁNOVANIE A TLAČIDLO */}
-        <div className="flex flex-col justify-between gap-4 h-[218px]">
+        <div className="flex flex-col justify-between gap-4 h-[258px] font-bold">
           <div className={`p-5 rounded-3xl border transition-all h-full flex flex-col justify-center ${isScheduled ? 'bg-blue-600/5 border-blue-600/30' : 'bg-black/20 border-zinc-800 shadow-inner'}`}>
             <label className="flex items-center gap-3 cursor-pointer group mb-3">
               <input 

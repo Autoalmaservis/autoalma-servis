@@ -25,13 +25,14 @@ export default function VerejnaObjednavkaPage() {
   }, []);
 
   const fetchOccupiedSlots = async () => {
+    // Načítame všetky udalosti, aby sme v kalendári zobrazili "Obsadené" (tmavé bloky)
     const { data } = await supabase.from('calendar_events').select('start_datetime, end_datetime');
     if (data) {
       const formatted = data.map(ev => ({
         start: ev.start_datetime,
         end: ev.end_datetime,
         display: 'background', 
-        backgroundColor: '#1f1f23', // Tmavá pre obsadené sloty
+        backgroundColor: '#1f1f23', 
       }));
       setEvents(formatted);
     }
@@ -50,6 +51,23 @@ export default function VerejnaObjednavkaPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // POKUS O AUTOMATICKÉ SPÁROVANIE SO ZÁKAZNÍKOM
+    let foundUserId = null;
+    try {
+      const { data: vehicleData } = await supabase
+        .from('vehicles')
+        .select('owner_id')
+        .eq('license_plate', formData.plate.toUpperCase())
+        .maybeSingle();
+      
+      if (vehicleData?.owner_id) {
+        foundUserId = vehicleData.owner_id;
+      }
+    } catch (err) {
+      console.log("Nepodarilo sa spáriť vozidlo so zákazníkom, ukladám ako novú požiadavku.");
+    }
+
     const { error } = await supabase.from('calendar_events').insert([{
       title: `ONLINE: ${formData.plate}`,
       start_datetime: `${formData.date}T${formData.start}:00`,
@@ -59,15 +77,16 @@ export default function VerejnaObjednavkaPage() {
       customer_phone: formData.phone,
       customer_email: formData.email,
       is_confirmed: false,
-      status: 'Plánované'
+      status: 'Čaká na schválenie', // Zmenené na status, ktorý signalizuje novú žiadosť
+      user_id: foundUserId // Ak sme našli v DB majiteľa tejto ŠPZ, priradíme ho
     }]);
 
     if (!error) {
-      alert("Vaša žiadosť o termín bola odoslaná. Budeme Vás kontaktovať pre potvrdenie.");
+      alert("Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.");
       setIsModalOpen(false);
       fetchOccupiedSlots();
     } else {
-      alert("Chyba: " + error.message);
+      alert("Chyba pri odosielaní: " + error.message);
     }
   };
 
@@ -81,7 +100,6 @@ export default function VerejnaObjednavkaPage() {
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8 flex flex-col items-center">
       
-      {/* HEADER - Široký a čistý */}
       <header className="w-full max-w-[1400px] mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-zinc-800 pb-8 gap-4">
         <div>
           <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">
@@ -96,7 +114,6 @@ export default function VerejnaObjednavkaPage() {
         </div>
       </header>
 
-      {/* KALENDÁR - Roztiahnutý na maximum */}
       <div className="w-full max-w-[1400px] bg-zinc-950 border border-zinc-800 p-2 md:p-6 rounded-[3rem] shadow-[0_0_80px_rgba(220,38,38,0.05)] overflow-hidden">
         <style>{`
           .fc { --fc-border-color: #18181b; color: white; }
@@ -125,9 +142,8 @@ export default function VerejnaObjednavkaPage() {
         />
       </div>
 
-      {/* MODAL OKNO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200 font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto relative">
             <button 
                 onClick={() => setIsModalOpen(false)} 
@@ -145,12 +161,9 @@ export default function VerejnaObjednavkaPage() {
               <div className="flex flex-col gap-2">
                 <label className="text-[10px] font-black uppercase text-zinc-600 ml-2 tracking-widest">ŠPZ Vozidla</label>
                 <div className="flex gap-2">
-                    <input required type="text" value={formData.plate} onChange={(e)=>setFormData({...formData, plate: e.target.value.toUpperCase()})} className="flex-grow bg-black border border-zinc-800 p-6 rounded-3xl text-white font-black text-4xl tracking-widest focus:border-red-600 outline-none uppercase shadow-inner text-center" placeholder="KE-123AB"/>
-                    <button type="button" className="bg-zinc-800 hover:bg-zinc-700 p-6 rounded-3xl border border-zinc-700 transition-all group">
-                        <span className="text-2xl group-hover:scale-110 block transition-transform">📷</span>
-                    </button>
+                    <input required type="text" value={formData.plate} onChange={(e)=>setFormData({...formData, plate: e.target.value.toUpperCase()})} className="flex-grow bg-black border border-zinc-800 p-6 rounded-3xl text-white font-black text-4xl tracking-widest focus:border-red-600 outline-none uppercase shadow-inner text-center font-bold" placeholder="ŠPZ"/>
                 </div>
-                <p className="text-[8px] text-zinc-700 font-black uppercase text-center mt-2 tracking-widest italic">Tip: Kliknite na ikonu foťáku pre odfotenie technického preukazu</p>
+                <p className="text-[8px] text-zinc-700 font-black uppercase text-center mt-2 tracking-widest italic">Vaša požiadavka bude spracovaná naším technikom</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -166,11 +179,11 @@ export default function VerejnaObjednavkaPage() {
 
               <div>
                 <label className="text-[10px] font-black uppercase text-zinc-600 ml-2 mb-2 block tracking-widest">Popis problému / Požiadavka</label>
-                <textarea required value={formData.description} onChange={(e)=>setFormData({...formData, description: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white text-sm outline-none focus:border-red-600 h-32 resize-none shadow-inner" placeholder="Napr.: Výmena oleja, kontrola bŕzd, búchanie v náprave..."/>
+                <textarea required value={formData.description} onChange={(e)=>setFormData({...formData, description: e.target.value})} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white text-sm outline-none focus:border-red-600 h-32 resize-none shadow-inner font-bold" placeholder="Napr.: Výmena oleja, kontrola bŕzd..."/>
               </div>
 
-              <button type="submit" className="w-full bg-red-600 py-6 rounded-3xl font-black uppercase text-xs tracking-[0.3em] shadow-[0_15px_30px_rgba(220,38,38,0.2)] hover:bg-red-500 hover:scale-[1.01] active:scale-[0.99] transition-all mt-4">
-                Odoslať na schválenie
+              <button type="submit" className="w-full bg-red-600 py-6 rounded-3xl font-black uppercase text-xs tracking-[0.3em] shadow-[0_15px_30px_rgba(220,38,38,0.2)] hover:bg-red-500 hover:scale-[1.01] active:scale-[0.99] transition-all mt-4 font-bold">
+                Odoslať žiadosť o termín
               </button>
             </form>
           </div>
