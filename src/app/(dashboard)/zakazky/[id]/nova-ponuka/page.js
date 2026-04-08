@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Fragment } from 'react'; // Pridaný Fragment pre čisté zoskupovanie v tabuľke
+import { useState, useEffect, Fragment } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -19,7 +19,7 @@ export default function NovaPonukaPage() {
     name: '', 
     quantity: 1, 
     unit: 'ks', 
-    unit_price: 0, 
+    unit_price: '', // Zmenené na prázdny reťazec pre lepšie písanie
     type: 'Materiál' 
   });
 
@@ -55,12 +55,14 @@ export default function NovaPonukaPage() {
     const itemToAdd = {
       ...newItem,
       id: crypto.randomUUID(),
+      unit_price: parseFloat(newItem.unit_price) || 0, // Prevod na číslo pri uložení
       group_name: newItem.group_name.trim().toUpperCase(),
-      is_selected: true // DOPLNENÉ: Každá položka začína ako vybratá/schválená
+      is_selected: true 
     };
 
     setOfferItems([...offerItems, itemToAdd]);
-    setNewItem({ ...newItem, name: '', quantity: 1, unit_price: 0 });
+    // Reset formulára pri zachovaní skupiny a typu pre rýchlejšie pridávanie
+    setNewItem({ ...newItem, name: '', quantity: 1, unit_price: '' });
   };
 
   const removeItem = (tempId) => {
@@ -142,23 +144,36 @@ export default function NovaPonukaPage() {
           <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] mb-6 italic">Nová položka do rozpočtu</h2>
           <form onSubmit={addItemToOffer} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             
-            <div className="md:col-span-3">
-              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Skupina opráv</label>
+            <div className="md:col-span-2">
+              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Skupina</label>
               <input 
                 type="text" 
-                placeholder="Napr. MOTOR..." 
+                placeholder="MOTOR..." 
                 className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors"
                 value={newItem.group_name}
                 onChange={(e) => setNewItem({...newItem, group_name: e.target.value})}
               />
             </div>
 
-            <div className="md:col-span-4">
+            {/* PRIDANÝ VÝBER TYPU */}
+            <div className="md:col-span-2">
+              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Typ</label>
+              <select 
+                className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer"
+                value={newItem.type}
+                onChange={(e) => setNewItem({...newItem, type: e.target.value, unit: e.target.value === 'Práca' ? 'hod' : 'ks'})}
+              >
+                <option value="Materiál">Materiál</option>
+                <option value="Práca">Práca</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-3">
               <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Položka (Diel/Práca)</label>
               <input 
                 list="catalog-list"
                 type="text"
-                placeholder="Hľadať v katalógu..."
+                placeholder="Hľadať..."
                 className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase italic focus:border-blue-500 outline-none transition-colors"
                 value={newItem.name}
                 onChange={(e) => {
@@ -175,12 +190,23 @@ export default function NovaPonukaPage() {
 
             <div className="md:col-span-1">
               <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Mn.</label>
-              <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value)})} />
+              <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 0})} />
             </div>
 
             <div className="md:col-span-2">
               <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-right font-black">Cena/J (€)</label>
-              <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-right text-xs font-black focus:border-blue-500 outline-none" value={newItem.unit_price} onChange={(e) => setNewItem({...newItem, unit_price: parseFloat(e.target.value)})} />
+              <input 
+                type="text" // Zmenené na text pre lepšiu kontrolu vstupu
+                className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-right text-xs font-black focus:border-blue-500 outline-none" 
+                value={newItem.unit_price} 
+                placeholder="0.00"
+                onChange={(e) => {
+                    const val = e.target.value.replace(',', '.'); // Automatická oprava čiarky na bodku
+                    if (/^\d*\.?\d*$/.test(val)) { // Povoliť len čísla a bodku
+                        setNewItem({...newItem, unit_price: val});
+                    }
+                }} 
+              />
             </div>
 
             <div className="md:col-span-2">
@@ -222,7 +248,7 @@ export default function NovaPonukaPage() {
                       </td>
                       <td className="p-4 text-xs tracking-tight">{item.name}</td>
                       <td className="p-4 text-center text-xs font-mono">{item.quantity} {item.unit}</td>
-                      <td className="p-4 text-right text-xs font-mono">{item.unit_price.toFixed(2)} €</td>
+                      <td className="p-4 text-right text-xs font-mono">{(Number(item.unit_price)).toFixed(2)} €</td>
                       <td className="p-4 text-right text-xs font-mono">{(item.quantity * item.unit_price).toFixed(2)} €</td>
                       <td className="p-4 text-center">
                         <button onClick={() => removeItem(item.id)} className="text-zinc-800 group-hover:text-red-600 transition-colors">✕</button>

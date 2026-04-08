@@ -491,7 +491,7 @@ export default function DetailZakazkyPage() {
             <p className="text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest">Zodp. Mechanik</p>
             <div className="relative no-print">
                 <select 
-                  className="bg-black/40 border-2 border-zinc-700 hover:border-red-600 rounded-xl px-3 py-2 text-[11px] font-black uppercase text-red-600 outline-none cursor-pointer appearance-none w-full"
+                  className="bg-black/40 border-2 border-zinc-700 hover:border-red-600 rounded-xl px-3 py-2 text-[11px] font-black uppercase text-red-600 outline-none cursor-pointer appearance-none w-full -ml-12"
                   value={zakazka.assigned_worker_id || ''}
                   onChange={(e) => updateMechanic(e.target.value)}
                 >
@@ -500,7 +500,7 @@ export default function DetailZakazkyPage() {
                     <option key={emp.id} value={emp.id} className="bg-zinc-900 text-white font-sans not-italic font-bold">{emp.name.toUpperCase()}</option>
                   ))}
                 </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-red-600 text-[8px] font-bold">▼</div>
+               
             </div>
             <p className="hidden print-block text-red-600 uppercase italic font-black text-sm">{zakazka.technician_name || 'Pridelený tím'}</p>
           </div>

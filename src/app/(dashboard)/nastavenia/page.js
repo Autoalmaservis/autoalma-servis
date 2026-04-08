@@ -1,8 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useRouter } from 'next/navigation'; // ZACHOVANÝ IMPORT
 
 export default function NastaveniaPage() {
+  const router = useRouter(); // INICIALIZÁCIA ROUTERA
+
   // Stav pre prepínanie záložiek
   const [activeTab, setActiveTab] = useState('pracovna_doba');
 
@@ -309,6 +312,15 @@ export default function NastaveniaPage() {
         >
           📱 SMS Šablóny
         </button>
+        
+        {/* --- PRIDANÉ TLAČIDLO SYNC & BACKUP --- */}
+        <button 
+          onClick={() => router.push('/nastavenia/import-export')}
+          className="px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 text-zinc-500 hover:text-white hover:bg-zinc-800"
+        >
+          Sync & Backup 🔄
+        </button>
+
         <button 
           onClick={() => setActiveTab('fakturacia')}
           className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'fakturacia' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
@@ -369,7 +381,7 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        {/* --- NOVÁ SEKCIJA: SMS ŠABLÓNY --- */}
+        {/* --- SEKCIJA 3: SMS ŠABLÓNY --- */}
         {activeTab === 'sms_templates' && (
           <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
@@ -406,7 +418,7 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        {/* --- SEKCIJA 3: FAKTURÁCIA --- */}
+        {/* --- SEKCIJA 4: FAKTURÁCIA --- */}
         {activeTab === 'fakturacia' && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3rem] shadow-2xl space-y-6">
@@ -445,7 +457,7 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        {/* --- SEKCIJA 4: TÍM --- */}
+        {/* --- SEKCIJA 5: TÍM --- */}
         {activeTab === 'tim' && (
           <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
             {/* Formulár pre nového zamestnanca */}
