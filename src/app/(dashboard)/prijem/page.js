@@ -1,7 +1,8 @@
-  'use client';
+'use client';
   import { useState, useEffect, Suspense } from 'react';
   import { supabase } from '@/app/lib/supabase';
   import { useSearchParams, useRouter } from 'next/navigation';
+  import SmsPanel from './SmsPanel'; // 1. RIADOK: Import nového komponentu
 
   function PrijemForm() {
     const searchParams = useSearchParams();
@@ -30,7 +31,8 @@
       dic: '',           
       ic_dph: '',
       assigned_worker_id: '',
-      technician_name: ''
+      technician_name: '',
+      customer_id: null // OPRAVA: Pridané pre funkčnosť notifikácií
     });
 
     const [tasks, setTasks] = useState([{ description: '' }]);
@@ -90,7 +92,8 @@
               ico: pData?.ico || '',
               dic: pData?.dic || '',
               ic_dph: pData?.ic_dph || '',
-              client_type: (pData?.company_name || pData?.ico) ? 'Firma' : 'Osoba'
+              client_type: (pData?.company_name || pData?.ico) ? 'Firma' : 'Osoba',
+              customer_id: pData?.id || vData.owner_id || null // OPRAVA: Dotiahnutie ID pre zvonček
             }));
             return;
           }
@@ -118,15 +121,56 @@
         return;
       }
 
+      // --- LOGIKA OČISTENIA DÁT PRE DATABÁZU (PAYLOAD) ---
+      const payload = {
+        customer_name: formData.customer_name,
+        plate_number: formData.plate_number,
+        status: formData.status,
+        car_brand_model: formData.car_brand_model,
+        vin_number: formData.vin_number,
+        mileage: formData.mileage ? parseInt(formData.mileage) : null,
+        engine_volume: formData.engine_volume,
+        engine_power: formData.engine_power,
+        year_produced: formData.year_produced,
+        fuel_type: formData.fuel_type,
+        customer_phone: formData.customer_phone,
+        customer_email: formData.customer_email,
+        address: formData.address,
+        city: formData.city,
+        zip: formData.zip,
+        client_type: formData.client_type,
+        company_name: formData.company_name,
+        ico: formData.ico,
+        dic: formData.dic,
+        ic_dph: formData.ic_dph,
+        assigned_worker_id: formData.assigned_worker_id || null,
+        technician_name: formData.technician_name,
+        updated_at: new Date()
+      };
+
+      // --- FIX PRE FOREIGN KEY: Overíme, či je customer_id validné UUID ---
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (formData.customer_id && uuidRegex.test(formData.customer_id)) {
+        payload.customer_id = formData.customer_id;
+      } else {
+        payload.customer_id = null; // Ak ID nie je validné UUID, pošleme null
+      }
+
       // A. Zápis do job_tickets
-      const { data: job, error: jobError } = await supabase
+      let { data: job, error: jobError } = await supabase
         .from('job_tickets')
-        .insert([{ 
-          ...formData, 
-          updated_at: new Date() 
-        }])
+        .insert([payload])
         .select()
         .single();
+
+      // --- ZÁCHRANNÝ MECHANIZMUS: Ak zlyhá FK (kód 23503), skúsime to bez ID klienta ---
+      if (jobError && jobError.code === '23503') {
+        console.warn("FK Error zachytený, skúšam uložiť bez prepojenia na klienta...");
+        payload.customer_id = null;
+        const retry = await supabase.from('job_tickets').insert([payload]).select().single();
+        job = retry.data;
+        jobError = retry.error;
+      }
 
       if (jobError) {
         alert("Chyba pri ukladaní: " + jobError.message);
@@ -146,7 +190,7 @@
       if (!tasksError) {
         // C. Aktualizácia KM v tabuľke vehicles (Synchronizácia)
         await supabase.from('vehicles')
-          .update({ mileage: formData.mileage })
+          .update({ mileage: payload.mileage || 0 })
           .eq('license_plate', formData.plate_number.toUpperCase());
 
         alert("Zákazka úspešne vytvorená!");
@@ -230,8 +274,18 @@
             </div>
           </div>
 
-          {/* MECHANIK A PLÁN PRÁC */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+          {/* SMS PANEL TERAZ ZABERÁ CELÚ ŠÍRKU - UMIESTNENÝ SAMOSTATNE */}
+          <div className="w-full">
+            <SmsPanel 
+              phone={formData.customer_phone} 
+              plate={formData.plate_number} 
+              customerName={formData.customer_name}
+              userId={formData.customer_id}
+            />
+          </div>
+
+          {/* MECHANIK A ÚKONY - VEDĽA SEBA V SPODNEJ ČASTI */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-10">
             <div className="lg:col-span-1">
               <div className="bg-blue-600/10 p-8 rounded-[3rem] border border-blue-600/20 h-full shadow-lg">
                 <label className="text-[10px] font-black text-blue-400 uppercase mb-5 ml-2 block tracking-widest italic">Zodpovedný Mechanik</label>
@@ -242,11 +296,11 @@
                   <option value="">-- VYBERTE MECHANIKA --</option>
                   {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
                 </select>
-                <p className="text-[9px] text-zinc-600 mt-4 px-2 uppercase tracking-widest italic">Mechanikovi bude zákazka pridelená do jeho pracovného panelu</p>
+                <p className="text-[9px] text-zinc-600 mt-4 px-2 uppercase tracking-widest italic">Mechanikovi bude zákazka pridelená</p>
               </div>
             </div>
 
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-3">
               <div className="bg-black/40 p-8 md:p-10 rounded-[3.5rem] border border-zinc-800/50 shadow-inner space-y-8">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 block tracking-widest italic">Definícia servisných úkonov</label>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
+import SmsPanel from '../../prijem/SmsPanel'; // PRIDANÝ IMPORT
 
 export default function DetailZakazkyPage() {
   const { id } = useParams();
@@ -85,7 +86,32 @@ export default function DetailZakazkyPage() {
     try {
       const { data, error } = await supabase.from('job_tickets').select('*').eq('id', id).single();
       if (error) throw error;
-      if (data) setZakazka(data);
+      
+      if (data) {
+        let finalCustomerId = data.customer_id;
+
+        // ZÁCHRANNÁ LOGIKA PRE SMS: Ak v zákazke chýba ID, hľadáme ho podľa ŠPZ v tabuľke vozidiel
+        if (!finalCustomerId && data.plate_number) {
+            const { data: vData } = await supabase
+                .from('vehicles')
+                .select('owner_id')
+                .eq('license_plate', data.plate_number.toUpperCase())
+                .maybeSingle();
+            if (vData?.owner_id) {
+                finalCustomerId = vData.owner_id;
+            }
+        }
+
+        const enrichedData = { ...data, customer_id: finalCustomerId };
+        setZakazka(enrichedData);
+        
+        // DEBUG KONZOLA
+        console.log("Dátový profil zákazky pre SMS:", {
+            customer_id: finalCustomerId,
+            plate: data.plate_number,
+            phone: data.customer_phone
+        });
+      }
     } catch (err) { console.error("Chyba detailu:", err.message); }
   };
 
@@ -229,7 +255,6 @@ export default function DetailZakazkyPage() {
       // 1. SCHVÁLENÉ POLOŽKY (is_selected === true)
       const approvedItems = allOfferItems.filter(item => item.is_selected === true);
       const itemsToInsert = approvedItems.map(item => {
-        // TU JE OPRAVA: Filtrujeme stĺpce, ktoré job_items nemá
         const { id: oldId, created_at, job_id: oldJobId, group_name, is_selected, ...cleanItem } = item;
         return {
           ...cleanItem,
@@ -247,7 +272,6 @@ export default function DetailZakazkyPage() {
       if (rejectedItems.length > 0) {
         const rejectedText = rejectedItems.map(i => `[ODMIETNUTÉ] ${i.group_name || 'Servis'}: ${i.name}`).join('\n');
         
-        // Získame aktuálne údaje, aby sme neprepísali existujúce závady
         const { data: jobData } = await supabase.from('job_tickets').select('complaints').eq('id', id).single();
         const newComplaints = jobData?.complaints 
           ? `${jobData.complaints}\n\n${rejectedText}` 
@@ -293,29 +317,33 @@ export default function DetailZakazkyPage() {
     if (!error) setZakazka(prev => ({ ...prev, assigned_worker_id: employeeId, technician_name: selectedEmp.name }));
   };
 
+  // --- UPRAVENÁ FUNKCIA FINALIZÁCIE: SAMOSTATNÉ ČÍSLOVANIE RÁD ---
   const handleFinalizeJob = async (isOfficial) => {
     setInvoiceLoading(true);
     try {
       const { subtotal, tax, total } = calculateTotal();
-
-      // 1. Získanie dnešného základu DDMMRR
       const teraz = new Date();
       const dd = String(teraz.getDate()).padStart(2, '0');
       const mm = String(teraz.getMonth() + 1).padStart(2, '0');
       const rr = String(teraz.getFullYear()).slice(-2);
-      const dnesnyZoznam = `${dd}${mm}${rr}`;
+      const dnesnyDátum = `${dd}${mm}${rr}`;
 
-      // 2. Opýtame sa DB na počet dnešných záznamov pre poradové číslo CCC
-      const { count, error: countError } = await supabase
-        .from('invoices')
-        .select('*', { count: 'exact', head: true })
-        .ilike('invoice_number', `%${dnesnyZoznam}%`);
+      // Hľadáme počet záznamov pre danú radu samostatne
+      let query = supabase.from('invoices').select('*', { count: 'exact', head: true });
 
+      if (isOfficial) {
+          // Hľadáme len tie, ktoré začínajú dátumom (napr. 080424...) a nemajú "A"
+          query = query.like('invoice_number', `${dnesnyDátum}%`).not('invoice_number', 'ilike', 'A%');
+      } else {
+          // Hľadáme tie, ktoré začínajú na "A" a dnešný dátum (napr. A080424...)
+          query = query.like('invoice_number', `A${dnesnyDátum}%`);
+      }
+
+      const { count, error: countError } = await query;
       if (countError) throw countError;
 
-      // 3. Vytvorenie finálneho čísla (Poradie 001, 002...)
       const poradie = String((count || 0) + 1).padStart(3, '0');
-      const konecneCislo = isOfficial ? `${dnesnyZoznam}${poradie}` : `A${dnesnyZoznam}${poradie}`;
+      const konecneCislo = isOfficial ? `${dnesnyDátum}${poradie}` : `A${dnesnyDátum}${poradie}`;
       
       const invoicePayload = {
         invoice_number: konecneCislo, 
@@ -478,6 +506,16 @@ export default function DetailZakazkyPage() {
           </div>
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest">KM</p><p className="font-bold">{zakazka.mileage || '---'} km</p></div>
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest">ŠPZ</p><p className="text-xl tracking-widest italic font-black uppercase">{zakazka.plate_number}</p></div>
+        </div>
+
+        {/* --- PRIDANÝ SMS PANEL NA CELÚ ŠÍRKU (NO PRINT) --- */}
+        <div className="no-print mb-12">
+            <SmsPanel 
+                phone={zakazka.customer_phone} 
+                plate={zakazka.plate_number} 
+                customerName={zakazka.customer_name}
+                userId={zakazka.customer_id} 
+            />
         </div>
 
         {/* --- BOX CENOVÁ PONUKA --- */}

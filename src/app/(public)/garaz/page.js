@@ -14,6 +14,12 @@ export default function GarazPage() {
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
+  // --- STAVY PRE FAKTÚRY (DOPLNENÉ) ---
+  const [vehicleInvoices, setVehicleInvoices] = useState([]);
+  const [isInvoiceListOpen, setIsInvoiceListOpen] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [activePlate, setActivePlate] = useState('');
+
   // --- STAVY PRE OBJEDNÁVKU SERVISU ---
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderingVehicle, setOrderingVehicle] = useState(null);
@@ -60,68 +66,76 @@ export default function GarazPage() {
   });
 
   useEffect(() => {
-    checkUserAndData();
-  }, []);
+    let channel;
 
-  const checkUserAndData = async () => {
-    try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        router.push('/login');
-        return;
-      }
+    const checkUserAndData = async () => {
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          router.push('/login');
+          return;
+        }
 
-      // Načítanie notifikácií
-      fetchNotifications(user.id);
-      
-      // Real-time odber nových správ
-      const channel = supabase
-        .channel('schema-db-changes')
-        .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'notifications', 
-          filter: `user_id=eq.${user.id}` 
-        }, () => fetchNotifications(user.id))
-        .subscribe();
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (profile) {
-        setUserProfile(profile);
-        setProfileForm({
-          full_name: profile.full_name || '',
-          phone: profile.phone || '',
-          email: profile.email || user.email || '',
-          address: profile.address || '',
-          city: profile.city || '',
-          zip: profile.zip || '',
-          company_name: profile.company_name || '',
-          ico: profile.ico || '',
-          dic: profile.dic || '',
-          ic_dph: profile.ic_dph || '',
-          country: profile.country || 'Slovensko'
-        });
-
-        const { data: vehicleData, error: vehError } = await supabase
-          .from('vehicles')
-          .select('*')
-          .or(`owner_id.eq.${user.id},owner_email.eq.${user.email}`);
+        // 1. Načítanie notifikácií
+        fetchNotifications(user.id);
         
-        if (vehError) throw vehError;
-        setVehicles(vehicleData || []);
+        // 2. Real-time odber nových správ - OPRAVENÉ NA UNIVERZÁLNY KANÁL
+        channel = supabase
+          .channel(`room-${Math.random()}`) // Unikátny názov pre každý render zabráni chybe
+          .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'notifications', 
+            filter: `user_id=eq.${user.id}` 
+          }, () => {
+            fetchNotifications(user.id);
+          })
+          .subscribe();
+
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (profile) {
+          setUserProfile(profile);
+          setProfileForm({
+            full_name: profile.full_name || '',
+            phone: profile.phone || '',
+            email: profile.email || user.email || '',
+            address: profile.address || '',
+            city: profile.city || '',
+            zip: profile.zip || '',
+            company_name: profile.company_name || '',
+            ico: profile.ico || '',
+            dic: profile.dic || '',
+            ic_dph: profile.ic_dph || '',
+            country: profile.country || 'Slovensko'
+          });
+
+          const { data: vehicleData, error: vehError } = await supabase
+            .from('vehicles')
+            .select('*')
+            .or(`owner_id.eq.${user.id},owner_email.eq.${user.email}`);
+          
+          if (vehError) throw vehError;
+          setVehicles(vehicleData || []);
+        }
+      } catch (err) {
+        console.error("Chyba pri načítaní:", err);
+      } finally {
+        setLoading(false);
       }
-      return () => supabase.removeChannel(channel);
-    } catch (err) {
-      console.error("Chyba pri načítaní:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    checkUserAndData();
+
+    // CLEANUP
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   // --- LOGIKA NOTIFIKÁCIÍ (NOVÉ) ---
   const fetchNotifications = async (userId) => {
@@ -142,6 +156,37 @@ export default function GarazPage() {
       .eq('user_id', user.id)
       .eq('is_read', false);
     fetchNotifications(user.id);
+  };
+
+  // --- LOGIKA FAKTÚR (DOPLNENÉ) ---
+  const openInvoiceModal = async (plate) => {
+    setActivePlate(plate);
+    setIsInvoiceListOpen(true);
+    setInvoiceLoading(true);
+    try {
+      // Hľadáme faktúry podľa plate_number v tabuľke invoices
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .ilike('car_details->>plate', plate) // Ak je plate v JSONB stĺpci car_details
+        .order('created_at', { ascending: false });
+      
+      // Fallback ak nemáš plate v JSON ale ako samostatný stĺpec
+      if (error || (data && data.length === 0)) {
+         const { data: fallbackData } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('plate_number', plate)
+          .order('created_at', { ascending: false });
+         setVehicleInvoices(fallbackData || []);
+      } else {
+        setVehicleInvoices(data || []);
+      }
+    } catch (err) {
+      console.error("Chyba faktúr:", err);
+    } finally {
+      setInvoiceLoading(false);
+    }
   };
 
   // --- LOGIKA OBJEDNÁVKY SERVISU ---
@@ -222,7 +267,6 @@ export default function GarazPage() {
       const { error } = await supabase.from('user_profiles').update(profileForm).eq('id', userProfile.id);
       if (error) throw error;
       setIsProfileModalOpen(false);
-      checkUserAndData();
     } catch (err) { alert("Chyba: " + err.message); }
   };
 
@@ -249,7 +293,7 @@ export default function GarazPage() {
       }).eq('id', editingVehicle.id);
       if (error) throw error;
       setIsEditModalOpen(false);
-      checkUserAndData();
+      window.location.reload(); 
     } catch (err) { alert("Chyba pri aktualizácii vozidla: " + err.message); }
   };
 
@@ -275,7 +319,6 @@ export default function GarazPage() {
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-12 font-sans font-bold relative overflow-x-hidden">
       
-      {/* TENTO STÝL ZABEZPEČÍ BIELU IKONU KALENDÁRA A SCROLLBAR */}
       <style>{`
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -287,7 +330,6 @@ export default function GarazPage() {
         
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 border-b border-zinc-800 pb-8 gap-4 font-bold relative">
           <div className="flex items-center gap-6">
-            {/* ZVONČEK - NOTIFIKÁCIE */}
             <div className="relative">
               <button 
                 onClick={() => { setIsInboxOpen(!isInboxOpen); markAsRead(); }}
@@ -301,7 +343,6 @@ export default function GarazPage() {
                 )}
               </button>
 
-              {/* DROPDOWN NOTIFIKÁCIÍ */}
               {isInboxOpen && (
                 <div className="absolute top-16 left-0 w-80 bg-zinc-950 border border-zinc-800 rounded-[2rem] shadow-2xl z-[300] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="p-5 border-b border-zinc-900 bg-black flex justify-between items-center">
@@ -342,38 +383,101 @@ export default function GarazPage() {
           </button>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-bold">
+        {/* --- ZOZNAM VOZIDIEL - POD SEBOU (FULL WIDTH) --- */}
+        <div className="flex flex-col gap-8 font-bold">
           {vehicles.map((vehicle) => (
-            <div key={vehicle.id} className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] relative group hover:border-zinc-700 transition-all shadow-xl font-bold">
-              <div className="flex justify-between items-start mb-6 font-bold">
-                <div className="bg-white text-black px-4 py-1.5 rounded-lg font-black text-xl tracking-tighter shadow-lg font-bold">{vehicle.license_plate}</div>
-                <div className="flex gap-2">
-                  <button onClick={() => openEditModal(vehicle)} className="p-3 bg-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs font-bold">✏️</button>
-                  <button onClick={() => handleDelete(vehicle.id, vehicle.license_plate)} className="p-3 bg-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs font-bold font-bold">🗑️</button>
+            <div key={vehicle.id} className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] relative group hover:border-zinc-700 transition-all shadow-xl font-bold w-full">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6 font-bold">
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                  <div className="bg-white text-black px-6 py-3 rounded-2xl font-black text-3xl tracking-tighter shadow-xl font-bold">{vehicle.license_plate}</div>
+                  <div>
+                    <h2 className="text-4xl font-black uppercase italic tracking-tight mb-1 font-bold">{vehicle.brand_model}</h2>
+                    <p className="text-zinc-500 text-[12px] font-black uppercase tracking-widest font-bold">VIN: {vehicle.vin_number || 'Neuvedené'}</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => openEditModal(vehicle)} className="p-4 bg-zinc-800 rounded-2xl hover:bg-white hover:text-black transition-all text-sm font-bold">Upraviť ✏️</button>
+                  <button onClick={() => handleDelete(vehicle.id, vehicle.license_plate)} className="p-4 bg-zinc-800 rounded-2xl hover:bg-red-600 transition-all text-sm font-bold font-bold">Vymazať 🗑️</button>
                 </div>
               </div>
-              <h2 className="text-3xl font-black uppercase italic tracking-tight mb-1 font-bold">{vehicle.brand_model}</h2>
-              <div className="space-y-1 mb-8">
-                  <p className="text-zinc-500 text-[11px] font-black uppercase tracking-widest font-bold">VIN: {vehicle.vin_number || 'Neuvedené'}</p>
-                  <p className="text-zinc-600 text-[10px] font-bold uppercase italic">
-                    {vehicle.engine_volume || '---'} ccm • {vehicle.engine_power || '---'} kW • {vehicle.year_produced || '---'}
-                  </p>
-                  <p className="text-blue-500 text-[10px] font-black uppercase mt-2">Posledný stav: {vehicle.mileage || 0} KM</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 border-t border-zinc-800/50 pt-8">
+                  <div className="bg-black/20 p-4 rounded-3xl">
+                     <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Motorizácia</p>
+                     <p className="text-sm font-black">{vehicle.engine_volume || '---'} ccm / {vehicle.engine_power || '---'} kW</p>
+                  </div>
+                  <div className="bg-black/20 p-4 rounded-3xl">
+                     <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Palivo & Rok</p>
+                     <p className="text-sm font-black">{vehicle.fuel_type} • {vehicle.year_produced || '---'}</p>
+                  </div>
+                  <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10">
+                     <p className="text-blue-500/60 text-[9px] uppercase font-black mb-1">Stav Tachometra</p>
+                     <p className="text-xl font-black text-blue-400">{vehicle.mileage || 0} KM</p>
+                  </div>
+                  <div className="bg-zinc-800/30 p-4 rounded-3xl flex flex-col justify-center items-center">
+                     <button onClick={() => openInvoiceModal(vehicle.license_plate)} className="text-red-600 hover:text-red-500 transition-all">
+                        <p className="text-[14px] font-black uppercase italic tracking-tighter">Moje Faktúry 💰</p>
+                     </button>
+                  </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 font-bold font-bold">
-                <button onClick={() => router.push(`/garaz/historia/${vehicle.license_plate}`)} className="bg-zinc-800 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-700 transition-all font-bold">História</button>
-                <button onClick={() => openOrderModal(vehicle)} className="bg-red-600 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 shadow-lg font-bold">
-                  Objednať servis
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-bold font-bold">
+                <button onClick={() => router.push(`/garaz/historia/${vehicle.license_plate}`)} className="bg-zinc-800 py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-zinc-700 transition-all font-bold">📜 Zobraziť kompletnú históriu</button>
+                <button onClick={() => openOrderModal(vehicle)} className="bg-red-600 py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-red-700 shadow-xl font-bold">
+                  🔧 Objednať sa na servis
                 </button>
               </div>
             </div>
           ))}
-          <button onClick={() => router.push('/garaz/pridat')} className="border-2 border-dashed border-zinc-800 rounded-[3rem] p-12 flex flex-col items-center justify-center gap-4 hover:border-red-600/50 transition-all group min-h-[300px] font-bold">
+
+          <button onClick={() => router.push('/garaz/pridat')} className="border-2 border-dashed border-zinc-800 rounded-[3rem] p-16 flex flex-col items-center justify-center gap-4 hover:border-red-600/50 transition-all group min-h-[150px] font-bold">
             <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center text-3xl group-hover:bg-red-600 transition-all font-bold">+</div>
-            <span className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-600 group-hover:text-white font-bold">Pridat nové vozidlo</span>
+            <span className="text-[13px] font-black uppercase tracking-[0.3em] text-zinc-600 group-hover:text-white font-bold">Pridať ďalšie vozidlo do mojej garáže</span>
           </button>
         </div>
       </div>
+
+      {/* --- MODAL ZOZNAMU FAKTÚR (NOVÉ) --- */}
+      {isInvoiceListOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[85vh]">
+            <div className="flex justify-between items-center mb-8">
+               <h2 className="text-3xl font-black uppercase italic tracking-tighter">Faktúry k vozidlu <span className="text-red-600">{activePlate}</span></h2>
+               <button onClick={() => setIsInvoiceListOpen(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
+            </div>
+
+            {invoiceLoading ? (
+               <div className="py-20 text-center animate-pulse text-zinc-500 uppercase tracking-widest text-xs">Sťahujem dáta faktúr...</div>
+            ) : vehicleInvoices.length === 0 ? (
+               <div className="py-20 text-center text-zinc-600 uppercase text-xs italic border-2 border-dashed border-zinc-800 rounded-[2rem]">Zatiaľ neboli k tomuto vozidlu vystavené žiadne faktúry.</div>
+            ) : (
+               <div className="space-y-4">
+                  {vehicleInvoices.map(inv => (
+                    <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all">
+                       <div>
+                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo dokladu</p>
+                          <p className="text-lg font-black uppercase tracking-tight">{inv.invoice_number}</p>
+                          <p className="text-[10px] text-zinc-600 mt-1 font-bold">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
+                       </div>
+                       <div className="text-right flex items-center gap-6">
+                          <div>
+                            <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Suma s DPH</p>
+                            <p className="text-2xl font-black text-white italic">{inv.total_amount?.toFixed(2)} €</p>
+                          </div>
+                          <button 
+                            onClick={() => router.push(`/garaz/faktura/${inv.id}`)}
+                            className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg"
+                          >
+                            👁️
+                          </button>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL OBJEDNÁVKY --- */}
       {isOrderModalOpen && (
@@ -470,7 +574,7 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* MODAL PROFILU (ZACHOVANÉ) */}
+      {/* MODAL PROFILU */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-3xl shadow-2xl my-auto font-bold">
@@ -478,13 +582,13 @@ export default function GarazPage() {
             <form onSubmit={handleUpdateProfile} className="space-y-6 font-bold italic">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-bold">
                 <div className="space-y-4 font-bold">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold font-bold font-bold">Meno a kontakt</label>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold">Meno a kontakt</label>
                   <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.full_name} onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})} placeholder="Meno a Priezvisko" />
                   <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.phone} onChange={(e) => setProfileForm({...profileForm, phone: e.target.value})} placeholder="Telefón" />
                   <input disabled className="w-full bg-zinc-800/30 border border-zinc-800 p-4 rounded-2xl font-bold text-zinc-500 outline-none" value={profileForm.email} placeholder="Email (nemožno meniť)" />
                 </div>
                 <div className="space-y-4 font-bold">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold font-bold font-bold font-bold">Adresa trvalého bydliska</label>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold">Adresa</label>
                   <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.address} onChange={(e) => setProfileForm({...profileForm, address: e.target.value})} placeholder="Ulica a č." />
                   <div className="grid grid-cols-2 gap-2 font-bold">
                     <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.city} onChange={(e) => setProfileForm({...profileForm, city: e.target.value})} placeholder="Mesto" />
@@ -494,7 +598,7 @@ export default function GarazPage() {
               </div>
               
               <div className="border-t border-zinc-800 pt-8 space-y-4 font-bold">
-                <label className="text-[10px] font-black text-blue-500 uppercase ml-2 tracking-widest font-bold font-bold font-bold">Fakturačné údaje firmy</label>
+                <label className="text-[10px] font-black text-blue-500 uppercase ml-2 tracking-widest font-bold">Fakturačné údaje firmy</label>
                 <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold" value={profileForm.company_name} onChange={(e) => setProfileForm({...profileForm, company_name: e.target.value})} placeholder="Obchodné meno spoločnosti" />
                 <div className="grid grid-cols-3 gap-2 font-bold">
                   <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold" value={profileForm.ico} onChange={(e) => setProfileForm({...profileForm, ico: e.target.value})} placeholder="IČO" />
@@ -504,61 +608,61 @@ export default function GarazPage() {
               </div>
 
               <div className="flex gap-6 pt-6 font-bold">
-                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold font-bold">Zrušiť</button>
-                <button type="submit" className="flex-[2] bg-white text-black py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold font-bold font-bold font-bold">Uložiť klientske dáta</button>
+                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold">Zrušiť</button>
+                <button type="submit" className="flex-[2] bg-white text-black py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold">Uložiť</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL VOZIDLA (ZACHOVANÉ) */}
+      {/* MODAL VOZIDLA */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto font-bold">
-            <h2 className="text-3xl font-black uppercase italic mb-8 text-center text-red-600 font-bold font-bold">Úprava technických údajov</h2>
+            <h2 className="text-3xl font-black uppercase italic mb-8 text-center text-red-600 font-bold">Úprava údajov vozidla</h2>
             <form onSubmit={handleUpdateVehicle} className="space-y-6 font-bold italic">
               <div className="font-bold">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold">Značka a Model</label>
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold">Značka a Model</label>
                 <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold" value={editForm.brand_model} onChange={(e) => setEditForm({...editForm, brand_model: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-4 font-bold">
                 <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase font-bold">ŠPZ</label>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">ŠPZ</label>
                   <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold uppercase tracking-widest" value={editForm.license_plate} onChange={(e) => setEditForm({...editForm, license_plate: e.target.value})} />
                 </div>
                 <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold font-bold uppercase font-bold font-bold">Rok výroby</label>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Rok výroby</label>
                   <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold" value={editForm.year_produced} onChange={(e) => setEditForm({...editForm, year_produced: e.target.value})} />
                 </div>
               </div>
-              <div className="font-bold font-bold">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold font-bold uppercase font-bold font-bold">VIN číslo</label>
-                <input required maxLength={17} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-mono text-sm uppercase font-bold font-bold" value={editForm.vin_number} onChange={(e) => setEditForm({...editForm, vin_number: e.target.value})} />
+              <div className="font-bold">
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">VIN číslo</label>
+                <input required maxLength={17} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-mono text-sm uppercase font-bold" value={editForm.vin_number} onChange={(e) => setEditForm({...editForm, vin_number: e.target.value})} />
               </div>
               <div className="grid grid-cols-3 gap-4 font-bold">
                 <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold font-bold uppercase font-bold">Objem (cm³)</label>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Objem (cm³)</label>
                   <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold" value={editForm.engine_volume} onChange={(e) => setEditForm({...editForm, engine_volume: e.target.value})} />
                 </div>
                 <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold font-bold uppercase font-bold">Výkon (kW)</label>
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Výkon (kW)</label>
                   <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold" value={editForm.engine_power} onChange={(e) => setEditForm({...editForm, engine_power: e.target.value})} />
                 </div>
-                <div className="font-bold font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold font-bold uppercase font-bold">Palivo</label>
-                  <select className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 appearance-none font-bold font-bold font-bold" value={editForm.fuel_type} onChange={(e) => setEditForm({...editForm, fuel_type: e.target.value})}>
+                <div className="font-bold">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Palivo</label>
+                  <select className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 appearance-none font-bold" value={editForm.fuel_type} onChange={(e) => setEditForm({...editForm, fuel_type: e.target.value})}>
                     <option value="Diesel">Diesel</option><option value="Benzín">Benzín</option><option value="Hybrid">Hybrid</option><option value="Elektro">Elektro</option><option value="LPG/CNG">LPG/CNG</option>
                   </select>
                 </div>
               </div>
-              <div className="font-bold font-bold">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold font-bold font-bold uppercase font-bold">Stav tachometra (km)</label>
-                <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold font-bold" value={editForm.mileage} onChange={(e) => setEditForm({...editForm, mileage: e.target.value})} />
+              <div className="font-bold">
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Tachometer (km)</label>
+                <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold" value={editForm.mileage} onChange={(e) => setEditForm({...editForm, mileage: e.target.value})} />
               </div>
               <div className="flex gap-6 pt-6 font-bold">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold tracking-widest font-bold">Zrušiť</button>
-                <button type="submit" className="flex-[2] bg-red-600 py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-700 shadow-xl tracking-widest font-bold font-bold">Uložiť zmeny</button>
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold tracking-widest">Zrušiť</button>
+                <button type="submit" className="flex-[2] bg-red-600 py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-700 shadow-xl font-bold">Uložiť zmeny</button>
               </div>
             </form>
           </div>

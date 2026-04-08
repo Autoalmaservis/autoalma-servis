@@ -8,7 +8,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="sk">
-      <body className="bg-black text-white antialiased">
+      <body className="bg-black text-white antialiased" suppressHydrationWarning>
         {/* Tu sa bude vykresľovať buď (dashboard) so sidebarom, alebo (public) bez neho */}
         {children}
       </body>
