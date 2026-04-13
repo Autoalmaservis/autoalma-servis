@@ -52,7 +52,6 @@ function PrijemForm() {
       const spz = searchParams.get('spz');
       if (!spz) return;
 
-      // Hľadáme poslednú neuzavretú udalosť v kalendári pre túto ŠPZ
       const { data: calData } = await supabase
         .from('calendar_events')
         .select('issue_description')
@@ -62,10 +61,9 @@ function PrijemForm() {
         .maybeSingle();
 
       if (calData?.issue_description) {
-        // Rozbijeme text na riadky (predpokladáme formát 1. závada\n2. závada alebo len text)
         const lines = calData.issue_description
           .split('\n')
-          .map(line => line.replace(/^\d+\.\s*/, '').trim()) // Odstráni číslovanie "1. "
+          .map(line => line.replace(/^\d+\.\s*/, '').trim())
           .filter(line => line !== '');
 
         if (lines.length > 0) {
@@ -134,6 +132,25 @@ function PrijemForm() {
     setTasks(newTasks);
   };
 
+  // --- NOVÁ FUNKCIA: GENEROVANIE ČÍSLA ZÁKAZKY ZDDMMRRCCC ---
+  const generateFinalJobNumber = async () => {
+    const teraz = new Date();
+    const dd = String(teraz.getDate()).padStart(2, '0');
+    const mm = String(teraz.getMonth() + 1).padStart(2, '0');
+    const rr = String(teraz.getFullYear()).slice(-2);
+    const dnesnyPrefix = `${dd}${mm}${rr}`;
+
+    const startOfDay = new Date(teraz.getFullYear(), teraz.getMonth(), teraz.getDate()).toISOString();
+    
+    const { count } = await supabase
+      .from('job_tickets')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', startOfDay);
+
+    const ccc = String((count || 0) + 1).padStart(3, '0');
+    return `Z${dnesnyPrefix}${ccc}`;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -145,7 +162,11 @@ function PrijemForm() {
       return;
     }
 
+    // VYGENEROVANIE UNIKÁTNEHO ČÍSLA ZÁKAZKY
+    const newJobNumber = await generateFinalJobNumber();
+
     const payload = {
+      job_number: newJobNumber, // ULOŽENIE DO DB
       customer_name: formData.customer_name,
       plate_number: formData.plate_number,
       status: formData.status,
@@ -209,7 +230,7 @@ function PrijemForm() {
         .update({ mileage: payload.mileage || 0 })
         .eq('license_plate', formData.plate_number.toUpperCase());
 
-      alert("Zákazka úspešne vytvorená!");
+      alert(`Zákazka ${newJobNumber} úspešne vytvorená!`);
       router.push('/zakazky'); 
     }
     setLoading(false);

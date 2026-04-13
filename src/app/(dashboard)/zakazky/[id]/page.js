@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
-import SmsPanel from '../../prijem/SmsPanel'; // PRIDANÝ IMPORT
+import SmsPanel from '../../prijem/SmsPanel'; // PRIDANÝ IMPORT ZACHOVANÝ
 
 export default function DetailZakazkyPage() {
   const { id } = useParams();
@@ -13,13 +13,13 @@ export default function DetailZakazkyPage() {
   const [employees, setEmployees] = useState([]); 
   const [loading, setLoading] = useState(true);
   
-  // --- NOVÉ STAVY PRE KATALÓG, SADZBY A CENOVÉ PONUKY ---
+  // --- NOVÉ STAVY PRE KATALÓG, SADZBY A CENOVÉ PONUKY ZACHOVANÉ ---
   const [catalog, setCatalog] = useState([]);
   const [globalRates, setGlobalRates] = useState({ m1: 0, m2: 0, e1: 0, e2: 0 });
   const [activeOffer, setActiveOffer] = useState(null);
-  const [pastOffers, setPastOffers] = useState([]); // NOVÝ STAV PRE HISTÓRIU PONÚK
+  const [pastOffers, setPastOffers] = useState([]); // HISTÓRIA PONÚK ZACHOVANÁ
 
-  // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ---
+  // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ZACHOVANÉ ---
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
 
@@ -517,7 +517,10 @@ export default function DetailZakazkyPage() {
           <div className="text-right">
             <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border inline-block mb-3 ${zakazka.status === 'Dokončené' ? 'border-green-600 text-green-500' : 'border-amber-600 text-amber-500'}`}>{zakazka.status}</span>
             <p className="text-[10px] font-black text-zinc-500 uppercase mb-1">Záznam o zákazke</p>
-            <p className="text-2xl font-black uppercase italic tracking-tighter leading-none">#{zakazka.id.slice(0, 8)}</p>
+            {/* TU JE ZMENA: Ťaháme reálne číslo job_number z databázy */}
+            <p className="text-2xl font-black uppercase italic tracking-tighter leading-none">
+              {zakazka.job_number || `#${zakazka.id.slice(0, 8)}`}
+            </p>
           </div>
         </div>
 
@@ -640,13 +643,12 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        {/* ROZPIS POLOŽIEK - DOPLNENÝ O HISTÓRIU PONÚK */}
+        {/* ROZPIS POLOŽIEK */}
         <div className="space-y-4 mb-12">
           <div className="flex justify-between items-center font-bold">
             <div className="flex flex-col md:flex-row md:items-center gap-4">
                 <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">2. Rozpis materiálu a servisných prác</h2>
                 
-                {/* --- NOVÝ SELECT: POUŽIŤ STARŠIU PONUKU PODĽA ŠPZ --- */}
                 {pastOffers.length > 0 && (
                     <div className="no-print">
                         <select 
@@ -783,7 +785,6 @@ export default function DetailZakazkyPage() {
                   <button 
                     onClick={() => deletePhoto(photo)}
                     className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-500 transition-all shadow-2xl transform translate-y-4 group-hover:translate-y-0 duration-300"
-                    title="Vymazať fotku"
                   >
                     🗑️ Vymazať
                   </button>
