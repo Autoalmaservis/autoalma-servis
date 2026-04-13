@@ -12,6 +12,7 @@ export default function ZakazkyZoznamPage() {
   // --- LOGIKA NOTIFIKÁCIÍ S PAMÄŤOU (localStorage) ---
   const [notifState, setNotifState] = useState({
     'Prebieha': { isNew: false, count: 0 },
+    'Čaká na schválenie': { isNew: false, count: 0 },
     'Dokončené': { isNew: false, count: 0 }
   });
 
@@ -49,11 +50,10 @@ export default function ZakazkyZoznamPage() {
 
       // Kontrola nových zákaziek voči localStorage
       const updatedNotifState = {};
-      ['Prebieha', 'Dokončené'].forEach(status => {
+      ['Prebieha', 'Čaká na schválenie', 'Dokončené'].forEach(status => {
         const currentCount = jobsWithPrices.filter(j => j.status === status).length;
         const savedCount = parseInt(localStorage.getItem(`lastCount_${status}`)) || 0;
 
-        // Bliká len ak je aktuálny počet reálne vyšší ako ten v pamäti
         updatedNotifState[status] = {
           count: currentCount,
           isNew: currentCount > savedCount
@@ -69,15 +69,11 @@ export default function ZakazkyZoznamPage() {
     }
   };
 
-  // Funkcia na prepnutie filtra a "zhasnutie" notifikácie
   const handleFilterChange = (status) => {
     setFilterStatus(status);
     
     if (notifState[status]?.isNew) {
-      // Uložíme aktuálny počet do localStorage, čím "potvrdíme" videnie
       localStorage.setItem(`lastCount_${status}`, notifState[status].count.toString());
-      
-      // Okamžite zhasneme blikanie v stave
       setNotifState(prev => ({
         ...prev,
         [status]: { ...prev[status], isNew: false }
@@ -85,7 +81,6 @@ export default function ZakazkyZoznamPage() {
     }
   };
 
-  // MODÁLNE OKNO MAZANIA
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, jobId: null, customerName: '' });
 
   const confirmDelete = (job) => {
@@ -121,6 +116,7 @@ export default function ZakazkyZoznamPage() {
   const getStatusColor = (status) => {
     switch(status) {
       case 'Prebieha': return 'bg-blue-600';
+      case 'Čaká na schválenie': return 'bg-purple-600'; // NOVÁ FARBA
       case 'Dokončené': return 'bg-green-600';
       case 'Archivované': return 'bg-zinc-700 text-zinc-400';
       default: return 'bg-zinc-700';
@@ -141,9 +137,9 @@ export default function ZakazkyZoznamPage() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Správa servisných procesov</p>
         </div>
 
-        {/* NAVIGÁCIA S DYNAMICKÝM BLIKANÍM */}
-        <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-2xl relative">
-          {['Prebieha', 'Dokončené', 'Archivované', 'Všetky'].map((status) => {
+        {/* NAVIGÁCIA S NOVÝM STATUSOM */}
+        <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-2xl relative flex-wrap gap-1">
+          {['Prebieha', 'Čaká na schválenie', 'Dokončené', 'Archivované', 'Všetky'].map((status) => {
             const isNew = notifState[status]?.isNew && filterStatus !== status;
             
             return (
@@ -201,6 +197,7 @@ export default function ZakazkyZoznamPage() {
               p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border
               ${job.offerStatus === 'Schválené' ? 'bg-blue-900/10 border-blue-600/30' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}
               ${job.status === 'Dokončené' ? 'border-green-600/30 bg-green-900/5' : ''}
+              ${job.status === 'Čaká na schválenie' ? 'border-purple-600/30 bg-purple-900/5' : ''}
             `}
           >
             <div className="flex items-center gap-6 w-full md:w-auto">
