@@ -124,6 +124,8 @@ export default function HistoriaVozidlaPage() {
             >
               <div className="text-zinc-400 text-sm italic">
                 {new Date(t.created_at).toLocaleDateString('sk-SK')}
+                {/* PRIDANÉ: Malý výpis čísla zákazky pod dátumom pre lepšiu orientáciu */}
+                <span className="block text-[8px] text-zinc-600 mt-1 font-mono uppercase tracking-widest">{t.job_number || t.id.slice(0, 8)}</span>
               </div>
               <div className="md:col-span-1">
                 <p className="text-white text-sm line-clamp-1 uppercase italic">
@@ -179,7 +181,10 @@ export default function HistoriaVozidlaPage() {
                 ) : (
                   <p className="text-[10px] text-zinc-600 uppercase font-black mb-1 text-right">Evidenčné číslo</p>
                 )}
-                <p className="text-2xl font-black italic text-right">#{selectedTicket.id.slice(0, 8).toUpperCase()}</p>
+                {/* UPRAVENÉ: Tu sa teraz zobrazuje job_number z databázy alebo záloha */}
+                <p className="text-2xl font-black italic text-right text-red-600">
+                  {selectedTicket.job_number || `#${selectedTicket.id.slice(0, 8).toUpperCase()}`}
+                </p>
               </div>
             </header>
 
