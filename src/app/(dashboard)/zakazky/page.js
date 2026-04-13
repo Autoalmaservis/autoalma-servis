@@ -25,28 +25,11 @@ export default function ZakazkyZoznamPage() {
       const { data, error } = await supabase
         .from('job_tickets')
         .select('*, job_items(quantity, unit_price, type), price_offers(status)')
-        .order('created_at', { ascending: true }); // Zoradíme od NAJSTARŠEJ pre správny výpočet CCC
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Pomocný objekt pre denné počítadlá
-      const dailyCounters = {};
-
       const jobsWithPrices = data.map(job => {
-        // --- LOGIKA ČÍSLOVANIA ZDDMMRRCCC ---
-        const dateObj = new Date(job.created_at);
-        const dd = String(dateObj.getDate()).padStart(2, '0');
-        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const rr = String(dateObj.getFullYear()).slice(-2);
-        
-        // Unikátny kľúč pre deň na počítanie poradovky
-        const dayKey = `${dateObj.getFullYear()}-${mm}-${dd}`;
-        dailyCounters[dayKey] = (dailyCounters[dayKey] || 0) + 1;
-        const ccc = String(dailyCounters[dayKey]).padStart(3, '0');
-        
-        const displayId = `Z${dd}${mm}${rr}${ccc}`;
-
-        // Výpočty cien
         const materialSubtotal = job.job_items?.filter(i => i.type === 'Materiál').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
         const workSubtotal = job.job_items?.filter(i => i.type === 'Práca').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
         const subtotal = materialSubtotal + workSubtotal;
@@ -60,19 +43,17 @@ export default function ZakazkyZoznamPage() {
           materialPrice: materialSubtotal * 1.23,
           workPrice: workSubtotal * 1.23,
           totalPrice: subtotal * 1.23,
-          offerStatus: offerStatus,
-          displayId: displayId // Pridáme vygenerované číslo do objektu
+          offerStatus: offerStatus 
         };
       });
-
-      // Zoznam otočíme, aby najnovšie boli hore, ale čísla CCC zostali zachované
-      const finalJobs = [...jobsWithPrices].reverse();
 
       // Kontrola nových zákaziek voči localStorage
       const updatedNotifState = {};
       ['Prebieha', 'Dokončené'].forEach(status => {
-        const currentCount = finalJobs.filter(j => j.status === status).length;
+        const currentCount = jobsWithPrices.filter(j => j.status === status).length;
         const savedCount = parseInt(localStorage.getItem(`lastCount_${status}`)) || 0;
+
+        // Bliká len ak je aktuálny počet reálne vyšší ako ten v pamäti
         updatedNotifState[status] = {
           count: currentCount,
           isNew: currentCount > savedCount
@@ -80,7 +61,7 @@ export default function ZakazkyZoznamPage() {
       });
       
       setNotifState(updatedNotifState);
-      setJobs(finalJobs);
+      setJobs(jobsWithPrices);
     } catch (err) {
       console.error("Chyba:", err.message);
     } finally {
@@ -88,10 +69,15 @@ export default function ZakazkyZoznamPage() {
     }
   };
 
+  // Funkcia na prepnutie filtra a "zhasnutie" notifikácie
   const handleFilterChange = (status) => {
     setFilterStatus(status);
+    
     if (notifState[status]?.isNew) {
+      // Uložíme aktuálny počet do localStorage, čím "potvrdíme" videnie
       localStorage.setItem(`lastCount_${status}`, notifState[status].count.toString());
+      
+      // Okamžite zhasneme blikanie v stave
       setNotifState(prev => ({
         ...prev,
         [status]: { ...prev[status], isNew: false }
@@ -99,6 +85,7 @@ export default function ZakazkyZoznamPage() {
     }
   };
 
+  // MODÁLNE OKNO MAZANIA
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, jobId: null, customerName: '' });
 
   const confirmDelete = (job) => {
@@ -121,8 +108,7 @@ export default function ZakazkyZoznamPage() {
     const matchesSearch = 
       (job.customer_name || '').toLowerCase().includes(s) ||
       (job.plate_number || '').toLowerCase().includes(s) ||
-      (job.technician_name || '').toLowerCase().includes(s) ||
-      (job.displayId || '').toLowerCase().includes(s); // Pridané hľadanie podľa čísla zákazky
+      (job.technician_name || '').toLowerCase().includes(s);
     
     const matchesFilter = filterStatus === 'Všetky' || (job.status || 'Prebieha') === filterStatus;
     return matchesSearch && matchesFilter;
@@ -155,10 +141,11 @@ export default function ZakazkyZoznamPage() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Správa servisných procesov</p>
         </div>
 
-        {/* NAVIGÁCIA */}
+        {/* NAVIGÁCIA S DYNAMICKÝM BLIKANÍM */}
         <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-2xl relative">
           {['Prebieha', 'Dokončené', 'Archivované', 'Všetky'].map((status) => {
             const isNew = notifState[status]?.isNew && filterStatus !== status;
+            
             return (
               <button
                 key={status}
@@ -199,7 +186,7 @@ export default function ZakazkyZoznamPage() {
       <div className="mb-8">
         <input 
           type="text" 
-          placeholder="Hľadať (Meno, ŠPZ, Číslo zákazky)..." 
+          placeholder="Hľadať (Meno, ŠPZ, Mechanik)..." 
           className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white outline-none focus:border-red-600 transition-all w-full max-w-md font-bold italic shadow-inner"
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -220,26 +207,25 @@ export default function ZakazkyZoznamPage() {
               <div className={`w-1.5 h-16 rounded-full ${getStatusColor(job.status || 'Prebieha')}`} />
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  {/* Zobrazenie nového formátu čísla zákazky */}
-                  <span className="bg-zinc-800 text-zinc-400 font-mono text-[10px] px-2 py-0.5 rounded border border-zinc-700 font-black">
-                    {job.displayId}
-                  </span>
-                  
                   <span className="text-red-500 font-black italic text-sm uppercase tracking-wider">{job.plate_number}</span>
                   
                   {job.offerStatus && (
                     <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase border ${
                       job.offerStatus === 'Schválené' ? 'bg-blue-600 text-white border-blue-400' : 'bg-amber-600/20 text-amber-500 border-amber-600/50'
                     }`}>
-                      {job.offerStatus === 'Schválené' ? '✅ Schválené' : '📩 Čaká'}
+                      {job.offerStatus === 'Schválené' ? '✅ Zákazník sa vyjadril' : '📩 Ponuka Odoslaná'}
                     </span>
                   )}
 
                   <div className="flex items-center gap-1.5 bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
+                    <span className="text-[10px]">👤</span>
                     <span className="text-[8px] font-black uppercase text-blue-400">
                       {job.technician_name || 'Nepiradený'}
                     </span>
                   </div>
+                  <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase ${getStatusColor(job.status || 'Prebieha')}`}>
+                    {job.status || 'Prebieha'}
+                  </span>
                 </div>
                 <h3 className="text-2xl font-black uppercase italic tracking-tight leading-none mb-1">{job.customer_name}</h3>
                 <p className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em]">{job.car_brand_model}</p>
@@ -277,14 +263,14 @@ export default function ZakazkyZoznamPage() {
         ))}
       </div>
 
-      {/* MODAL MAZANIA */}
+      {/* MODÁLNE OKNO PRE POTVRDENIE MAZANIA */}
       {deleteModal.isOpen && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-md w-full text-center shadow-2xl border-t-4 border-t-red-600">
             <div className="text-6xl mb-6">⚠️</div>
             <h3 className="text-2xl font-black uppercase italic mb-2 tracking-tighter">Odstrániť zákazku?</h3>
             <p className="text-zinc-500 text-xs mb-8 font-bold uppercase tracking-widest leading-relaxed">
-              Naozaj chcete vymazať zákazku pre klienta <span className="text-white">{deleteModal.customerName}</span>?
+              Naozaj chcete vymazať zákazku pre klienta <span className="text-white">{deleteModal.customerName}</span>? <br /> Táto akcia je nevratná.
             </p>
             <div className="grid grid-cols-2 gap-4">
               <button 

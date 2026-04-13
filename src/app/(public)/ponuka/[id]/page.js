@@ -199,13 +199,17 @@ export default function VerejnaPonukaPage() {
             {Object.keys(groupedItems).map((groupName) => {
               const isSelected = groupedItems[groupName].every(i => i.is_selected);
               return (
-                <div key={groupName} className={`rounded-[2.5rem] border-2 transition-all duration-300 overflow-hidden ${isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-zinc-800 bg-black/20 opacity-60'}`}>
-                  <div className="p-5 flex justify-between items-center bg-zinc-800/30 group-header">
+                <div key={groupName} className={`rounded-[2.5rem] border-2 transition-all duration-300 overflow-hidden ${isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-zinc-800 bg-black/20 opacity-40'}`}>
+                  <div className={`p-5 flex justify-between items-center transition-all duration-300 ${isSelected ? 'bg-blue-600/20' : 'bg-zinc-800/30'}`}>
                     <h3 className={`font-black uppercase italic tracking-wider ${isSelected ? 'text-white' : 'text-zinc-500'}`}>📂 {groupName}</h3>
                     <button 
                       disabled={responded || offer.status !== 'Odoslané'}
                       onClick={() => toggleGroup(groupName)}
-                      className="px-6 py-2 rounded-2xl text-[10px] font-black uppercase transition-all no-print bg-zinc-800 text-zinc-400"
+                      className={`px-6 py-2 rounded-2xl text-[10px] font-black uppercase transition-all duration-300 no-print ${
+                        isSelected 
+                          ? 'bg-blue-600 text-white shadow-lg' 
+                          : 'bg-zinc-800 text-zinc-500'
+                      }`}
                     >
                       {isSelected ? 'Vybraté ✓' : 'Vynechať ✕'}
                     </button>
@@ -213,11 +217,11 @@ export default function VerejnaPonukaPage() {
                   <div className="p-6 space-y-4">
                     {groupedItems[groupName].map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
-                        <div>
+                        <div className={`${isSelected ? 'opacity-100' : 'opacity-50'}`}>
                           <p className="text-sm font-black uppercase italic">{item.name}</p>
                           <p className="text-[9px] text-zinc-500 uppercase tracking-widest">{item.quantity} {item.unit} • {item.unit_price.toFixed(2)}€ / j</p>
                         </div>
-                        <p className="text-lg font-black italic tracking-tighter">{(item.quantity * item.unit_price).toFixed(2)}€</p>
+                        <p className={`text-lg font-black italic tracking-tighter ${isSelected ? 'text-white' : 'text-zinc-600'}`}>{(item.quantity * item.unit_price).toFixed(2)}€</p>
                       </div>
                     ))}
                   </div>
