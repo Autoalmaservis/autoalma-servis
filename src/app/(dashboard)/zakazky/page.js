@@ -9,8 +9,11 @@ export default function ZakazkyZoznamPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Prebieha');
 
-  // MODÁLNE OKNO MAZANIA
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, jobId: null, customerName: '' });
+  // --- LOGIKA NOTIFIKÁCIÍ S PAMÄŤOU (localStorage) ---
+  const [notifState, setNotifState] = useState({
+    'Prebieha': { isNew: false, count: 0 },
+    'Dokončené': { isNew: false, count: 0 }
+  });
 
   useEffect(() => {
     fetchJobs();
@@ -19,7 +22,6 @@ export default function ZakazkyZoznamPage() {
   const fetchJobs = async () => {
     setLoading(true);
     try {
-      // Rozšírený select o cenové ponuky (price_offers)
       const { data, error } = await supabase
         .from('job_tickets')
         .select('*, job_items(quantity, unit_price, type), price_offers(status)')
@@ -32,7 +34,6 @@ export default function ZakazkyZoznamPage() {
         const workSubtotal = job.job_items?.filter(i => i.type === 'Práca').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
         const subtotal = materialSubtotal + workSubtotal;
         
-        // Zisťujeme stav ponuky (ak existuje)
         const offerStatus = job.price_offers && job.price_offers.length > 0 
           ? job.price_offers[job.price_offers.length - 1].status 
           : null;
@@ -42,10 +43,24 @@ export default function ZakazkyZoznamPage() {
           materialPrice: materialSubtotal * 1.23,
           workPrice: workSubtotal * 1.23,
           totalPrice: subtotal * 1.23,
-          offerStatus: offerStatus // Pridaný stav ponuky do objektu
+          offerStatus: offerStatus 
         };
       });
 
+      // Kontrola nových zákaziek voči localStorage
+      const updatedNotifState = {};
+      ['Prebieha', 'Dokončené'].forEach(status => {
+        const currentCount = jobsWithPrices.filter(j => j.status === status).length;
+        const savedCount = parseInt(localStorage.getItem(`lastCount_${status}`)) || 0;
+
+        // Bliká len ak je aktuálny počet reálne vyšší ako ten v pamäti
+        updatedNotifState[status] = {
+          count: currentCount,
+          isNew: currentCount > savedCount
+        };
+      });
+      
+      setNotifState(updatedNotifState);
       setJobs(jobsWithPrices);
     } catch (err) {
       console.error("Chyba:", err.message);
@@ -53,6 +68,25 @@ export default function ZakazkyZoznamPage() {
       setLoading(false);
     }
   };
+
+  // Funkcia na prepnutie filtra a "zhasnutie" notifikácie
+  const handleFilterChange = (status) => {
+    setFilterStatus(status);
+    
+    if (notifState[status]?.isNew) {
+      // Uložíme aktuálny počet do localStorage, čím "potvrdíme" videnie
+      localStorage.setItem(`lastCount_${status}`, notifState[status].count.toString());
+      
+      // Okamžite zhasneme blikanie v stave
+      setNotifState(prev => ({
+        ...prev,
+        [status]: { ...prev[status], isNew: false }
+      }));
+    }
+  };
+
+  // MODÁLNE OKNO MAZANIA
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, jobId: null, customerName: '' });
 
   const confirmDelete = (job) => {
     setDeleteModal({ isOpen: true, jobId: job.id, customerName: job.customer_name });
@@ -88,7 +122,7 @@ export default function ZakazkyZoznamPage() {
     switch(status) {
       case 'Prebieha': return 'bg-blue-600';
       case 'Dokončené': return 'bg-green-600';
-      case 'Archivované': return 'bg-yellow-500 text-black';
+      case 'Archivované': return 'bg-zinc-700 text-zinc-400';
       default: return 'bg-zinc-700';
     }
   };
@@ -107,18 +141,29 @@ export default function ZakazkyZoznamPage() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Správa servisných procesov</p>
         </div>
 
-        <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-2xl">
-          {['Prebieha', 'Dokončené', 'Archivované', 'Všetky'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all duration-300 ${
-                filterStatus === status ? getStatusColor(status) : 'text-zinc-500 hover:text-white'
-              }`}
-            >
-              {status}
-            </button>
-          ))}
+        {/* NAVIGÁCIA S DYNAMICKÝM BLIKANÍM */}
+        <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-2xl relative">
+          {['Prebieha', 'Dokončené', 'Archivované', 'Všetky'].map((status) => {
+            const isNew = notifState[status]?.isNew && filterStatus !== status;
+            
+            return (
+              <button
+                key={status}
+                onClick={() => handleFilterChange(status)}
+                className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all duration-300 relative ${
+                  filterStatus === status ? getStatusColor(status) : 'text-zinc-500 hover:text-white'
+                } ${isNew ? 'animate-pulse ring-2 ring-red-600 ring-offset-2 ring-offset-black' : ''}`}
+              >
+                {status}
+                {isNew && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -155,16 +200,15 @@ export default function ZakazkyZoznamPage() {
             className={`
               p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border
               ${job.offerStatus === 'Schválené' ? 'bg-blue-900/10 border-blue-600/30' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}
+              ${job.status === 'Dokončené' ? 'border-green-600/30 bg-green-900/5' : ''}
             `}
           >
-            
             <div className="flex items-center gap-6 w-full md:w-auto">
               <div className={`w-1.5 h-16 rounded-full ${getStatusColor(job.status || 'Prebieha')}`} />
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <span className="text-red-500 font-black italic text-sm uppercase tracking-wider">{job.plate_number}</span>
                   
-                  {/* ZOBRAZENIE STAVU PONUKY - MODRÁ PRE SCHVÁLENÉ */}
                   {job.offerStatus && (
                     <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase border ${
                       job.offerStatus === 'Schválené' ? 'bg-blue-600 text-white border-blue-400' : 'bg-amber-600/20 text-amber-500 border-amber-600/50'

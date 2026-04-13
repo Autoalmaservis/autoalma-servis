@@ -4,287 +4,391 @@ import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 
 export default function NovaPonukaPage() {
-  const { id } = useParams();
-  const router = useRouter();
-  
-  const [zakazka, setZakazka] = useState(null);
-  const [catalog, setCatalog] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+    const { id } = useParams();
+    const router = useRouter();
+    
+    const [zakazka, setZakazka] = useState(null);
+    const [catalog, setCatalog] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [generatedNumber, setGeneratedNumber] = useState(''); // Stav pre číslo ponuky
 
-  const [offerItems, setOfferItems] = useState([]);
-  
-  const [newItem, setNewItem] = useState({ 
-    group_name: '', 
-    name: '', 
-    quantity: 1, 
-    unit: 'ks', 
-    unit_price: '', // Zmenené na prázdny reťazec pre lepšie písanie
-    type: 'Materiál' 
-  });
+    const [offerItems, setOfferItems] = useState([]);
+    
+    const [newItem, setNewItem] = useState({ 
+        group_name: '', 
+        name: '', 
+        quantity: 1, 
+        unit: 'ks', 
+        unit_price: '', 
+        type: 'Materiál' 
+    });
 
-  useEffect(() => {
-    if (id) {
-      loadInitialData();
-    }
-  }, [id]);
+    // --- LOGIKA DÁTUMOV ---
+    const dateCreated = new Date();
+    const dateExpiry = new Date();
+    dateExpiry.setDate(dateCreated.getDate() + 14);
 
-  const loadInitialData = async () => {
-    setLoading(true);
-    try {
-      const [jobRes, catalogRes] = await Promise.all([
-        supabase.from('job_tickets').select('*').eq('id', id).single(),
-        supabase.from('inventory_catalog').select('*').order('name', { ascending: true })
-      ]);
+    useEffect(() => {
+        if (id) {
+            loadInitialData();
+        }
+    }, [id]);
 
-      if (jobRes.data) setZakazka(jobRes.data);
-      if (catalogRes.data) setCatalog(catalogRes.data);
-    } catch (err) {
-      console.error("Chyba pri načítaní:", err);
-    }
-    setLoading(false);
-  };
+    const loadInitialData = async () => {
+        setLoading(true);
+        try {
+            const [jobRes, catalogRes] = await Promise.all([
+                supabase.from('job_tickets').select('*').eq('id', id).single(),
+                supabase.from('inventory_catalog').select('*').order('name', { ascending: true })
+            ]);
 
-  const addItemToOffer = (e) => {
-    e.preventDefault();
-    if (!newItem.name || !newItem.group_name) {
-      alert("Vyplňte názov skupiny aj názov položky.");
-      return;
-    }
+            if (jobRes.data) setZakazka(jobRes.data);
+            if (catalogRes.data) setCatalog(catalogRes.data);
 
-    const itemToAdd = {
-      ...newItem,
-      id: crypto.randomUUID(),
-      unit_price: parseFloat(newItem.unit_price) || 0, // Prevod na číslo pri uložení
-      group_name: newItem.group_name.trim().toUpperCase(),
-      is_selected: true 
+            // --- PRED-GENEROVANIE ČÍSLA PONUKY ---
+            const teraz = new Date();
+            const dd = String(teraz.getDate()).padStart(2, '0');
+            const mm = String(teraz.getMonth() + 1).padStart(2, '0');
+            const rr = String(teraz.getFullYear()).slice(-2);
+            const dnesnyDatumPrefix = `P${dd}${mm}${rr}`;
+
+            const { count } = await supabase
+                .from('price_offers')
+                .select('*', { count: 'exact', head: true })
+                .like('offer_number', `${dnesnyDatumPrefix}%`);
+
+            const poradie = String((count || 0) + 1).padStart(3, '0');
+            setGeneratedNumber(`${dnesnyDatumPrefix}${poradie}`);
+
+        } catch (err) {
+            console.error("Chyba pri načítaní:", err);
+        }
+        setLoading(false);
     };
 
-    setOfferItems([...offerItems, itemToAdd]);
-    // Reset formulára pri zachovaní skupiny a typu pre rýchlejšie pridávanie
-    setNewItem({ ...newItem, name: '', quantity: 1, unit_price: '' });
-  };
+    const addItemToOffer = (e) => {
+        e.preventDefault();
+        if (!newItem.name || !newItem.group_name) {
+            alert("Vyplňte názov skupiny aj názov položky.");
+            return;
+        }
 
-  const removeItem = (tempId) => {
-    setOfferItems(offerItems.filter(item => item.id !== tempId));
-  };
+        const itemToAdd = {
+            ...newItem,
+            id: crypto.randomUUID(),
+            unit_price: parseFloat(newItem.unit_price) || 0,
+            group_name: newItem.group_name.trim().toUpperCase(),
+            is_selected: true 
+        };
 
-  const calculateTotal = () => {
-    const subtotal = offerItems.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
-    const tax = subtotal * 0.23;
-    const total = subtotal + tax;
-    return { subtotal, tax, total };
-  };
+        setOfferItems([...offerItems, itemToAdd]);
+        setNewItem({ ...newItem, name: '', quantity: 1, unit_price: '' });
+    };
 
-  const saveOffer = async () => {
-    if (offerItems.length === 0) {
-      alert("Ponuka musí obsahovať aspoň jednu položku.");
-      return;
-    }
-    setSaving(true);
-    const { subtotal } = calculateTotal();
+    const removeItem = (tempId) => {
+        setOfferItems(offerItems.filter(item => item.id !== tempId));
+    };
 
-    const { error } = await supabase.from('price_offers').insert([{
-      job_id: id,
-      items_json: offerItems,
-      total_amount: subtotal,
-      status: 'Odoslané'
-    }]);
+    const calculateTotal = () => {
+        const subtotal = offerItems.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
+        const tax = subtotal * 0.23;
+        const total = subtotal + tax;
+        return { subtotal, tax, total };
+    };
 
-    if (error) {
-      alert("Chyba: " + error.message);
-    } else {
-      router.push(`/zakazky/${id}`);
-    }
-    setSaving(false);
-  };
+    // --- FUNKCIA PRE SAMOTNÉ ULOŽENIE (BEZ ODOSLANIA) ---
+    const saveOnly = async () => {
+        if (offerItems.length === 0) {
+            alert("Ponuka musí obsahovať aspoň jednu položku.");
+            return;
+        }
+        setSaving(true);
+        const { subtotal } = calculateTotal();
 
-  const groupedItems = offerItems.reduce((groups, item) => {
-    const group = groups[item.group_name] || [];
-    group.push(item);
-    groups[item.group_name] = group;
-    return groups;
-  }, {});
+        try {
+            const { error: offerError } = await supabase
+                .from('price_offers')
+                .insert([{
+                    job_id: id,
+                    customer_id: zakazka?.customer_id,
+                    items_json: offerItems,
+                    total_amount: subtotal,
+                    status: 'Rozpracované', // Iný status pre rozpracovanú ponuku
+                    offer_number: generatedNumber
+                }]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-black italic animate-pulse tracking-widest uppercase">
-      Pripravujem konfigurátor...
-    </div>
-  );
+            if (offerError) throw offerError;
 
-  const { subtotal, tax, total } = calculateTotal();
+            alert("Ponuka bola úspešne uložená (interný záznam).");
+            router.push(`/zakazky/${id}`);
+        } catch (err) {
+            alert("Chyba pri ukladaní: " + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
-  return (
-    <div className="min-h-screen bg-black text-white p-4 md:p-12 font-sans font-bold">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs uppercase font-black tracking-widest">← Zrušiť</button>
-          <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Cenová <span className="text-blue-500">Ponuka</span></h1>
-          <button onClick={saveOffer} disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs shadow-xl shadow-blue-900/20 transition-all tracking-widest">
-            {saving ? 'Ukladám...' : '💾 Odoslať ponuku'}
-          </button>
+    const saveOffer = async () => {
+        if (offerItems.length === 0) {
+            alert("Ponuka musí obsahovať aspoň jednu položku.");
+            return;
+        }
+        setSaving(true);
+        const { subtotal, total } = calculateTotal();
+
+        try {
+            const { data: offerData, error: offerError } = await supabase
+                .from('price_offers')
+                .insert([{
+                    job_id: id,
+                    customer_id: zakazka?.customer_id,
+                    items_json: offerItems,
+                    total_amount: subtotal,
+                    status: 'Odoslané',
+                    offer_number: generatedNumber
+                }])
+                .select()
+                .single();
+
+            if (offerError) throw offerError;
+
+            await supabase
+                .from('job_tickets')
+                .update({ status: 'Čaká na schválenie' })
+                .eq('id', id);
+
+            if (zakazka?.customer_id) {
+                await supabase.from('notifications').insert([{
+                    user_id: zakazka.customer_id,
+                    customer_id: zakazka.customer_id,
+                    title: 'Nová cenová ponuka 📄',
+                    content: `K Vašej zákazke (${zakazka.plate_number}) bola vypracovaná ponuka č. ${generatedNumber} v hodnote ${total.toFixed(2)} €.`,
+                    type: 'info',
+                    link: `/ponuka/${offerData.id}`
+                }]);
+            }
+
+            router.push(`/zakazky/${id}`);
+        } catch (err) {
+            alert("Chyba pri ukladaní: " + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const groupedItems = offerItems.reduce((groups, item) => {
+        const group = groups[item.group_name] || [];
+        group.push(item);
+        groups[item.group_name] = group;
+        return groups;
+    }, {});
+
+    if (loading) return (
+        <div className="min-h-screen bg-black flex items-center justify-center text-blue-500 font-black italic animate-pulse tracking-widest uppercase">
+            Pripravujem konfigurátor...
         </div>
+    );
 
-        {/* Info Box */}
-        <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] mb-8 flex flex-col md:flex-row justify-between gap-4">
-          <div>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Zákazník</p>
-            <p className="text-xl italic uppercase font-black text-blue-400">{zakazka?.customer_name}</p>
-          </div>
-          <div className="md:text-right">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Vozidlo</p>
-            <p className="text-xl italic uppercase font-black">{zakazka?.car_brand_model} <span className="text-blue-500 text-sm ml-2">[{zakazka?.plate_number}]</span></p>
-          </div>
+    const { subtotal, tax, total } = calculateTotal();
+
+    return (
+        <div className="min-h-screen bg-black text-white p-4 md:p-12 font-sans font-bold">
+            <div className="max-w-6xl mx-auto">
+                
+                {/* --- HEADER OVLÁDANIE --- */}
+                <div className="flex justify-between items-center mb-8 no-print">
+                    <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs uppercase font-black tracking-widest">← Zrušiť</button>
+                    <div className="flex gap-4">
+                        <button onClick={() => window.print()} className="bg-zinc-800 border border-zinc-700 px-6 py-3 rounded-2xl text-white hover:bg-zinc-700 transition-all text-xs uppercase font-black tracking-widest">🖨️ Tlačiť</button>
+                        
+                        <button onClick={saveOnly} disabled={saving} className="bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all tracking-widest">
+                            💾 Iba uložiť
+                        </button>
+
+                        <button onClick={saveOffer} disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs shadow-xl shadow-blue-900/20 transition-all tracking-widest">
+                            {saving ? 'Ukladám...' : '🚀 Odoslať ponuku'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="printable-area">
+                    {/* Skrytá hlavička pre tlač */}
+                    <div className="hidden print-block mb-10 border-b-2 border-black pb-6 text-center">
+                        <h1 className="text-4xl font-black uppercase italic">Cenová ponuka</h1>
+                        <p className="text-[10px] tracking-[0.3em] uppercase">AutoAlma Servis</p>
+                    </div>
+
+                    {/* Info Box - PORADOVÉ ČÍSLO V STREDE */}
+                    <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] mb-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center info-box">
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Zákazník</p>
+                                <p className="text-xl italic uppercase font-black text-blue-400 print-black">{zakazka?.customer_name}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Dátumy</p>
+                                <p className="text-[11px] font-black text-white print-black">
+                                    Vystavené: {dateCreated.toLocaleDateString('sk-SK')} <br/>
+                                    Platnosť: <span className="text-red-500 print-black">{dateExpiry.toLocaleDateString('sk-SK')}</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="text-center border-x border-zinc-800/50 px-4 py-2 print-border-none">
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Číslo ponuky</p>
+                            <div className="bg-white/5 border border-zinc-800 px-4 py-3 rounded-2xl print-no-bg">
+                                <p className="text-3xl font-black tracking-tighter text-blue-500 print-black">
+                                    {generatedNumber}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="md:text-right">
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Vozidlo</p>
+                            <p className="text-xl italic uppercase font-black print-black">{zakazka?.car_brand_model}</p>
+                            <p className="text-blue-500 text-lg font-black tracking-widest print-black mt-1">[{zakazka?.plate_number}]</p>
+                        </div>
+                    </div>
+
+                    {/* Form Box - SKRYTÝ PRI TLAČI */}
+                    <div className="bg-zinc-900 border-t-4 border-blue-600 p-8 rounded-[2.5rem] mb-8 shadow-2xl no-print">
+                        <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] mb-6 italic">Nová položka do rozpočtu</h2>
+                        <form onSubmit={addItemToOffer} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                            <div className="md:col-span-2">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Skupina</label>
+                                <input type="text" placeholder="MOTOR..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors" value={newItem.group_name} onChange={(e) => setNewItem({...newItem, group_name: e.target.value})} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Typ</label>
+                                <select className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.type} onChange={(e) => setNewItem({...newItem, type: e.target.value, unit: e.target.value === 'Práca' ? 'hod' : 'ks'})}>
+                                    <option value="Materiál">Materiál</option>
+                                    <option value="Práca">Práca</option>
+                                </select>
+                            </div>
+                            <div className="md:col-span-3">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Položka</label>
+                                <input list="catalog-list" type="text" placeholder="Hľadať v katalógu..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase italic focus:border-blue-500 outline-none transition-colors" value={newItem.name} 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        const match = catalog.find(c => c.name === val.toUpperCase());
+                                        if (match) {
+                                            setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit || 'ks', type: match.type === 'práca' ? 'Práca' : 'Materiál' });
+                                        } else {
+                                            setNewItem({...newItem, name: val});
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <div className="md:col-span-1">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Mn.</label>
+                                <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 0})} />
+                            </div>
+                            <div className="md:col-span-1">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Jedn.</label>
+                                <select className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-[10px] font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.unit} onChange={(e) => setNewItem({...newItem, unit: e.target.value})}>
+                                    <option value="ks">ks</option><option value="l">l</option><option value="m">m</option><option value="hod">hod</option><option value="norma">norma</option><option value="bal">bal</option><option value="sada">sada</option>
+                                </select>
+                            </div>
+                            <div className="md:col-span-1">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-right font-black">Cena/J</label>
+                                <input type="text" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-right text-xs font-black focus:border-blue-500 outline-none" value={newItem.unit_price} placeholder="0.00" 
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(',', '.');
+                                        if (/^\d*\.?\d*$/.test(val)) setNewItem({...newItem, unit_price: val});
+                                    }} 
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <button type="submit" className="w-full bg-blue-600/10 hover:bg-blue-600 text-blue-500 hover:text-white font-black py-3 rounded-xl transition-all border border-blue-600/30 text-xl shadow-lg shadow-blue-900/10">+</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl table-container">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-zinc-800/50 text-[10px] uppercase font-black text-zinc-400 tracking-widest italic">
+                                <tr>
+                                    <th className="p-4">Typ</th>
+                                    <th className="p-4">Položka</th>
+                                    <th className="p-4 text-center">Množstvo</th>
+                                    <th className="p-4 text-right">Cena/J</th>
+                                    <th className="p-4 text-right">Spolu</th>
+                                    <th className="p-4 text-center w-10 no-print"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800 font-black italic uppercase">
+                                {Object.keys(groupedItems).map((groupName) => (
+                                    <Fragment key={groupName}>
+                                        <tr className="bg-blue-600/10 border-l-4 border-blue-600 print-row-bg">
+                                            <td colSpan="6" className="p-4 text-blue-400 text-[11px] font-black tracking-widest uppercase italic print-black">
+                                                📂 {groupName}
+                                            </td>
+                                        </tr>
+                                        {groupedItems[groupName].map((item) => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-all group">
+                                                <td className="p-4">
+                                                    <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'} print-black-border print-black`}>
+                                                        {item.type}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-xs tracking-tight print-black">{item.name}</td>
+                                                <td className="p-4 text-center text-xs font-mono print-black">{item.quantity} {item.unit}</td>
+                                                <td className="p-4 text-right text-xs font-mono print-black">{(Number(item.unit_price)).toFixed(2)} €</td>
+                                                <td className="p-4 text-right text-xs font-mono print-black">{(item.quantity * item.unit_price).toFixed(2)} €</td>
+                                                <td className="p-4 text-center no-print">
+                                                    <button onClick={() => removeItem(item.id)} className="text-zinc-800 group-hover:text-red-600 transition-colors">✕</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </Fragment>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        <div className="p-10 bg-black/40 border-t border-zinc-800 flex flex-col items-end space-y-2 recap-area">
+                            <div className="flex justify-between w-64 text-zinc-500 text-[10px] font-black uppercase italic tracking-widest print-black">
+                                <span>Základ:</span>
+                                <span>{subtotal.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-between w-64 text-zinc-500 text-[10px] font-black uppercase italic tracking-widest border-b border-zinc-800 pb-3 print-black">
+                                <span>DPH (23%):</span>
+                                <span>{tax.toFixed(2)} €</span>
+                            </div>
+                            <div className="flex justify-between w-80 pt-4 items-center">
+                                <span className="text-blue-500 font-black uppercase italic text-xl tracking-tighter print-black">Celkom ponuka:</span>
+                                <span className="text-4xl font-black italic tracking-tighter leading-none print-black">{total.toFixed(2)} €</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <datalist id="catalog-list">
+                {catalog.map((c, i) => (<option key={i} value={c.name}>{c.unit_price} €</option>))}
+            </datalist>
+
+            <style jsx global>{`
+                .print-block { display: none; }
+                @media print {
+                    @page { size: A4; margin: 1cm; }
+                    body { background: white !important; color: black !important; }
+                    .no-print { display: none !important; }
+                    .print-block { display: block !important; }
+                    .printable-area { background: white !important; padding: 0 !important; width: 100% !important; }
+                    .bg-zinc-900, .bg-zinc-900/50, .bg-black/40, .bg-black { background: white !important; }
+                    .border, .border-zinc-800, .border-t { border-color: #eee !important; }
+                    .info-box { border: 1pt solid #000 !important; border-radius: 10pt !important; margin-bottom: 20pt !important; display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; }
+                    .print-border-none { border: none !important; }
+                    .print-no-bg { background: none !important; border: 1px solid #000 !important; }
+                    .table-container { border: 1pt solid #000 !important; border-radius: 10pt !important; overflow: hidden !important; }
+                    .print-black { color: black !important; }
+                    .print-black-border { border-color: black !important; }
+                    .print-row-bg { background: #f8fafc !important; }
+                    p, span, h1, h2, td, th { color: black !important; }
+                    .recap-area { border-top: 2pt solid black !important; background: #fff !important; }
+                }
+            `}</style>
         </div>
-
-        {/* Form Box */}
-        <div className="bg-zinc-900 border-t-4 border-blue-600 p-8 rounded-[2.5rem] mb-8 shadow-2xl">
-          <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] mb-6 italic">Nová položka do rozpočtu</h2>
-          <form onSubmit={addItemToOffer} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-            
-            <div className="md:col-span-2">
-              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Skupina</label>
-              <input 
-                type="text" 
-                placeholder="MOTOR..." 
-                className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors"
-                value={newItem.group_name}
-                onChange={(e) => setNewItem({...newItem, group_name: e.target.value})}
-              />
-            </div>
-
-            {/* PRIDANÝ VÝBER TYPU */}
-            <div className="md:col-span-2">
-              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Typ</label>
-              <select 
-                className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer"
-                value={newItem.type}
-                onChange={(e) => setNewItem({...newItem, type: e.target.value, unit: e.target.value === 'Práca' ? 'hod' : 'ks'})}
-              >
-                <option value="Materiál">Materiál</option>
-                <option value="Práca">Práca</option>
-              </select>
-            </div>
-
-            <div className="md:col-span-3">
-              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Položka (Diel/Práca)</label>
-              <input 
-                list="catalog-list"
-                type="text"
-                placeholder="Hľadať..."
-                className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase italic focus:border-blue-500 outline-none transition-colors"
-                value={newItem.name}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const match = catalog.find(c => c.name === val.toUpperCase());
-                  if (match) {
-                    setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit, type: match.type === 'práca' ? 'Práca' : 'Materiál' });
-                  } else {
-                    setNewItem({...newItem, name: val});
-                  }
-                }}
-              />
-            </div>
-
-            <div className="md:col-span-1">
-              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Mn.</label>
-              <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 0})} />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-right font-black">Cena/J (€)</label>
-              <input 
-                type="text" // Zmenené na text pre lepšiu kontrolu vstupu
-                className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-right text-xs font-black focus:border-blue-500 outline-none" 
-                value={newItem.unit_price} 
-                placeholder="0.00"
-                onChange={(e) => {
-                    const val = e.target.value.replace(',', '.'); // Automatická oprava čiarky na bodku
-                    if (/^\d*\.?\d*$/.test(val)) { // Povoliť len čísla a bodku
-                        setNewItem({...newItem, unit_price: val});
-                    }
-                }} 
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <button type="submit" className="w-full bg-blue-600/10 hover:bg-blue-600 text-blue-500 hover:text-white font-black py-3 rounded-xl transition-all border border-blue-600/30 text-xl shadow-lg shadow-blue-900/10">+</button>
-            </div>
-          </form>
-          <datalist id="catalog-list">
-            {catalog.map((c, i) => (<option key={i} value={c.name}>{c.unit_price} €</option>))}
-          </datalist>
-        </div>
-
-        {/* Table Box */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-zinc-800/50 text-[10px] uppercase font-black text-zinc-400 tracking-widest italic">
-              <tr>
-                <th className="p-4">Typ</th>
-                <th className="p-4">Položka</th>
-                <th className="p-4 text-center">Množstvo</th>
-                <th className="p-4 text-right">Cena/J</th>
-                <th className="p-4 text-right">Spolu</th>
-                <th className="p-4 text-center w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800 font-black italic uppercase">
-              {Object.keys(groupedItems).map((groupName) => (
-                <Fragment key={groupName}>
-                  <tr className="bg-blue-600/10 border-l-4 border-blue-600">
-                    <td colSpan="6" className="p-4 text-blue-400 text-[11px] font-black tracking-widest uppercase italic">
-                      📂 {groupName}
-                    </td>
-                  </tr>
-                  {groupedItems[groupName].map((item) => (
-                    <tr key={item.id} className="hover:bg-white/5 transition-all group">
-                      <td className="p-4">
-                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'}`}>
-                          {item.type}
-                        </span>
-                      </td>
-                      <td className="p-4 text-xs tracking-tight">{item.name}</td>
-                      <td className="p-4 text-center text-xs font-mono">{item.quantity} {item.unit}</td>
-                      <td className="p-4 text-right text-xs font-mono">{(Number(item.unit_price)).toFixed(2)} €</td>
-                      <td className="p-4 text-right text-xs font-mono">{(item.quantity * item.unit_price).toFixed(2)} €</td>
-                      <td className="p-4 text-center">
-                        <button onClick={() => removeItem(item.id)} className="text-zinc-800 group-hover:text-red-600 transition-colors">✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-              
-              {offerItems.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="p-16 text-center text-zinc-700 uppercase text-[10px] tracking-[0.4em] italic font-black">
-                    Zatiaľ neboli pridané žiadne položky.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          {/* Recap Box */}
-          <div className="p-10 bg-black/40 border-t border-zinc-800 flex flex-col items-end space-y-2">
-            <div className="flex justify-between w-64 text-zinc-500 text-[10px] font-black uppercase italic tracking-widest">
-              <span>Základ:</span>
-              <span>{subtotal.toFixed(2)} €</span>
-            </div>
-            <div className="flex justify-between w-64 text-zinc-500 text-[10px] font-black uppercase italic tracking-widest border-b border-zinc-800 pb-3">
-              <span>DPH (23%):</span>
-              <span>{tax.toFixed(2)} €</span>
-            </div>
-            <div className="flex justify-between w-80 pt-4 items-center">
-              <span className="text-blue-500 font-black uppercase italic text-xl tracking-tighter">Celkom ponuka:</span>
-              <span className="text-4xl font-black italic tracking-tighter leading-none">{total.toFixed(2)} €</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
 }

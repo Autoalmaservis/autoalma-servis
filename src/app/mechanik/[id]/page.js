@@ -219,7 +219,7 @@ export default function PracovnyList() {
 
       {/* MATERIÁL A DIELY */}
       <section className="bg-zinc-900/20 p-8 rounded-[3rem] border border-zinc-800">
-        <h3 className="text-[10px] font-black uppercase text-orange-500 tracking-[0.3em] mb-6 italic ml-2">Použitý materiál</h3>
+        <h3 className="text-[10px] font-black uppercase text-orange-500 tracking-[0.3em] mb-6 italic ml-2">Závady na vozidle</h3>
         
         {!isLocked && (
             <form onSubmit={handleAddMaterial} className="flex gap-2 mb-8">
@@ -227,7 +227,7 @@ export default function PracovnyList() {
                 type="text" 
                 value={newMaterial} 
                 onChange={e => setNewMaterial(e.target.value)} 
-                placeholder="Názov dielu..." 
+                placeholder="Napíš závady ...." 
                 className="flex-grow bg-black border border-zinc-800 p-5 rounded-2xl outline-none focus:border-orange-500 text-xs uppercase font-bold" 
               />
               <input 

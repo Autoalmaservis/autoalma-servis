@@ -9,7 +9,7 @@ export default function GarazPage() {
   const [userProfile, setUserProfile] = useState(null);
   const router = useRouter();
 
-  // --- STAVY PRE NOTIFIKÁCIE (NOVÉ) ---
+  // --- STAVY PRE NOTIFIKÁCIE (NOVÉ EXTRA OKNO) ---
   const [notifications, setNotifications] = useState([]);
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -65,6 +65,14 @@ export default function GarazPage() {
     ic_dph: '',
     country: 'Slovensko'
   });
+
+  // POMOCNÁ FUNKCIA: Získa zajtrajší dátum vo formáte YYYY-MM-DD
+  const getTomorrowDate = () => {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
 
   useEffect(() => {
     let channel;
@@ -138,7 +146,7 @@ export default function GarazPage() {
     };
   }, []);
 
-  // --- LOGIKA NOTIFIKÁCIÍ (NOVÉ) ---
+  // --- LOGIKA NOTIFIKÁCIÍ (EXTRA MODAL) ---
   const fetchNotifications = async (userId) => {
     const { data } = await supabase
       .from('notifications')
@@ -157,6 +165,13 @@ export default function GarazPage() {
       .eq('user_id', user.id)
       .eq('is_read', false);
     fetchNotifications(user.id);
+  };
+
+  const handleNotificationClick = (n) => {
+    if (n.link) {
+      router.push(n.link);
+      setIsInboxOpen(false);
+    }
   };
 
   // --- LOGIKA FAKTÚR (DOPLNENÉ) ---
@@ -179,7 +194,7 @@ export default function GarazPage() {
           .select('*')
           .eq('plate_number', plate)
           .order('created_at', { ascending: false });
-         setVehicleInvoices(fallbackData || []);
+          setVehicleInvoices(fallbackData || []);
       } else {
         setVehicleInvoices(data || []);
       }
@@ -284,7 +299,7 @@ export default function GarazPage() {
 
   // --- LOGIKA VOZIDIEL (ZACHOVANÉ) ---
   const openEditModal = (vehicle) => {
-    setEditingVehicle(vehicle);
+    setOrderingVehicle(vehicle);
     setEditForm({
       brand_model: vehicle.brand_model || '', license_plate: vehicle.license_plate || '',
       vin_number: vehicle.vin_number || '', year_produced: vehicle.year_produced || '',
@@ -344,40 +359,16 @@ export default function GarazPage() {
           <div className="flex items-center gap-6">
             <div className="relative">
               <button 
-                onClick={() => { setIsInboxOpen(!isInboxOpen); markAsRead(); }}
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${unreadCount > 0 ? 'bg-red-600 border-red-500 animate-pulse' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800'}`}
+                onClick={() => { setIsInboxOpen(true); markAsRead(); }}
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all ${unreadCount > 0 ? 'bg-red-600 border-red-500 animate-pulse' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800'}`}
               >
                 <span className="text-xl">🔔</span>
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg">
+                  <span className="absolute -top-1 -right-1 bg-white text-red-600 text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-lg border-2 border-black">
                     {unreadCount}
                   </span>
                 )}
               </button>
-
-              {isInboxOpen && (
-                <div className="absolute top-16 left-0 w-80 bg-zinc-950 border border-zinc-800 rounded-[2rem] shadow-2xl z-[300] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="p-5 border-b border-zinc-900 bg-black flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Správy zo servisu</span>
-                    <button onClick={() => setIsInboxOpen(false)} className="text-zinc-600 hover:text-white">✕</button>
-                  </div>
-                  <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-2 space-y-2">
-                    {notifications.length === 0 ? (
-                      <div className="p-8 text-center text-[10px] uppercase text-zinc-700 italic">Žiadne správy</div>
-                    ) : (
-                      notifications.map(n => (
-                        <div key={n.id} className={`p-4 rounded-2xl border transition-all ${n.is_read ? 'bg-zinc-900/30 border-zinc-900' : 'bg-zinc-900 border-zinc-800 shadow-lg'}`}>
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="text-[11px] font-black uppercase text-red-500 italic">{n.title}</h4>
-                            <span className="text-[8px] text-zinc-600 font-bold uppercase">{new Date(n.created_at).toLocaleDateString('sk-SK')}</span>
-                          </div>
-                          <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">{n.content}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div>
@@ -415,21 +406,21 @@ export default function GarazPage() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 border-t border-zinc-800/50 pt-8">
                   <div className="bg-black/20 p-4 rounded-3xl">
-                     <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Motorizácia</p>
-                     <p className="text-sm font-black">{vehicle.engine_volume || '---'} ccm / {vehicle.engine_power || '---'} kW</p>
+                    <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Motorizácia</p>
+                    <p className="text-sm font-black">{vehicle.engine_volume || '---'} ccm / {vehicle.engine_power || '---'} kW</p>
                   </div>
                   <div className="bg-black/20 p-4 rounded-3xl">
-                     <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Palivo & Rok</p>
-                     <p className="text-sm font-black">{vehicle.fuel_type} • {vehicle.year_produced || '---'}</p>
+                    <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Palivo & Rok</p>
+                    <p className="text-sm font-black">{vehicle.fuel_type} • {vehicle.year_produced || '---'}</p>
                   </div>
                   <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10">
-                     <p className="text-blue-500/60 text-[9px] uppercase font-black mb-1">Stav Tachometra</p>
-                     <p className="text-xl font-black text-blue-400">{vehicle.mileage || 0} KM</p>
+                    <p className="text-blue-500/60 text-[9px] uppercase font-black mb-1">Stav Tachometra</p>
+                    <p className="text-xl font-black text-blue-400">{vehicle.mileage || 0} KM</p>
                   </div>
                   <div className="bg-zinc-800/30 p-4 rounded-3xl flex flex-col justify-center items-center">
-                     <button onClick={() => openInvoiceModal(vehicle.license_plate)} className="text-red-600 hover:text-red-500 transition-all">
-                        <p className="text-[14px] font-black uppercase italic tracking-tighter">Moje Faktúry 💰</p>
-                     </button>
+                    <button onClick={() => openInvoiceModal(vehicle.license_plate)} className="text-red-600 hover:text-red-500 transition-all">
+                      <p className="text-[14px] font-black uppercase italic tracking-tighter">Moje Faktúry 💰</p>
+                    </button>
                   </div>
               </div>
 
@@ -444,44 +435,81 @@ export default function GarazPage() {
 
           <button onClick={() => router.push('/garaz/pridat')} className="border-2 border-dashed border-zinc-800 rounded-[3rem] p-16 flex flex-col items-center justify-center gap-4 hover:border-red-600/50 transition-all group min-h-[150px] font-bold">
             <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center text-3xl group-hover:bg-red-600 transition-all font-bold">+</div>
-            <span className="text-[13px] font-black uppercase tracking-[0.3em] text-zinc-600 group-hover:text-white font-bold">Pridať ďalšie vozidlo do mojej garáže</span>
+            <span className="text-[13px] font-black uppercase tracking-[0.3em] text-zinc-600 group-hover:text-white font-bold">Pradať ďalšie vozidlo do mojej garáže</span>
           </button>
         </div>
       </div>
 
-      {/* --- MODAL ZOZNAMU FAKTÚR --- */}
-      {isInvoiceListOpen && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[85vh]">
-            <div className="flex justify-between items-center mb-8">
-               <h2 className="text-3xl font-black uppercase italic tracking-tighter">Faktúry k vozidlu <span className="text-red-600">{activePlate}</span></h2>
-               <button onClick={() => setIsInvoiceListOpen(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
+      {/* --- EXTRA OKNO PRE NOTIFIKÁCIE (ZVONČEK MODAL) --- */}
+      {isInboxOpen && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[500] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-[3.5rem] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            <div className="p-8 border-b border-zinc-900 flex justify-between items-center bg-black/20">
+              <div>
+                <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">Centrum <span className="text-red-600">Upozornení</span></h2>
+                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Správy a dôležité informácie zo servisu</p>
+              </div>
+              <button onClick={() => setIsInboxOpen(false)} className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center hover:bg-white hover:text-black transition-all font-bold">✕</button>
             </div>
 
+            <div className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar bg-black/10">
+              {notifications.length === 0 ? (
+                <div className="py-20 text-center text-[11px] uppercase text-zinc-700 italic tracking-widest">Zatiaľ nemáte žiadne nové správy</div>
+              ) : (
+                notifications.map(n => (
+                  <div 
+                    key={n.id} 
+                    onClick={() => handleNotificationClick(n)}
+                    className={`p-6 rounded-[2.5rem] border transition-all cursor-pointer group ${n.is_read ? 'bg-zinc-900/20 border-zinc-900 opacity-60' : 'bg-zinc-900 border-zinc-800 shadow-xl hover:border-blue-600'}`}
+                  >
+                    <div className="flex justify-between items-start mb-2 font-bold">
+                      <h4 className={`text-sm font-black uppercase italic ${n.link ? 'text-blue-500' : 'text-red-500'}`}>
+                        {n.title} {!n.is_read && "•"}
+                      </h4>
+                      <span className="text-[10px] text-zinc-600 font-bold uppercase">{new Date(n.created_at).toLocaleDateString('sk-SK')}</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed font-bold uppercase">{n.content}</p>
+                    {/* ODSTRÁNENÉ BLIKAJÚCE "Zobraziť podrobnosti" */}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="p-6 border-t border-zinc-800 text-center">
+                <button onClick={() => setIsInboxOpen(false)} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-all tracking-widest italic">Zatvoriť okno</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ZOZNAMU FAKTÚR */}
+      {isInvoiceListOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-4 font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[85vh]">
+            <div className="flex justify-between items-center mb-8 font-bold">
+               <h2 className="text-3xl font-black uppercase italic tracking-tighter">Faktúry k vozidlu <span className="text-red-600">{activePlate}</span></h2>
+               <button onClick={() => setIsInvoiceListOpen(false)} className="text-zinc-500 hover:text-white text-2xl font-bold">✕</button>
+            </div>
             {invoiceLoading ? (
-               <div className="py-20 text-center animate-pulse text-zinc-500 uppercase tracking-widest text-xs">Sťahujem dáta faktúr...</div>
+               <div className="py-20 text-center animate-pulse text-zinc-500 uppercase tracking-widest text-xs font-bold italic">Sťahujem dáta faktúr...</div>
             ) : vehicleInvoices.length === 0 ? (
                <div className="py-20 text-center text-zinc-600 uppercase text-xs italic border-2 border-dashed border-zinc-800 rounded-[2rem]">Zatiaľ neboli k tomuto vozidlu vystavené žiadne faktúry.</div>
             ) : (
-               <div className="space-y-4">
+               <div className="space-y-4 font-bold uppercase">
                   {vehicleInvoices.map(inv => (
-                    <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all">
+                    <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all font-bold italic">
                        <div>
-                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo dokladu</p>
-                          <p className="text-lg font-black uppercase tracking-tight">{inv.invoice_number}</p>
-                          <p className="text-[10px] text-zinc-600 mt-1 font-bold">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
+                         <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo dokladu</p>
+                         <p className="text-lg font-black uppercase tracking-tight font-bold italic">{inv.invoice_number}</p>
+                         <p className="text-[10px] text-zinc-600 mt-1 font-bold italic">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
                        </div>
-                       <div className="text-right flex items-center gap-6">
-                          <div>
-                            <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Suma s DPH</p>
-                            <p className="text-2xl font-black text-white italic">{inv.total_amount?.toFixed(2)} €</p>
-                          </div>
-                          <button 
-                            onClick={() => router.push(`/garaz/faktura/${inv.id}`)}
-                            className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg"
-                          >
-                            👁️
-                          </button>
+                       <div className="text-right flex items-center gap-6 font-bold italic">
+                         <div>
+                           <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Suma s DPH</p>
+                           <p className="text-2xl font-black text-white italic font-bold">{inv.total_amount?.toFixed(2)} €</p>
+                         </div>
+                         <button onClick={() => router.push(`/garaz/faktura/${inv.id}`)} className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg font-bold italic">👁️</button>
                        </div>
                     </div>
                   ))}
@@ -491,190 +519,160 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* --- MODAL OBJEDNÁVKY NA CELÚ ŠÍRKU --- */}
+      {/* MODAL OBJEDNÁVKY SERVISU */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-10 rounded-[3rem] w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[95vh]">
-            
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">Nová <span className="text-red-600">Objednávka</span></h2>
-              <button onClick={() => setIsOrderModalOpen(false)} className="text-zinc-500 hover:text-white text-2xl">✕</button>
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white font-bold">Nová <span className="text-red-600">Objednávka</span></h2>
+              <button onClick={() => setIsOrderModalOpen(false)} className="text-zinc-500 hover:text-white text-2xl font-bold">✕</button>
             </div>
-            
             <form onSubmit={handleFinalizeOrder} className="font-bold italic">
-              {/* GRID: Rozdelenie na dva stĺpce */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                
-                {/* ĽAVÁ STRANA: Údaje a Závady */}
                 <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4 bg-black/40 p-5 rounded-2xl border border-zinc-800">
+                  <div className="grid grid-cols-2 gap-4 bg-black/40 p-5 rounded-2xl border border-zinc-800 font-bold uppercase italic">
                     <div>
-                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Zákazník</p>
-                      <p className="text-xs font-black uppercase">{userProfile?.full_name}</p>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Zákazník</p>
+                      <p className="text-xs font-black uppercase font-bold">{userProfile?.full_name}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Vozidlo</p>
-                      <p className="text-xs font-black uppercase text-red-600">{orderingVehicle?.brand_model}</p>
-                      <p className="text-[10px] font-black uppercase">{orderingVehicle?.license_plate}</p>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Vozidlo</p>
+                      <p className="text-xs font-black uppercase text-red-600 font-bold italic">{orderingVehicle?.brand_model}</p>
+                      <p className="text-[10px] font-black uppercase font-bold italic">{orderingVehicle?.license_plate}</p>
                     </div>
                   </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 block tracking-widest">Zoznam závad / Potrebné úkony</label>
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="space-y-4 font-bold uppercase italic">
+                    <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 block tracking-widest font-bold italic">Zoznam závad / Potrebné úkony</label>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar font-bold italic">
                       {issues.map((issue, index) => (
                         <div key={index} className="flex gap-2">
-                          <input required className="flex-grow bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs" 
+                          <input required className="flex-grow bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs font-bold italic uppercase" 
                             placeholder={`Závada č. ${index + 1}...`} value={issue} onChange={(e) => updateIssue(index, e.target.value)} />
-                          {issues.length > 1 && (<button type="button" onClick={() => removeIssue(index)} className="px-4 bg-zinc-800 rounded-xl text-zinc-500 hover:text-red-600 transition-all font-bold">✕</button>)}
+                          {issues.length > 1 && (<button type="button" onClick={() => removeIssue(index)} className="px-4 bg-zinc-800 rounded-xl text-zinc-500 hover:text-red-600 transition-all font-bold italic font-bold">✕</button>)}
                         </div>
                       ))}
                     </div>
-                    <button type="button" onClick={addIssueField} className="w-full py-3 border-2 border-dashed border-zinc-800 rounded-xl text-[10px] font-black uppercase text-zinc-500 hover:border-blue-600 hover:text-blue-500 transition-all font-bold tracking-widest">+ Pridať ďalšiu závadu</button>
+                    <button type="button" onClick={addIssueField} className="w-full py-3 border-2 border-dashed border-zinc-800 rounded-xl text-[10px] font-black uppercase text-zinc-500 hover:border-blue-600 hover:text-blue-500 transition-all font-bold tracking-widest font-bold italic">+ Pridať ďalšiu závadu</button>
                   </div>
                 </div>
-
-                {/* PRAVÁ STRANA: Výber termínu a Odoslanie */}
-                <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 flex flex-col justify-between">
-                  <div className="space-y-6">
-                    <div className="flex bg-black p-1 rounded-2xl border border-zinc-800">
-                      <button type="button" onClick={() => setBookingType('manual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'manual' ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Presný čas</button>
-                      <button type="button" onClick={() => setBookingType('auto')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'auto' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>Navrhnite mi termín</button>
+                <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 flex flex-col justify-between font-bold italic uppercase">
+                  <div className="space-y-6 font-bold italic uppercase">
+                    <div className="flex bg-black p-1 rounded-2xl border border-zinc-800 font-bold italic uppercase">
+                      <button type="button" onClick={() => setBookingType('manual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'manual' ? 'bg-blue-600 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Presný čas</button>
+                      <button type="button" onClick={() => setBookingType('auto')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'auto' ? 'bg-zinc-800 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Navrhnite mi termín</button>
                     </div>
-
-                    <div className="flex justify-between items-center">
-                      <label className="text-[10px] font-black uppercase text-blue-500 ml-2 block tracking-widest italic">Kedy by vám vyhovoval termín?</label>
-                      <button type="button" onClick={() => window.open('/kalendar-verejny', '_blank')} className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-600/40 px-3 py-1 rounded-lg uppercase font-black hover:bg-blue-600 transition-all">📅 Obsadenosť</button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest">1. Deň</p>
-                        <input required type="date" min={new Date().toISOString().split('T')[0]} className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-blue-600 font-bold text-xs text-white uppercase" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-bold italic uppercase">
+                      <div className="space-y-2 font-bold italic uppercase">
+                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">1. Deň</p>
+                        <input required type="date" min={getTomorrowDate()} className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs text-white uppercase font-bold italic uppercase" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
                       </div>
                       <div className={`space-y-2 transition-all ${bookingType === 'auto' ? 'opacity-30 pointer-events-none' : ''}`}>
-                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest">2. Čas príchodu</p>
-                        <div className="grid grid-cols-3 gap-2 p-2 bg-black/30 rounded-xl border border-zinc-800 max-h-[120px] overflow-y-auto custom-scrollbar">
+                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">2. Čas príchodu</p>
+                        <div className="grid grid-cols-3 gap-2 p-2 bg-black/30 rounded-xl border border-zinc-800 max-h-[120px] overflow-y-auto custom-scrollbar font-bold italic uppercase">
                           {timeSlots.map((slot) => (
-                            <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${selectedSlot === slot ? 'bg-blue-600 border-blue-600 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600'}`}>{slot}</button>
+                            <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${selectedSlot === slot ? 'bg-blue-600 border-blue-600 text-white font-bold italic uppercase' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600 font-bold italic uppercase'}`}>{slot}</button>
                           ))}
                         </div>
                       </div>
                     </div>
-
-                    {selectedDay && (
-                      <div className="bg-blue-600/10 border border-blue-600/20 p-4 rounded-xl text-center animate-pulse">
-                        <p className="text-[9px] text-blue-400 uppercase font-black tracking-widest">Zhrnutie požiadavky</p>
-                        <p className="text-sm font-black text-white italic">
-                          {new Date(selectedDay).toLocaleDateString('sk-SK')} {bookingType === 'manual' ? ` o ${selectedSlot || '...'} hod.` : ' (Čas navrhne technik)'}
-                        </p>
-                      </div>
-                    )}
                   </div>
-
-                  <div className="flex gap-4 pt-4 font-bold">
-                    <button type="button" onClick={() => setIsOrderModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs tracking-widest">Zrušiť</button>
-                    <button type="submit" disabled={orderLoading} className="flex-[2] bg-red-600 py-6 rounded-2xl font-black uppercase text-xs hover:bg-red-700 shadow-[0_10px_20px_rgba(220,38,38,0.3)] transition-all tracking-[0.2em]">
-                      {orderLoading ? 'Odosielam...' : 'Odoslať požiadavku'}
-                    </button>
-                  </div>
+                  <button type="submit" disabled={orderLoading} className="w-full bg-red-600 py-6 rounded-2xl font-black uppercase text-xs hover:bg-red-700 shadow-[0_10px_20px_rgba(220,38,38,0.3)] transition-all tracking-[0.2em] font-bold italic uppercase">
+                    {orderLoading ? 'Odosielam...' : 'Odoslať požiadavku'}
+                  </button>
                 </div>
-
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL PROFILU (ZACHOVANÝ) */}
+      {/* MODAL PROFILU */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-3xl shadow-2xl my-auto font-bold">
-            <h2 className="text-3xl font-black uppercase italic mb-8 text-center text-red-600 font-bold">Moje klientske údaje</h2>
-            <form onSubmit={handleUpdateProfile} className="space-y-6 font-bold italic">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-bold">
-                <div className="space-y-4 font-bold">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold">Meno a kontakt</label>
-                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.full_name} onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})} placeholder="Meno a Priezvisko" />
-                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.phone} onChange={(e) => setProfileForm({...profileForm, phone: e.target.value})} placeholder="Telefón" />
-                  <input disabled className="w-full bg-zinc-800/30 border border-zinc-800 p-4 rounded-2xl font-bold text-zinc-500 outline-none" value={profileForm.email} placeholder="Email (nemožno meniť)" />
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold uppercase italic">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-3xl shadow-2xl my-auto font-bold uppercase italic">
+            <h2 className="text-3xl font-black uppercase italic mb-8 text-center text-red-600 font-bold uppercase italic">Moje klientske údaje</h2>
+            <form onSubmit={handleUpdateProfile} className="space-y-6 font-bold italic uppercase italic">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 font-bold uppercase italic">
+                <div className="space-y-4 font-bold uppercase italic">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold uppercase italic tracking-widest">Meno a kontakt</label>
+                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={profileForm.full_name} onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})} placeholder="Meno a Priezvisko" />
+                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={profileForm.phone} onChange={(e) => setProfileForm({...profileForm, phone: e.target.value})} placeholder="Telefón" />
+                  <input disabled className="w-full bg-zinc-800/30 border border-zinc-800 p-4 rounded-2xl font-bold text-zinc-500 outline-none uppercase italic" value={profileForm.email} placeholder="Email" />
                 </div>
-                <div className="space-y-4 font-bold">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold">Adresa</label>
-                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.address} onChange={(e) => setProfileForm({...profileForm, address: e.target.value})} placeholder="Ulica a č." />
-                  <div className="grid grid-cols-2 gap-2 font-bold">
-                    <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.city} onChange={(e) => setProfileForm({...profileForm, city: e.target.value})} placeholder="Mesto" />
-                    <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600" value={profileForm.zip} onChange={(e) => setProfileForm({...profileForm, zip: e.target.value})} placeholder="PSČ" />
+                <div className="space-y-4 font-bold uppercase italic">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 font-bold uppercase italic tracking-widest">Adresa</label>
+                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={profileForm.address} onChange={(e) => setProfileForm({...profileForm, address: e.target.value})} placeholder="Ulica a č." />
+                  <div className="grid grid-cols-2 gap-2 font-bold uppercase italic">
+                    <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={profileForm.city} onChange={(e) => setProfileForm({...profileForm, city: e.target.value})} placeholder="Mesto" />
+                    <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={profileForm.zip} onChange={(e) => setProfileForm({...profileForm, zip: e.target.value})} placeholder="PSČ" />
                   </div>
                 </div>
               </div>
-              
-              <div className="border-t border-zinc-800 pt-8 space-y-4 font-bold">
-                <label className="text-[10px] font-black text-blue-500 uppercase ml-2 tracking-widest font-bold">Fakturačné údaje firmy</label>
-                <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold" value={profileForm.company_name} onChange={(e) => setProfileForm({...profileForm, company_name: e.target.value})} placeholder="Obchodné meno spoločnosti" />
-                <div className="grid grid-cols-3 gap-2 font-bold">
-                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold" value={profileForm.ico} onChange={(e) => setProfileForm({...profileForm, ico: e.target.value})} placeholder="IČO" />
-                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold" value={profileForm.dic} onChange={(e) => setProfileForm({...profileForm, dic: e.target.value})} placeholder="DIČ" />
-                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold" value={profileForm.ic_dph} onChange={(e) => setProfileForm({...profileForm, ic_dph: e.target.value})} placeholder="IČ DPH" />
+              <div className="border-t border-zinc-800 pt-8 space-y-4 font-bold uppercase italic tracking-widest">
+                <label className="text-[10px] font-black text-blue-500 uppercase ml-2 font-bold uppercase italic">Fakturačné údaje firmy</label>
+                <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold uppercase italic" value={profileForm.company_name} onChange={(e) => setProfileForm({...profileForm, company_name: e.target.value})} placeholder="Obchodné meno spoločnosti" />
+                <div className="grid grid-cols-3 gap-2 font-bold uppercase italic">
+                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold uppercase italic" value={profileForm.ico} onChange={(e) => setProfileForm({...profileForm, ico: e.target.value})} placeholder="IČO" />
+                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold uppercase italic" value={profileForm.dic} onChange={(e) => setProfileForm({...profileForm, dic: e.target.value})} placeholder="DIČ" />
+                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-blue-600 font-bold uppercase italic" value={profileForm.ic_dph} onChange={(e) => setProfileForm({...profileForm, ic_dph: e.target.value})} placeholder="IČ DPH" />
                 </div>
               </div>
-
-              <div className="flex gap-6 pt-6 font-bold">
-                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold">Zrušiť</button>
-                <button type="submit" className="flex-[2] bg-white text-black py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold">Uložiť</button>
+              <div className="flex gap-6 pt-6 font-bold uppercase italic">
+                <button type="button" onClick={() => setIsProfileModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold uppercase italic tracking-widest">Zrušiť</button>
+                <button type="submit" className="flex-[2] bg-white text-black py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold uppercase italic tracking-widest">Uložiť</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL VOZIDLA (ZACHOVANÝ) */}
+      {/* MODAL VOZIDLA (ZACHOVANÉ) */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto font-bold">
-            <h2 className="text-3xl font-black uppercase italic mb-8 text-center text-red-600 font-bold">Úprava údajov vozidla</h2>
-            <form onSubmit={handleUpdateVehicle} className="space-y-6 font-bold italic">
-              <div className="font-bold">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold">Značka a Model</label>
-                <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold" value={editForm.brand_model} onChange={(e) => setEditForm({...editForm, brand_model: e.target.value})} />
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold uppercase italic">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto font-bold uppercase italic">
+            <h2 className="text-3xl font-black uppercase italic mb-8 text-center text-red-600 font-bold uppercase italic">Úprava údajov vozidla</h2>
+            <form onSubmit={handleUpdateVehicle} className="space-y-6 font-bold italic uppercase italic">
+              <div className="font-bold uppercase italic">
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">Značka a Model</label>
+                <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold uppercase italic" value={editForm.brand_model} onChange={(e) => setEditForm({...editForm, brand_model: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4 font-bold">
-                <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">ŠPZ</label>
-                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold uppercase tracking-widest" value={editForm.license_plate} onChange={(e) => setEditForm({...editForm, license_plate: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4 font-bold uppercase italic">
+                <div className="font-bold uppercase italic">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">ŠPZ</label>
+                  <input required className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold uppercase tracking-widest font-bold uppercase italic" value={editForm.license_plate} onChange={(e) => setEditForm({...editForm, license_plate: e.target.value})} />
                 </div>
-                <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Rok výroby</label>
-                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold" value={editForm.year_produced} onChange={(e) => setEditForm({...editForm, year_produced: e.target.value})} />
+                <div className="font-bold uppercase italic">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">Rok výroby</label>
+                  <input className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-bold uppercase italic" value={editForm.year_produced} onChange={(e) => setEditForm({...editForm, year_produced: e.target.value})} />
                 </div>
               </div>
-              <div className="font-bold">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">VIN číslo</label>
-                <input required maxLength={17} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-mono text-sm uppercase font-bold" value={editForm.vin_number} onChange={(e) => setEditForm({...editForm, vin_number: e.target.value})} />
+              <div className="font-bold uppercase italic">
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">VIN číslo</label>
+                <input required maxLength={17} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl outline-none focus:border-red-600 font-mono text-sm uppercase font-bold uppercase italic" value={editForm.vin_number} onChange={(e) => setEditForm({...editForm, vin_number: e.target.value})} />
               </div>
-              <div className="grid grid-cols-3 gap-4 font-bold">
-                <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Objem (cm³)</label>
-                  <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold" value={editForm.engine_volume} onChange={(e) => setEditForm({...editForm, engine_volume: e.target.value})} />
+              <div className="grid grid-cols-3 gap-4 font-bold uppercase italic">
+                <div className="font-bold uppercase italic">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">Objem (cm³)</label>
+                  <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={editForm.engine_volume} onChange={(e) => setEditForm({...editForm, engine_volume: e.target.value})} />
                 </div>
-                <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Výkon (kW)</label>
-                  <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold" value={editForm.engine_power} onChange={(e) => setEditForm({...editForm, engine_power: e.target.value})} />
+                <div className="font-bold uppercase italic">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">Výkon (kW)</label>
+                  <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={editForm.engine_power} onChange={(e) => setEditForm({...editForm, engine_power: e.target.value})} />
                 </div>
-                <div className="font-bold">
-                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Palivo</label>
-                  <select className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 appearance-none font-bold" value={editForm.fuel_type} onChange={(e) => setEditForm({...editForm, fuel_type: e.target.value})}>
+                <div className="font-bold uppercase italic">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">Palivo</label>
+                  <select className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 appearance-none font-bold uppercase italic" value={editForm.fuel_type} onChange={(e) => setEditForm({...editForm, fuel_type: e.target.value})}>
                     <option value="Diesel">Diesel</option><option value="Benzín">Benzín</option><option value="Hybrid">Hybrid</option><option value="Elektro">Elektro</option><option value="LPG/CNG">LPG/CNG</option>
                   </select>
                 </div>
               </div>
-              <div className="font-bold">
-                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase">Tachometer (km)</label>
-                <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold" value={editForm.mileage} onChange={(e) => setEditForm({...editForm, mileage: e.target.value})} />
+              <div className="font-bold uppercase italic">
+                <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 mb-1 block tracking-widest font-bold uppercase italic">Tachometer (km)</label>
+                <input type="number" className="w-full bg-black border border-zinc-800 p-4 rounded-2xl font-bold outline-none focus:border-red-600 font-bold uppercase italic" value={editForm.mileage} onChange={(e) => setEditForm({...editForm, mileage: e.target.value})} />
               </div>
-              <div className="flex gap-6 pt-6 font-bold">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold tracking-widest">Zrušiť</button>
-                <button type="submit" className="flex-[2] bg-red-600 py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-700 shadow-xl font-bold">Uložiť zmeny</button>
+              <div className="flex gap-6 pt-6 font-bold uppercase italic">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs font-bold uppercase italic tracking-widest">Zrušiť</button>
+                <button type="submit" className="flex-[2] bg-red-600 py-6 rounded-3xl font-black uppercase text-xs hover:bg-red-700 shadow-xl font-bold uppercase italic tracking-widest">Uložiť zmeny</button>
               </div>
             </form>
           </div>

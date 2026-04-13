@@ -94,7 +94,6 @@ export default function DashboardLayout({ children }) {
         <nav className="space-y-2 flex-grow overflow-y-auto pr-1">
           {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Hlavné Menu</p>}
           
-          {/* PREHĽAD - Teraz smeruje na tvoj štatistický dashboard */}
           <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
           
           <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
@@ -109,6 +108,9 @@ export default function DashboardLayout({ children }) {
           />
 
           <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname.startsWith('/zakazky')} />
+          
+          {/* NOVÉ TLAČIDLO: CENOVÉ PONUKY */}
+          <MenuLink href="/CP" icon="📄" label="Cenové ponuky" collapsed={isCollapsed} active={pathname.startsWith('/ponuky')} />
           
           <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
           

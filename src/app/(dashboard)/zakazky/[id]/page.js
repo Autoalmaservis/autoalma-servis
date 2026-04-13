@@ -17,6 +17,7 @@ export default function DetailZakazkyPage() {
   const [catalog, setCatalog] = useState([]);
   const [globalRates, setGlobalRates] = useState({ m1: 0, m2: 0, e1: 0, e2: 0 });
   const [activeOffer, setActiveOffer] = useState(null);
+  const [pastOffers, setPastOffers] = useState([]); // NOVÝ STAV PRE HISTÓRIU PONÚK
 
   // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ---
   const [photos, setPhotos] = useState([]);
@@ -57,16 +58,24 @@ export default function DetailZakazkyPage() {
 
   const loadAllData = async () => {
     setLoading(true);
+    // Spustíme fetchDetail ako prvý, aby sme získali ŠPZ pre históriu
+    const detailData = await fetchDetail(); 
+    
     await Promise.all([
-      fetchDetail(), 
       fetchItems(), 
       fetchTasks(), 
       fetchEmployees(), 
       fetchCatalog(),
       fetchSettings(),
       fetchCurrentOffer(),
-      fetchPhotos() // DOPLNENÉ NAČÍTANIE FOTIEK
+      fetchPhotos()
     ]);
+
+    // Ak máme ŠPZ, vyhľadáme históriu ponúk
+    if (detailData?.plate_number) {
+        fetchPastOffers(detailData.plate_number);
+    }
+    
     setLoading(false);
   };
 
@@ -90,7 +99,6 @@ export default function DetailZakazkyPage() {
       if (data) {
         let finalCustomerId = data.customer_id;
 
-        // ZÁCHRANNÁ LOGIKA PRE SMS: Ak v zákazke chýba ID, hľadáme ho podľa ŠPZ v tabuľke vozidiel
         if (!finalCustomerId && data.plate_number) {
             const { data: vData } = await supabase
                 .from('vehicles')
@@ -104,15 +112,51 @@ export default function DetailZakazkyPage() {
 
         const enrichedData = { ...data, customer_id: finalCustomerId };
         setZakazka(enrichedData);
-        
-        // DEBUG KONZOLA
-        console.log("Dátový profil zákazky pre SMS:", {
-            customer_id: finalCustomerId,
-            plate: data.plate_number,
-            phone: data.customer_phone
-        });
+        return enrichedData; // Vrátime dáta pre loadAllData
       }
     } catch (err) { console.error("Chyba detailu:", err.message); }
+  };
+
+  // --- NOVÁ FUNKCIA: NAČÍTANIE HISTÓRIE PONÚK PODĽA ŠPZ ---
+  const fetchPastOffers = async (plate) => {
+    try {
+        const { data, error } = await supabase
+            .from('price_offers')
+            .select(`
+                id, 
+                offer_number, 
+                created_at, 
+                total_amount,
+                items_json,
+                job_tickets!inner(plate_number)
+            `)
+            .eq('job_tickets.plate_number', plate.toUpperCase())
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        // Odfiltrujeme aktuálnu ponuku ak nejakú má
+        const filtered = data?.filter(o => o.job_id !== id) || [];
+        setPastOffers(filtered);
+    } catch (err) { console.error("Chyba histórie ponúk:", err.message); }
+  };
+
+  // --- NOVÁ FUNKCIA: IMPORT POLOŽIEK ZO STAREJ PONUKY ---
+  const importOfferItems = async (oldOffer) => {
+    if (!confirm(`Importovať ${oldOffer.items_json.length} položiek z ponuky ${oldOffer.offer_number || 'bez čísla'}?`)) return;
+    
+    try {
+        const itemsToInsert = oldOffer.items_json.map(item => {
+            const { id: oldId, created_at, group_name, is_selected, ...cleanItem } = item;
+            return { ...cleanItem, job_id: id };
+        });
+
+        if (itemsToInsert.length > 0) {
+            const { error } = await supabase.from('job_items').insert(itemsToInsert);
+            if (error) throw error;
+            fetchItems();
+            alert("Položky naimportované.");
+        }
+    } catch (err) { alert("Chyba importu: " + err.message); }
   };
 
   const fetchItems = async () => {
@@ -149,7 +193,6 @@ export default function DetailZakazkyPage() {
     if (data) setCatalog(data);
   };
 
-  // --- DOPLNENÁ LOGIKA PRE FOTKY (Načítanie, Nahrávanie, Mazanie) ---
   const fetchPhotos = async () => {
     try {
       const { data, error } = await supabase.from('job_photos').select('*').eq('job_id', id).order('created_at', { ascending: false });
@@ -213,7 +256,6 @@ export default function DetailZakazkyPage() {
     }
   };
 
-  // --- LOGIKA CENOVÝCH PONÚK (Nová časť) ---
   const fetchCurrentOffer = async () => {
     const { data } = await supabase
       .from('price_offers')
@@ -244,15 +286,18 @@ export default function DetailZakazkyPage() {
     }
   };
 
-  // --- UPRAVENÁ FUNKCIA PREKLÁPANIA: ROZDELENIE NA PRÁCE A ZÁVADY ---
   const convertOfferToItems = async () => {
-    if (!activeOffer || activeOffer.status !== 'Schválené') return;
-    if (!confirm("Schválené položky sa pridajú do rozpisu a neschválené sa zapíšu ako závady. Pokračovať?")) return;
+    if (!activeOffer || (activeOffer.status !== 'Schválené' && activeOffer.status !== 'Zamietnuté')) return;
+    
+    if (activeOffer.status === 'Schválené') {
+        if (!confirm("Schválené položky sa pridajú do rozpisu a neschválené sa zapíšu ako závady. Pokračovať?")) return;
+    } else {
+        if (!confirm("Zákazník zamietol celú ponuku. Všetky položky sa zapíšu ako závady a ponuka sa archivuje. Pokračovať?")) return;
+    }
 
     try {
       const allOfferItems = activeOffer.items_json;
       
-      // 1. SCHVÁLENÉ POLOŽKY (is_selected === true)
       const approvedItems = allOfferItems.filter(item => item.is_selected === true);
       const itemsToInsert = approvedItems.map(item => {
         const { id: oldId, created_at, job_id: oldJobId, group_name, is_selected, ...cleanItem } = item;
@@ -267,7 +312,6 @@ export default function DetailZakazkyPage() {
         if (insertError) throw insertError;
       }
 
-      // 2. NESCHVÁLENÉ POLOŽKY -> ZÁPIS DO ZÁVAD (complaints)
       const rejectedItems = allOfferItems.filter(item => item.is_selected === false);
       if (rejectedItems.length > 0) {
         const rejectedText = rejectedItems.map(i => `[ODMIETNUTÉ] ${i.group_name || 'Servis'}: ${i.name}`).join('\n');
@@ -277,18 +321,17 @@ export default function DetailZakazkyPage() {
           ? `${jobData.complaints}\n\n${rejectedText}` 
           : rejectedText;
 
-        await supabase.from('job_tickets').update({ complaints: newComplaints }).eq('id', id);
+        await supabase.from('job_tickets').update({ complaints: newComplaints, status: 'Prebieha' }).eq('id', id);
       }
 
-      // 3. Označíme ponuku ako vybavenú/preklopenú
       await supabase.from('price_offers').update({ status: 'Preklopené' }).eq('id', activeOffer.id);
       
       setActiveOffer(null);
       fetchItems();
-      fetchDetail(); // Obnovíme detail zákazky, aby sa zobrazili nové závady
-      alert("Položky boli úspešne rozdelené.");
+      fetchDetail(); 
+      alert("Spracované.");
     } catch (err) {
-      alert("Chyba pri preklápaní: " + err.message);
+      alert("Chyba pri spracovaní: " + err.message);
     }
   };
 
@@ -317,7 +360,6 @@ export default function DetailZakazkyPage() {
     if (!error) setZakazka(prev => ({ ...prev, assigned_worker_id: employeeId, technician_name: selectedEmp.name }));
   };
 
-  // --- UPRAVENÁ FUNKCIA FINALIZÁCIE: SAMOSTATNÉ ČÍSLOVANIE RÁD ---
   const handleFinalizeJob = async (isOfficial) => {
     setInvoiceLoading(true);
     try {
@@ -328,14 +370,11 @@ export default function DetailZakazkyPage() {
       const rr = String(teraz.getFullYear()).slice(-2);
       const dnesnyDátum = `${dd}${mm}${rr}`;
 
-      // Hľadáme počet záznamov pre danú radu samostatne
       let query = supabase.from('invoices').select('*', { count: 'exact', head: true });
 
       if (isOfficial) {
-          // Hľadáme len tie, ktoré začínajú dátumom (napr. 080424...) a nemajú "A"
           query = query.like('invoice_number', `${dnesnyDátum}%`).not('invoice_number', 'ilike', 'A%');
       } else {
-          // Hľadáme tie, ktoré začínajú na "A" a dnešný dátum (napr. A080424...)
           query = query.like('invoice_number', `A${dnesnyDátum}%`);
       }
 
@@ -453,7 +492,6 @@ export default function DetailZakazkyPage() {
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-12 relative font-sans font-bold">
       
-      {/* OVLÁDANIE - TOP BAR (Plne zachovaný) */}
       <div className="flex flex-col lg:flex-row justify-between items-center mb-8 no-print max-w-5xl mx-auto gap-4">
         <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs font-black uppercase tracking-widest font-bold">← Späť</button>
         
@@ -471,7 +509,6 @@ export default function DetailZakazkyPage() {
 
       <div className="printable-area bg-zinc-900 border border-zinc-800 p-8 md:p-16 rounded-[3rem] shadow-2xl max-w-5xl mx-auto text-white">
         
-        {/* LOGO A INFO */}
         <div className="flex justify-between items-start border-b-2 border-red-600 pb-8 mb-8 font-bold">
           <div>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter leading-none">AutoAlma <span className="text-red-600">Servis</span></h1>
@@ -479,12 +516,11 @@ export default function DetailZakazkyPage() {
           </div>
           <div className="text-right">
             <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border inline-block mb-3 ${zakazka.status === 'Dokončené' ? 'border-green-600 text-green-500' : 'border-amber-600 text-amber-500'}`}>{zakazka.status}</span>
-            <p className="text-[10px] font-black text-zinc-500 uppercase mb-1">Zákazkový list</p>
+            <p className="text-[10px] font-black text-zinc-500 uppercase mb-1">Záznam o zákazke</p>
             <p className="text-2xl font-black uppercase italic tracking-tighter leading-none">#{zakazka.id.slice(0, 8)}</p>
           </div>
         </div>
 
-        {/* INFO BAR */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 border-b border-zinc-800 pb-8 font-bold">
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1">Dátum príjmu</p><p className="font-bold">{new Date(zakazka.created_at).toLocaleDateString('sk-SK')}</p></div>
           <div className="relative group">
@@ -500,7 +536,6 @@ export default function DetailZakazkyPage() {
                     <option key={emp.id} value={emp.id} className="bg-zinc-900 text-white font-sans not-italic font-bold">{emp.name.toUpperCase()}</option>
                   ))}
                 </select>
-               
             </div>
             <p className="hidden print-block text-red-600 uppercase italic font-black text-sm">{zakazka.technician_name || 'Pridelený tím'}</p>
           </div>
@@ -508,7 +543,6 @@ export default function DetailZakazkyPage() {
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest">ŠPZ</p><p className="text-xl tracking-widest italic font-black uppercase">{zakazka.plate_number}</p></div>
         </div>
 
-        {/* --- PRIDANÝ SMS PANEL NA CELÚ ŠÍRKU (NO PRINT) --- */}
         <div className="no-print mb-12">
             <SmsPanel 
                 phone={zakazka.customer_phone} 
@@ -518,19 +552,28 @@ export default function DetailZakazkyPage() {
             />
         </div>
 
-        {/* --- BOX CENOVÁ PONUKA --- */}
         {activeOffer && (
-          <div className={`mb-10 p-8 rounded-[2.5rem] border-2 flex flex-col md:flex-row justify-between items-center shadow-2xl no-print gap-6 ${activeOffer.status === 'Schválené' ? 'bg-green-600/10 border-green-600 animate-pulse' : 'bg-blue-600/10 border-blue-600'}`}>
+          <div className={`mb-10 p-8 rounded-[2.5rem] border-2 flex flex-col md:flex-row justify-between items-center shadow-2xl no-print gap-6 
+            ${activeOffer.status === 'Schválené' ? 'bg-green-600/10 border-green-600 animate-pulse' : 
+              activeOffer.status === 'Zamietnuté' ? 'bg-red-600/10 border-red-600' : 
+              'bg-blue-600/10 border-blue-600'}`}>
+            
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 italic font-bold">Cenová ponuka</p>
-              <h3 className={`text-2xl font-black uppercase italic tracking-tighter ${activeOffer.status === 'Schválené' ? 'text-green-500' : 'text-blue-500'}`}>
-                {activeOffer.status === 'Schválené' ? '✅ Zákazník sa vyjadril k ponuke' : '📩 Ponuka odoslaná na schválenie'}
+              <h3 className={`text-2xl font-black uppercase italic tracking-tighter 
+                ${activeOffer.status === 'Schválené' ? 'text-green-500' : 
+                  activeOffer.status === 'Zamietnuté' ? 'text-red-500' : 
+                  'text-blue-500'}`}>
+                {activeOffer.status === 'Schválené' ? '✅ Zákazník ponuku schválil' : 
+                 activeOffer.status === 'Zamietnuté' ? '❌ Zákazník ponuku zamietol' : 
+                 '📩 Ponuka odoslaná na schválenie'}
               </h3>
             </div>
+
             <div className="flex gap-3">
-              {activeOffer.status === 'Schválené' ? (
-                <button onClick={convertOfferToItems} className="bg-green-600 text-white px-10 py-4 rounded-2xl font-black uppercase text-xs hover:bg-green-500 transition-all shadow-xl tracking-widest">
-                  📥 Preklopiť do zákazky
+              {(activeOffer.status === 'Schválené' || activeOffer.status === 'Zamietnuté') ? (
+                <button onClick={convertOfferToItems} className={`${activeOffer.status === 'Schválené' ? 'bg-green-600 hover:bg-green-500' : 'bg-red-600 hover:bg-red-500'} text-white px-10 py-4 rounded-2xl font-black uppercase text-xs transition-all shadow-xl tracking-widest`}>
+                  {activeOffer.status === 'Schválené' ? '📥 Preklopiť schválené práce' : '📥 Zapísať do závad a zavrieť'}
                 </button>
               ) : (
                 <button onClick={() => prompt("Link pre zákazníka:", `${window.location.origin}/ponuka/${activeOffer.id}`)} className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs hover:bg-blue-500 transition-all shadow-xl tracking-widest">
@@ -541,7 +584,6 @@ export default function DetailZakazkyPage() {
           </div>
         )}
 
-        {/* KLIENT A CHECKLIST (A NOVÁ SEKČIA ZÁVAD) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-bold">
           <div className="space-y-4">
               <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">Partner a Technika</h2>
@@ -562,7 +604,6 @@ export default function DetailZakazkyPage() {
                 </div>
               </div>
               
-              {/* --- NOVÁ SEKČIA: ZISTENÉ ZÁVADY / ODMIETNUTÉ PRÁCE --- */}
               <div className="bg-red-600/5 p-8 rounded-[2rem] border border-red-600/20 shadow-inner">
                 <h2 className="text-red-600 font-black uppercase text-[10px] tracking-widest mb-4 italic">Zistené závady / Poznámky</h2>
                 <pre className="text-xs font-sans text-zinc-400 whitespace-pre-wrap font-bold leading-relaxed">
@@ -599,10 +640,34 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        {/* ROZPIS POLOŽIEK */}
+        {/* ROZPIS POLOŽIEK - DOPLNENÝ O HISTÓRIU PONÚK */}
         <div className="space-y-4 mb-12">
           <div className="flex justify-between items-center font-bold">
-            <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">2. Rozpis materiálu a servisných prác</h2>
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">2. Rozpis materiálu a servisných prác</h2>
+                
+                {/* --- NOVÝ SELECT: POUŽIŤ STARŠIU PONUKU PODĽA ŠPZ --- */}
+                {pastOffers.length > 0 && (
+                    <div className="no-print">
+                        <select 
+                            onChange={(e) => {
+                                const selected = pastOffers.find(o => o.id === e.target.value);
+                                if (selected) importOfferItems(selected);
+                                e.target.value = ""; 
+                            }}
+                            className="bg-blue-600/10 border border-blue-600/30 text-blue-500 text-[9px] px-3 py-2 rounded-xl outline-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all font-black uppercase tracking-tighter"
+                        >
+                            <option value="">🕒 HISTÓRIA PONÚK ŠPZ ({pastOffers.length})</option>
+                            {pastOffers.map(o => (
+                                <option key={o.id} value={o.id} className="bg-zinc-900 text-white">
+                                    {o.offer_number || 'CP'} - {new Date(o.created_at).toLocaleDateString('sk-SK')} ({(o.total_amount * 1.23).toFixed(2)}€)
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+
             {!activeOffer && (
               <button 
                 onClick={() => router.push(`/zakazky/${id}/nova-ponuka`)} 
@@ -701,7 +766,6 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        {/* --- SEKCIJA: FOTODOKUMENTÁCIA --- */}
         <div className="space-y-4 mb-12 no-print font-bold">
           <div className="flex justify-between items-center">
             <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">3. Fotodokumentácia opravy</h2>
@@ -736,7 +800,6 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        {/* TLAČIDLO UZAVRETIA */}
         <div className="mt-12 no-print font-bold">
             <button 
                 onClick={() => setIsInvoiceModalOpen(true)}
@@ -752,7 +815,6 @@ export default function DetailZakazkyPage() {
         </div>
       </div>
 
-      {/* MODAL FAKTURÁCIA */}
       {isInvoiceModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print">
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[4rem] max-w-2xl w-full text-center shadow-2xl font-bold">
@@ -766,7 +828,6 @@ export default function DetailZakazkyPage() {
         </div>
       )}
 
-      {/* MODAL MAZANIA */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[200] flex items-center justify-center p-6 no-print font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-sm w-full text-center shadow-2xl">
@@ -779,7 +840,6 @@ export default function DetailZakazkyPage() {
         </div>
       )}
 
-      {/* PRINT STYLES */}
       <style jsx global>{`
         .print-block { display: none; }
         @media print {
