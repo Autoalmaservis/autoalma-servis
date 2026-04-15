@@ -11,10 +11,11 @@ export default function Dashboard() {
     const fetchRealStats = async () => {
       setLoading(true);
       try {
-        // 1. Získame počet unikátnych klientov
+        // 1. Získame počet unikátnych klientov z profilov (nie zo zákaziek)
         const { count: customerCount } = await supabase
-          .from('job_tickets')
-          .select('customer_name', { count: 'exact', head: true });
+          .from('user_profiles')
+          .select('*', { count: 'exact', head: true })
+          .or('role.eq.zakaznik,role.eq.klient');
 
         // 2. Získame počet dnešných rezervácií z kalendára
         const today = new Date().toISOString().split('T')[0];
@@ -24,11 +25,11 @@ export default function Dashboard() {
           .gte('start_datetime', `${today}T00:00:00`)
           .lte('start_datetime', `${today}T23:59:59`);
 
-        // 3. Získame počet aktívnych zákaziek (stav 'Otvorená')
+        // 3. Získame počet aktívnych zákaziek (Otvorená, Prebieha, Dokončené)
         const { count: jobsCount } = await supabase
           .from('job_tickets')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'Otvorená');
+          .in('status', ['Čaká na schválenie', 'Prebieha', 'Dokončené']);
 
         setStats({
           activeJobs: jobsCount || 0,
@@ -90,7 +91,7 @@ export default function Dashboard() {
             </p>
             <span className="text-zinc-600 font-bold uppercase text-xs tracking-tighter">zákazky</span>
           </div>
-          <p className="text-[10px] text-zinc-500 mt-6 uppercase font-bold tracking-tight">Vozidlá s otvoreným listom</p>
+          <p className="text-[10px] text-zinc-500 mt-6 uppercase font-bold tracking-tight">Vozidlá s aktívnym listom</p>
         </div>
 
         {/* KARTA: REGISTROVANÍ KLIENTI */}
