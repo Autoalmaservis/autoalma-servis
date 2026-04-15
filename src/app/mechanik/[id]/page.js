@@ -250,14 +250,21 @@ export default function PracovnyList() {
         </div>
       </section>
 
-      {/* --- DOPLNENÁ SEKCIJA: FOTODOKUMENTÁCIA PRE MECHANIKA --- */}
+      {/* --- SEKCIJA: FOTODOKUMENTÁCIA S AKTÍVNOU KAMEROU --- */}
       <section className="bg-zinc-900/20 p-8 rounded-[3rem] border border-zinc-800">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-[10px] font-black uppercase text-red-500 tracking-[0.3em] italic ml-2">Fotodokumentácia opravy</h3>
           {!isLocked && (
             <label className="bg-zinc-800 hover:bg-red-600 text-white px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-lg">
               {uploading ? 'Nahrávam...' : '📸 Odfotiť / Nahrať'}
-              <input type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} disabled={uploading} />
+              <input 
+                type="file" 
+                accept="image/*" 
+                capture="environment" 
+                className="hidden" 
+                onChange={handleUploadPhoto} 
+                disabled={uploading} 
+              />
             </label>
           )}
         </div>

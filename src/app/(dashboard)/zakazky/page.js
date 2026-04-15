@@ -12,7 +12,7 @@ export default function ZakazkyZoznamPage() {
   // --- LOGIKA NOTIFIKÁCIÍ S PAMÄŤOU (localStorage) ---
   const [notifState, setNotifState] = useState({
     'Prebieha': { isNew: false, count: 0 },
-    'Čaká na schválenie': { isNew: false, count: 0 },
+    'Čaká na schválenie': { isNew: false, count: 0 }, // DOPLNENÉ
     'Dokončené': { isNew: false, count: 0 }
   });
 
@@ -51,7 +51,7 @@ export default function ZakazkyZoznamPage() {
       // Kontrola nových zákaziek voči localStorage
       const updatedNotifState = {};
       ['Prebieha', 'Čaká na schválenie', 'Dokončené'].forEach(status => {
-        const currentCount = jobsWithPrices.filter(j => j.status === status).length;
+        const currentCount = jobsWithPrices.filter(j => (j.status || 'Prebieha') === status).length;
         const savedCount = parseInt(localStorage.getItem(`lastCount_${status}`)) || 0;
 
         updatedNotifState[status] = {
@@ -116,7 +116,7 @@ export default function ZakazkyZoznamPage() {
   const getStatusColor = (status) => {
     switch(status) {
       case 'Prebieha': return 'bg-blue-600';
-      case 'Čaká na schválenie': return 'bg-purple-600'; // NOVÁ FARBA
+      case 'Čaká na schválenie': return 'bg-purple-600'; // FIALOVÁ PRE PONUKY
       case 'Dokončené': return 'bg-green-600';
       case 'Archivované': return 'bg-zinc-700 text-zinc-400';
       default: return 'bg-zinc-700';
@@ -137,7 +137,7 @@ export default function ZakazkyZoznamPage() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Správa servisných procesov</p>
         </div>
 
-        {/* NAVIGÁCIA S NOVÝM STATUSOM */}
+        {/* NAVIGÁCIA - PRIDANÉ TLAČIDLO ČAKÁ NA SCHVÁLENIE */}
         <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 shadow-2xl relative flex-wrap gap-1">
           {['Prebieha', 'Čaká na schválenie', 'Dokončené', 'Archivované', 'Všetky'].map((status) => {
             const isNew = notifState[status]?.isNew && filterStatus !== status;
