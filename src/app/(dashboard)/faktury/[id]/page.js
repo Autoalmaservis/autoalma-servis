@@ -60,6 +60,7 @@ export default function DetailFakturyPage() {
       .single();
 
     if (!error) setInv(data);
+    loading === false && setLoading(false); // Oprava pre zacyklenie ak by bolo treba
     setLoading(false);
   };
 
@@ -127,6 +128,7 @@ export default function DetailFakturyPage() {
                   <p style={{ margin: '0' }}>{myCompany.address}</p>
                   <p style={{ margin: '0' }}>{myCompany.zip} {myCompany.city}</p>
                   <p style={{ margin: '3pt 0 0 0' }}>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
+                  {myCompany.ic_dph && <p style={{ margin: '0' }}>IČ DPH: {myCompany.ic_dph}</p>}
                 </div>
               </td>
               <td width="50%" valign="top" align="right">
@@ -138,15 +140,20 @@ export default function DetailFakturyPage() {
           </tbody>
         </table>
 
-        {/* --- TLAČOVÁ TABUĽKA ADRIES --- */}
+        {/* --- TLAČOVÁ TABUĽKA ADRIES (OPRAVENÁ PRE IČO/DIČ ODBERATEĽA) --- */}
         <table className="print-only-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
           <tbody>
             <tr>
               <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
                 <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>ODBERATEĽ:</p>
-                <p style={{ margin: '0', fontSize: '11pt', color: '#000', fontWeight: '900' }}>{inv.customer_name}</p>
-                <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.customer_phone}</p>
-                <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.customer_email}</p>
+                <p style={{ margin: '0', fontSize: '11pt', color: '#000', fontWeight: '900' }}>{inv.company_details?.company_name || inv.customer_name}</p>
+                <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.company_details?.address || '---'}</p>
+                <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.company_details?.zip} {inv.company_details?.city}</p>
+                <div style={{ marginTop: '5pt', fontSize: '8.5pt', color: '#000' }}>
+                    {inv.company_details?.ico && <p style={{ margin: '0' }}>IČO: {inv.company_details.ico}</p>}
+                    {inv.company_details?.dic && <p style={{ margin: '0' }}>DIČ: {inv.company_details.dic}</p>}
+                    {inv.company_details?.ic_dph && <p style={{ margin: '0' }}>IČ DPH: {inv.company_details.ic_dph}</p>}
+                </div>
               </td>
               <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
                 <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>VOZIDLO:</p>
@@ -179,6 +186,13 @@ export default function DetailFakturyPage() {
               {inv.is_official ? 'Faktúra' : 'Servisný záznam'}
             </h2>
             <p className="text-3xl font-black tracking-tighter mb-4 doc-number">{inv.invoice_number}</p>
+            
+            {/* ODBERATEĽ WEB VERZIA */}
+            <div className="mt-4 text-[10px] text-zinc-400 uppercase text-right">
+                <p className="text-blue-500 font-black italic">Odberateľ:</p>
+                <p className="text-white font-black">{inv.company_details?.company_name || inv.customer_name}</p>
+                <p>{inv.company_details?.ico ? `IČO: ${inv.company_details.ico}` : ''} {inv.company_details?.dic ? `| DIČ: ${inv.company_details.dic}` : ''}</p>
+            </div>
           </div>
         </div>
 
@@ -221,6 +235,7 @@ export default function DetailFakturyPage() {
                       <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
                       <p style={{ margin: '0' }}>VS: <strong>{String(inv.invoice_number).replace(/\D/g, '')}</strong></p>
+                      <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
                       <p style={{ marginTop: '5pt', fontSize: '8pt', color: '#666' }}>Vystavil: Maroš - AutoAlma</p>
                     </div>
                   </div>
@@ -273,6 +288,7 @@ export default function DetailFakturyPage() {
                 <p className="text-zinc-400">Platobné informácie:</p>
                 <p className="text-white font-black mt-1 uppercase text-sm bank-iban">{myCompany.bank || 'Platba v hotovosti'}</p>
                 <p className="text-zinc-500 mt-1">Variabilný symbol: {String(inv.invoice_number).replace(/\D/g, '')}</p>
+                <p className="text-red-600 mt-1">Splatnosť: {inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : '---'}</p>
              </div>
           </div>
           <div className="bg-black p-10 rounded-[2.5rem] border border-zinc-800 min-w-[340px] space-y-4 shadow-2xl font-bold totals-box">

@@ -18,6 +18,31 @@ export default function ZakazkyZoznamPage() {
 
   useEffect(() => {
     fetchJobs();
+
+    // --- REAL-TIME LOGIKA: AKTUALIZÁCIA PRI ZMENE V DATABÁZE ---
+    const channel = supabase
+      .channel('public:job_tickets_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'job_tickets' },
+        () => {
+          console.log('Zmena v zákazkách detegovaná! Aktualizujem...');
+          fetchJobs(); // Pri zmene (napr. mechanik prepne stav) znova načítame zoznam a prepočítame blikanie
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'price_offers' },
+        () => {
+          console.log('Zmena v ponukách detegovaná! Aktualizujem...');
+          fetchJobs(); // Dôležité pre stav "Čaká na schválenie"
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchJobs = async () => {

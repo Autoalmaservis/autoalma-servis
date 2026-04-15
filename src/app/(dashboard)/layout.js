@@ -11,12 +11,13 @@ export default function DashboardLayout({ children }) {
   const [pendingCount, setPendingCount] = useState(0);
   const pathname = usePathname();
 
-  // REAL-TIME sledovanie nových požiadaviek
+  // REAL-TIME sledovanie nových požiadaviek a zmien v zákazkách
   useEffect(() => {
     fetchPendingCount();
 
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('dashboard-global-updates')
+      // Sledovanie nových objednávok v kalendári
       .on(
         'postgres_changes',
         {
@@ -26,6 +27,18 @@ export default function DashboardLayout({ children }) {
         },
         () => {
           fetchPendingCount();
+        }
+      )
+      // PRIDANÉ: Sledovanie zmien v zákazkách pre globálnu synchronizáciu stavov
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          table: 'job_tickets',
+          schema: 'public',
+        },
+        (payload) => {
+          console.log('Globálna zmena v zákazke:', payload);
         }
       )
       .subscribe();
@@ -127,16 +140,16 @@ export default function DashboardLayout({ children }) {
         {/* PROFIL UŽÍVATEĽA */}
         <div className={`mt-auto pt-4 border-t border-zinc-900 transition-all ${isCollapsed ? 'items-center' : ''}`}>
            <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
-              <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
-              {!isCollapsed && (
-                <div className="overflow-hidden font-bold">
-                  <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
-                  <div className="flex items-center gap-1 mt-1 font-bold">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                    <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
-                  </div>
-                </div>
-              )}
+             <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
+             {!isCollapsed && (
+               <div className="overflow-hidden font-bold">
+                 <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
+                 <div className="flex items-center gap-1 mt-1 font-bold">
+                   <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                   <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
+                 </div>
+               </div>
+             )}
            </div>
         </div>
       </aside>

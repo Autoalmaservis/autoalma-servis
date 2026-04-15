@@ -15,7 +15,7 @@ function LoginFormContent() {
   const [message, setMessage] = useState(null); // Pre potvrdenie odoslania reset linku
   const [resetMode, setResetMode] = useState(false); // Prepínač pre zabudnuté heslo
 
-  // TVOJ NOVÝ ADMIN ÚČET
+  // TVOJ NOVÝ ADMIN ÚČET (Ponechané pre gateway, ale logika sa mení na DB roly)
   const ADMIN_EMAIL = 'maros.jurkovic@autoalma.sk';
   const ADMIN_PASSWORD = 'Autoalma137.';
 
@@ -34,6 +34,7 @@ function LoginFormContent() {
     setError(null);
     setMessage(null);
 
+    // 1. Prihlásenie do Supabase Auth
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password: password,
@@ -46,10 +47,33 @@ function LoginFormContent() {
     }
 
     if (data.user) {
-      if (email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase()) {
-        router.push('/zakazky'); 
+      // 2. NOVÁ LOGIKA: Získame rolu priamo z databázy (tabuľka user_profiles)
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        // Ak používateľ nemá vytvorený profil v databáze, nepustíme ho ďalej
+        await supabase.auth.signOut();
+        setError("Váš užívateľský profil nebol nájdený v systéme.");
+        setLoading(false);
+        return;
+      }
+
+      // 3. PRESMEROVANIE PODĽA ROLY V DATABÁZE
+      const userRole = profile.role?.toLowerCase();
+
+      if (userRole === 'admin') {
+        router.push('/dashboard'); // Hlavný dashboard technika
+      } else if (userRole === 'mechanik') {
+        router.push('/mechanik'); // Rozhranie pre dielňu
+      } else if (userRole === 'zakaznik' || userRole === 'klient') {
+        router.push('/garaz'); // Klientska zóna
       } else {
-        router.push('/garaz');
+        // Poistka ak by niekto nemal rolu
+        router.push('/');
       }
     }
   };
@@ -69,7 +93,6 @@ function LoginFormContent() {
       setError("Chyba: " + resetError.message);
     } else {
       setMessage("Inštrukcie na obnovu hesla boli odoslané na Váš e-mail.");
-      // Voliteľne: setResetMode(false);
     }
     setLoading(false);
   };
