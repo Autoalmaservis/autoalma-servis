@@ -80,6 +80,7 @@ function PrijemForm() {
       const menoFromUrl = searchParams.get('meno');
 
       if (spzToQuery && spzToQuery.length >= 4) {
+        // 1. Hľadáme auto v tabuľke vehicles
         const { data: vData } = await supabase
           .from('vehicles')
           .select('*')
@@ -87,13 +88,16 @@ function PrijemForm() {
           .maybeSingle();
         
         if (vData) {
-          const menoMajitela = menoFromUrl || vData.owner_name;
-          
-          const { data: pData } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .or(`full_name.eq."${menoMajitela}",company_name.eq."${menoMajitela}",email.eq."${vData.owner_email}"`)
-            .maybeSingle();
+          // 2. Hľadáme profil (pre Osobu aj Firmu) podľa ID majiteľa z tabuľky user_profiles
+          let pData = null;
+          if (vData.owner_id) {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('id', vData.owner_id)
+              .maybeSingle();
+            pData = profile;
+          }
           
           setFormData(prev => ({
             ...prev,
@@ -105,9 +109,10 @@ function PrijemForm() {
             engine_power: vData.engine_power || '',   
             year_produced: vData.year_produced || '', 
             fuel_type: vData.fuel_type || 'Diesel',
-            customer_name: menoMajitela || pData?.full_name || prev.customer_name,
+            // Logika mena: uprednostníme profil (company_name pre firmu, full_name pre osobu), inak meno z vehicles
+            customer_name: pData?.company_name || pData?.full_name || menoFromUrl || vData.owner_name || prev.customer_name,
             customer_email: pData?.email || vData.owner_email || prev.customer_email,
-            customer_phone: pData?.phone || prev.customer_phone,
+            customer_phone: pData?.phone || vData.owner_phone || prev.customer_phone,
             address: pData?.address || '',
             city: pData?.city || '',
             zip: pData?.zip || '',
@@ -115,14 +120,14 @@ function PrijemForm() {
             ico: pData?.ico || '',
             dic: pData?.dic || '',
             ic_dph: pData?.ic_dph || '',
-            client_type: (pData?.company_name || pData?.ico) ? 'Firma' : 'Osoba',
-            customer_id: pData?.id || vData.owner_id || null 
+            client_type: pData?.company_name ? 'Firma' : 'Osoba',
+            customer_id: vData.owner_id || null 
           }));
         }
       }
     };
     autoDoplnenie();
-  }, [formData.plate_number, searchParams]);
+  }, [formData.plate_number, searchParams]); // Ponechané obe závislosti kvôli chybe v konzole
 
   const addTaskRow = () => setTasks([...tasks, { description: '' }]);
   const removeTaskRow = (index) => setTasks(tasks.filter((_, i) => i !== index));

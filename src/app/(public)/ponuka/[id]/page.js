@@ -10,13 +10,40 @@ export default function VerejnaPonukaPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [responded, setResponded] = useState(false);
+  
+  const [myCompany, setMyCompany] = useState({
+    name: 'AutoAlma Servis',
+    address: '', city: '', zip: '', ico: '', dic: '', ic_dph: '',
+    phone: '', email: '', web: '' // DOPLNENÉ
+  });
 
   useEffect(() => {
-    if (id) fetchOffer();
+    if (id) {
+      fetchOffer();
+      fetchMyCompanySettings();
+    }
   }, [id]);
 
+  const fetchMyCompanySettings = async () => {
+    const { data } = await supabase.from('business_settings').select('*');
+    if (data) {
+      setMyCompany({
+        name: data.find(s => s.id === 'company_name')?.value || 'AutoAlma Servis',
+        address: data.find(s => s.id === 'company_address')?.value || '',
+        city: data.find(s => s.id === 'company_city')?.value || '',
+        zip: data.find(s => s.id === 'company_zip')?.value || '',
+        ico: data.find(s => s.id === 'company_ico')?.value || '',
+        dic: data.find(s => s.id === 'company_dic')?.value || '',
+        ic_dph: data.find(s => s.id === 'company_ic_dph')?.value || '',
+        phone: data.find(s => s.id === 'company_phone')?.value || '',
+        email: data.find(s => s.id === 'company_email')?.value || '',
+        web: data.find(s => s.id === 'company_web')?.value || '', // DOPLNENÉ
+        logo_url: data.find(s => s.id === 'company_logo')?.value || '',
+      });
+    }
+  };
+
   const fetchOffer = async () => {
-    // Rozšírený select o všetky dôležité polia zo zakázky
     const { data, error } = await supabase
       .from('price_offers')
       .select(`
@@ -128,7 +155,6 @@ export default function VerejnaPonukaPage() {
     return groups;
   }, {});
 
-  // Dátumová logika
   const dateCreated = new Date(offer.created_at);
   const dateExpiry = new Date(offer.created_at);
   dateExpiry.setDate(dateExpiry.getDate() + 14);
@@ -136,29 +162,73 @@ export default function VerejnaPonukaPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-4 md:p-12 font-sans font-bold">
       
-      {/* TOP BAR - Skrytý pri tlači */}
+      {/* TOP BAR */}
       <div className="max-w-4xl mx-auto mb-6 flex justify-between items-center no-print">
-        <button 
-          onClick={() => router.back()} 
-          className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black tracking-widest shadow-xl"
-        >
+        <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black tracking-widest shadow-xl">
           ← Späť
         </button>
-        <button 
-          onClick={() => window.print()}
-          className="bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-xl flex items-center gap-2"
-        >
+        <button onClick={() => window.print()} className="bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-xl flex items-center gap-2">
           🖨️ Tlačiť ponuku
         </button>
       </div>
 
       <div className="max-w-4xl mx-auto bg-zinc-900 border border-zinc-800 rounded-[3rem] overflow-hidden shadow-2xl printable-area">
         
-        {/* HEADER */}
-        <div className="bg-blue-600 p-10 flex justify-between items-center text-white header-bg">
-          <div className="text-left">
-            <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">Cenová ponuka</h1>
-            <p className="text-blue-100 text-[10px] uppercase tracking-[0.3em] mt-2 font-black italic">AutoAlma Servis • #{id.slice(0,8)}</p>
+        {/* COMPACT PRINT HEADER WITH LOGO ONLY */}
+        <div className="hidden print-block">
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10pt' }}>
+                <tbody>
+                    <tr>
+                        <td width="20%" valign="middle">
+                            <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" style={{ width: '90px', height: 'auto', display: 'block' }} />
+                        </td>
+                        <td width="40%" valign="top" style={{ paddingLeft: '15pt' }}>
+                            <div style={{ fontSize: '8.5pt', color: '#000', lineHeight: '1.3' }}>
+                                <p style={{ margin: '0', fontSize: '10pt' }}><strong>{myCompany.name}</strong></p>
+                                <p style={{ margin: '0' }}>{myCompany.address}, {myCompany.zip} {myCompany.city}</p>
+                                <p style={{ margin: '0' }}>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
+                                <p style={{ margin: '2pt 0 0 0', color: '#444' }}>{myCompany.phone} | {myCompany.email}</p>
+                                {myCompany.web && <p style={{ margin: '0', color: '#444' }}>{myCompany.web}</p>}
+                            </div>
+                        </td>
+                        <td width="40%" valign="top" align="right">
+                            <h2 style={{ fontSize: '14pt', color: '#dc2626', margin: '0', textTransform: 'uppercase', fontWeight: '900' }}>Cenová ponuka</h2>
+                            <p style={{ fontSize: '10pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>#{offer.offer_number || id.slice(0,8).toUpperCase()}</p>
+                            <p style={{ margin: '0', color: '#000', fontSize: '8pt' }}>Vystavené: <strong>{dateCreated.toLocaleDateString('sk-SK')}</strong></p>
+                            <p style={{ margin: '0', color: '#000', fontSize: '8pt' }}>Platnosť do: <strong>{dateExpiry.toLocaleDateString('sk-SK')}</strong></p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt', border: '0.5pt solid #000' }}>
+                <tbody>
+                    <tr style={{ fontSize: '8pt' }}>
+                        <td width="50%" style={{ padding: '6pt', borderRight: '0.5pt solid #000' }} valign="top">
+                            <p style={{ color: '#666', fontWeight: '900', margin: '0 0 2pt 0', fontSize: '7pt' }}>ODBERATEĽ:</p>
+                            <p style={{ fontWeight: '900', margin: '0', color: '#000' }}>{offer.job_tickets?.customer_name}</p>
+                            <p style={{ margin: '0', color: '#000' }}>{offer.job_tickets?.customer_phone}</p>
+                            <p style={{ margin: '0', color: '#000' }}>{offer.job_tickets?.customer_email}</p>
+                        </td>
+                        <td width="50%" style={{ padding: '6pt' }} valign="top">
+                            <p style={{ color: '#666', fontWeight: '900', margin: '0 0 2pt 0', fontSize: '7pt' }}>VOZIDLO:</p>
+                            <p style={{ fontWeight: '900', margin: '0', color: '#000' }}>{offer.job_tickets?.plate_number} • {offer.job_tickets?.car_brand_model}</p>
+                            <p style={{ margin: '0', color: '#000' }}>VIN: {offer.job_tickets?.vin_number || '---'}</p>
+                            <p style={{ margin: '0', color: '#000' }}>KM: {offer.job_tickets?.mileage || '---'}</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {/* WEB VIEW HEADER */}
+        <div className="bg-blue-600 p-10 flex justify-between items-center text-white header-bg no-print">
+          <div className="flex items-center gap-6">
+            <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" className="w-20 h-auto brightness-0 invert" />
+            <div className="text-left">
+              <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">Cenová ponuka</h1>
+              <p className="text-blue-100 text-[10px] uppercase tracking-[0.3em] mt-2 font-black italic">#{id.slice(0,8)}</p>
+            </div>
           </div>
           <div className="text-right">
              <p className="text-[9px] uppercase opacity-70">Platnosť ponuky do:</p>
@@ -166,16 +236,15 @@ export default function VerejnaPonukaPage() {
           </div>
         </div>
 
-        <div className="p-10 space-y-10 bg-zinc-900">
+        <div className="p-10 space-y-10 bg-zinc-900 print-p-0">
           
-          {/* INFO O KLIENTOVI A VOZIDLE */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 border-b border-zinc-800 pb-10">
+          {/* INFO O KLIENTOVI - WEB VIEW ONLY */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 border-b border-zinc-800 pb-10 no-print">
             <div className="space-y-4">
               <h4 className="text-blue-500 text-[10px] uppercase tracking-widest">Odberateľ</h4>
               <div>
                 <p className="text-2xl font-black uppercase italic leading-none">{offer.job_tickets?.customer_name}</p>
-                <p className="text-xs text-zinc-400 mt-1">{offer.job_tickets?.customer_phone} • {offer.job_tickets?.customer_email}</p>
-                <p className="text-xs text-zinc-500 mt-1">{offer.job_tickets?.address}, {offer.job_tickets?.city}</p>
+                <p className="text-xs text-zinc-400 mt-1">{offer.job_tickets?.customer_phone}</p>
               </div>
             </div>
             <div className="space-y-4 md:text-right">
@@ -183,45 +252,39 @@ export default function VerejnaPonukaPage() {
               <div>
                 <p className="text-2xl font-black uppercase italic leading-none">{offer.job_tickets?.car_brand_model}</p>
                 <p className="text-sm font-black text-white mt-1">ŠPZ: {offer.job_tickets?.plate_number}</p>
-                <p className="text-[10px] text-zinc-500 mt-1 font-mono uppercase">VIN: {offer.job_tickets?.vin_number || '---'}</p>
-                <p className="text-[10px] text-zinc-500 mt-1 uppercase italic">Stav KM: {offer.job_tickets?.mileage} km</p>
               </div>
             </div>
           </div>
 
           {/* POLOŽKY */}
           <div className="space-y-8">
-            <div className="flex justify-between items-end">
+            <div className="flex justify-between items-end no-print">
                 <p className="text-[10px] text-blue-500 uppercase tracking-[0.2em] italic font-black">Rozpis navrhovaných prác a materiálu:</p>
-                <p className="text-[10px] text-zinc-500 uppercase">Dátum vystavenia: {dateCreated.toLocaleDateString('sk-SK')}</p>
+                <p className="text-[10px] text-zinc-500 uppercase">Dátum: {dateCreated.toLocaleDateString('sk-SK')}</p>
             </div>
             
             {Object.keys(groupedItems).map((groupName) => {
               const isSelected = groupedItems[groupName].every(i => i.is_selected);
               return (
-                <div key={groupName} className={`rounded-[2.5rem] border-2 transition-all duration-300 overflow-hidden ${isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-zinc-800 bg-black/20 opacity-40'}`}>
-                  <div className={`p-5 flex justify-between items-center transition-all duration-300 ${isSelected ? 'bg-blue-600/20' : 'bg-zinc-800/30'}`}>
-                    <h3 className={`font-black uppercase italic tracking-wider ${isSelected ? 'text-white' : 'text-zinc-500'}`}>📂 {groupName}</h3>
+                <div key={groupName} className={`rounded-[2.5rem] border-2 transition-all duration-300 overflow-hidden print-no-round print-border-thin ${isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-zinc-800 bg-black/20 opacity-40 no-print'}`}>
+                  <div className={`p-5 flex justify-between items-center transition-all duration-300 print-bg-gray ${isSelected ? 'bg-blue-600/20' : 'bg-zinc-800/30'}`}>
+                    <h3 className={`font-black uppercase italic tracking-wider print-text-black ${isSelected ? 'text-white' : 'text-zinc-500'}`}>📂 {groupName}</h3>
                     <button 
                       disabled={responded || offer.status !== 'Odoslané'}
                       onClick={() => toggleGroup(groupName)}
-                      className={`px-6 py-2 rounded-2xl text-[10px] font-black uppercase transition-all duration-300 no-print ${
-                        isSelected 
-                          ? 'bg-blue-600 text-white shadow-lg' 
-                          : 'bg-zinc-800 text-zinc-500'
-                      }`}
+                      className={`px-6 py-2 rounded-2xl text-[10px] font-black uppercase transition-all duration-300 no-print ${isSelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500'}`}
                     >
                       {isSelected ? 'Vybraté ✓' : 'Vynechať ✕'}
                     </button>
                   </div>
-                  <div className="p-6 space-y-4">
+                  <div className="p-6 space-y-4 print-p-2">
                     {groupedItems[groupName].map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center border-b border-zinc-800/50 pb-2">
+                      <div key={idx} className="flex justify-between items-center border-b border-zinc-800/50 pb-2 print-border-black">
                         <div className={`${isSelected ? 'opacity-100' : 'opacity-50'}`}>
-                          <p className="text-sm font-black uppercase italic">{item.name}</p>
-                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest">{item.quantity} {item.unit} • {item.unit_price.toFixed(2)}€ / j</p>
+                          <p className="text-sm font-black uppercase italic print-text-black">{item.name}</p>
+                          <p className="text-[9px] text-zinc-500 uppercase tracking-widest print-text-black">{item.quantity} {item.unit} • {item.unit_price.toFixed(2)}€ / j</p>
                         </div>
-                        <p className={`text-lg font-black italic tracking-tighter ${isSelected ? 'text-white' : 'text-zinc-600'}`}>{(item.quantity * item.unit_price).toFixed(2)}€</p>
+                        <p className={`text-lg font-black italic tracking-tighter print-text-black ${isSelected ? 'text-white' : 'text-zinc-600'}`}>{(item.quantity * item.unit_price).toFixed(2)}€</p>
                       </div>
                     ))}
                   </div>
@@ -230,24 +293,21 @@ export default function VerejnaPonukaPage() {
             })}
           </div>
 
-          {/* SUMÁR */}
-          <div className="bg-white text-black p-10 rounded-[2.5rem] flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
+          {/* MENŠIA SUMÁRNA TABUĽKA */}
+          <div className="bg-white text-black p-6 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-2 shadow-lg border border-zinc-200 print-no-round print-p-4 print-border-thick">
             <div className="text-left">
-                <span className="text-xl font-black uppercase italic leading-none block">Celková suma ponuky:</span>
-                <span className="text-[10px] uppercase font-black tracking-widest mt-1 opacity-50">Vrátane DPH 23%</span>
+                <span className="text-sm font-black uppercase italic leading-none block">Celková suma s DPH:</span>
+                <span className="text-[8px] uppercase font-black tracking-widest mt-1 opacity-40 block">Sadzba DPH 23%</span>
             </div>
             <div className="text-right">
-              <p className="text-6xl font-black italic leading-none tracking-tighter">{calculateSelectedTotal().toFixed(2)}€</p>
+              <p className="text-4xl font-black italic leading-none tracking-tighter print-text-2xl">{calculateSelectedTotal().toFixed(2)}€</p>
             </div>
           </div>
 
-          {/* AKCIA - Skrytá pri tlači */}
+          {/* AKCIA */}
           <div className="no-print">
               {!responded && offer.status === 'Odoslané' ? (
-                <button 
-                  onClick={handleResponse}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-7 rounded-[2rem] uppercase text-sm tracking-[0.2em] italic transition-all shadow-2xl shadow-blue-900/40"
-                >
+                <button onClick={handleResponse} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-7 rounded-[2rem] uppercase text-sm tracking-[0.2em] italic transition-all shadow-2xl shadow-blue-900/40">
                   Odoslať vyjadrenie do servisu
                 </button>
               ) : (
@@ -259,29 +319,52 @@ export default function VerejnaPonukaPage() {
         </div>
       </div>
 
-      <p className="text-center mt-8 text-zinc-600 text-[9px] uppercase tracking-[0.4em] font-black italic">AutoAlma Servis • Slovenská ulica 12, Košice • www.autoalma.sk</p>
+      <p className="text-center mt-8 text-zinc-600 text-[9px] uppercase tracking-[0.4em] font-black italic no-print">
+        {myCompany.name} • {myCompany.address}, {myCompany.city} • {myCompany.web}
+      </p>
 
       {/* PRINT STYLES */}
       <style jsx global>{`
+        .print-block { display: none; }
+        
         @media print {
-          body { background: white !important; color: black !important; }
+          @page { 
+            size: A4; 
+            margin: 0 !important; /* ODSTRÁNI URL, DÁTUM A NÁZOV STRÁNKY */
+          }
+          
+          body { 
+            background: white !important; 
+            color: black !important; 
+            margin: 0 !important; 
+            padding: 0 !important;
+          }
+
           .no-print { display: none !important; }
-          .min-h-screen { background: white !important; padding: 0 !important; }
+          .print-block { display: block !important; }
+          .min-h-screen { background: white !important; padding: 0 !important; min-height: 0 !important; }
+          
           .printable-area { 
-            border: 2px solid black !important; 
+            border: none !important; 
             background: white !important; 
             box-shadow: none !important; 
             color: black !important; 
-            border-radius: 0 !important;
-            max-width: 100% !important;
+            border-radius: 0 !important; 
+            max-width: 100% !important; 
+            padding: 1.5cm 1.5cm 1.5cm 1.5cm !important; /* VNÚTORNÝ OKRAJ PRE OBSAH */
           }
+
           .bg-zinc-900, .bg-zinc-950, .bg-black { background: white !important; color: black !important; }
-          .bg-blue-600 { background: #f3f4f6 !important; border-bottom: 2px solid black !important; }
-          .text-white, .text-blue-100, .text-blue-400, .text-zinc-400, .text-zinc-500 { color: black !important; }
-          .border-zinc-800 { border-color: #ddd !important; }
-          .header-bg { color: black !important; padding: 40px !important; }
-          .bg-white { border: 2px solid black !important; }
-          .group-header { background: #f9fafb !important; border-bottom: 1px solid black !important; }
+          .print-no-round { border-radius: 0 !important; }
+          .print-border-thin { border: 0.5pt solid #bbb !important; margin-bottom: 10pt !important; }
+          .print-border-thick { border: 1.2pt solid #000 !important; }
+          .print-bg-gray { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; border-bottom: 0.5pt solid #000 !important; }
+          .print-text-black { color: black !important; }
+          .print-text-2xl { font-size: 20pt !important; }
+          .print-p-0 { padding: 0 !important; }
+          .print-p-4 { padding: 10pt !important; }
+          .print-p-2 { padding: 5pt !important; }
+          .print-border-black { border-bottom: 0.2pt solid #eee !important; }
         }
       `}</style>
     </div>

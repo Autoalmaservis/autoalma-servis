@@ -19,7 +19,11 @@ export default function DetailFakturyPage() {
     dic: '',
     ic_dph: '',
     bank: '',
-    swift: ''
+    swift: '',
+    phone: '', // PRIDANÉ
+    email: '', // PRIDANÉ
+    web: '',   // PRIDANÉ
+    logo_url: '' // PRIDANÉ
   });
 
   useEffect(() => {
@@ -42,6 +46,10 @@ export default function DetailFakturyPage() {
         ic_dph: data.find(s => s.id === 'company_ic_dph')?.value || '',
         bank: data.find(s => s.id === 'company_bank')?.value || '',
         swift: data.find(s => s.id === 'company_swift')?.value || '',
+        phone: data.find(s => s.id === 'company_phone')?.value || '', // DOPLNENÉ
+        email: data.find(s => s.id === 'company_email')?.value || '', // DOPLNENÉ
+        web: data.find(s => s.id === 'company_web')?.value || '',     // DOPLNENÉ
+        logo_url: data.find(s => s.id === 'company_logo')?.value || '', // DOPLNENÉ
       });
     }
   };
@@ -50,7 +58,12 @@ export default function DetailFakturyPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from('invoices')
-      .select('*')
+      .select(`
+        *,
+        job_tickets (
+          complaints
+        )
+      `)
       .eq('id', id)
       .single();
 
@@ -58,32 +71,15 @@ export default function DetailFakturyPage() {
     setLoading(false);
   };
 
-  // --- NOVÁ FUNKCIA: ZRUŠIŤ FAKTÚRU A OTVORIŤ ZÁKAZKU ---
   const handleReopenJob = async () => {
     if (!confirm("Pozor! Vymazaním faktúry sa pôvodná zákazka opäť otvorí v stave 'Dokončené'. Chcete pokračovať?")) return;
-
     try {
       setLoading(true);
-      
-      // 1. Ak máme prepojenú zákazku, vrátime jej status
       if (inv.job_id) {
-        const { error: updateError } = await supabase
-          .from('job_tickets')
-          .update({ status: 'Dokončené' })
-          .eq('id', inv.job_id);
-        
-        if (updateError) throw updateError;
+        await supabase.from('job_tickets').update({ status: 'Dokončené' }).eq('id', inv.job_id);
       }
-
-      // 2. Vymažeme faktúru
-      const { error: deleteError } = await supabase
-        .from('invoices')
-        .delete()
-        .eq('id', id);
-
-      if (deleteError) throw deleteError;
-
-      alert("Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná v zozname zákaziek.");
+      await supabase.from('invoices').delete().eq('id', id);
+      alert("Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná.");
       router.push('/zakazky');
     } catch (err) {
       alert("Chyba pri znovuotváraní: " + err.message);
@@ -94,7 +90,7 @@ export default function DetailFakturyPage() {
 
   const generateQRValue = () => {
     if (!inv || !myCompany.bank) return '';
-    return `SPD*1.0*ACC:${myCompany.bank.replace(/\s/g, '')}*AM:${inv.total_amount}*CUR:EUR*VS:${inv.invoice_number.replace(/\D/g, '')}*MSG:Oprava vozidla ${inv.car_details?.plate_number}`;
+    return `SPD*1.0*ACC:${myCompany.bank.replace(/\s/g, '')}*AM:${inv.total_amount}*CUR:EUR*VS:${String(inv.invoice_number).replace(/\D/g, '')}*MSG:Oprava vozidla ${inv.car_details?.plate || inv.car_details?.plate_number || ''}`;
   };
 
   const handlePrint = () => window.print();
@@ -111,7 +107,9 @@ export default function DetailFakturyPage() {
           <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs font-black uppercase tracking-widest font-bold">
             ← Späť
           </button>
-          
+          <button onClick={handleReopenJob} className="bg-zinc-900 border border-red-900/30 text-red-500 hover:bg-red-600 hover:text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
+            🔓 Zrušiť faktúru / Otvoriť zákazku
+          </button>
         </div>
         <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2 font-bold">
           🖨️ Tlačiť dokument
@@ -125,18 +123,73 @@ export default function DetailFakturyPage() {
           {inv.is_official ? 'INVOICE' : 'ARCHIVE'}
         </div>
 
-        {/* HLAVIČKA */}
-        <div className="flex justify-between items-start border-b-4 border-red-600 pb-10 mb-10 relative z-10 font-bold section-header">
-          <div>
-            <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none mb-4 font-bold title-main">
-              AutoAlma <span className="text-red-600 text-5xl font-bold">Servis</span>
-            </h1>
+        {/* --- TLAČOVÁ TABUĽKA HLAVIČKY (LOGO NAHRADILO TEXT) --- */}
+        <table className="print-only-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
+          <tbody>
+            <tr>
+              <td width="15%" valign="middle">
+                {/* DYNAMICKÉ LOGO PRE TLAČ */}
+                <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" style={{ width: '90px', height: 'auto', display: 'block' }} />
+              </td>
+              <td width="45%" valign="top" style={{ paddingLeft: '15pt' }}>
+                <div style={{ fontSize: '8.5pt', color: '#000', lineHeight: '1.2' }}>
+                  <p style={{ margin: '0', color: '#666', fontWeight: '900' }}>DODÁVATEĽ:</p>
+                  <p style={{ margin: '0' }}><strong>{myCompany.name}</strong></p>
+                  <p style={{ margin: '0' }}>{myCompany.address}</p>
+                  <p style={{ margin: '0' }}>{myCompany.zip} {myCompany.city}</p>
+                  <p style={{ margin: '3pt 0 0 0' }}>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
+                  <p style={{ margin: '0' }}>{myCompany.phone} | {myCompany.email}</p>
+                  {myCompany.web && <p style={{ margin: '0' }}>{myCompany.web}</p>}
+                </div>
+              </td>
+              <td width="40%" valign="top" align="right">
+                <h2 style={{ fontSize: '14pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
+                <p style={{ fontSize: '24pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{inv.invoice_number}</p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum: <strong>{new Date(inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* --- TLAČOVÁ TABUĽKA ADRIES --- */}
+        <table className="print-only-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
+          <tbody>
+            <tr>
+              <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
+                <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>ODBERATEĽ:</p>
+                <p style={{ margin: '0', fontSize: '11pt', color: '#000', fontWeight: '900' }}>{inv.company_details?.company_name || inv.customer_name}</p>
+                <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.company_details?.address || '---'}</p>
+                <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.company_details?.zip} {inv.company_details?.city}</p>
+                <div style={{ marginTop: '5pt', fontSize: '8.5pt', color: '#000' }}>
+                    {inv.company_details?.ico && <p style={{ margin: '0' }}>IČO: {inv.company_details.ico}</p>}
+                    {inv.company_details?.dic && <p style={{ margin: '0' }}>DIČ: {inv.company_details.dic}</p>}
+                    {inv.company_details?.ic_dph && <p style={{ margin: '0' }}>IČ DPH: {inv.company_details.ic_dph}</p>}
+                </div>
+              </td>
+              <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
+                <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>VOZIDLO:</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ border: '1.5pt solid #000', padding: '1pt 4pt', fontWeight: '900', fontSize: '11pt', color: '#000' }}>{inv.car_details?.plate_number || inv.car_details?.plate || '---'}</span>
+                  <span style={{ fontSize: '10pt', fontWeight: '900', color: '#000' }}>{inv.car_details?.brand_model || inv.car_details?.brand || 'Vozidlo'}</span>
+                </div>
+                <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>VIN: {inv.car_details?.vin_number || inv.car_details?.vin || '---'}</p>
+                <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {inv.car_details?.mileage || '---'}</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* WEB HLAVIČKA (LOGO NAHRADILO TEXT) */}
+        <div className="flex justify-between items-start border-b-4 border-red-600 pb-10 mb-10 relative z-10 font-bold section-header no-print">
+          <div className="flex items-center gap-6">
+            <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" className="w-24 h-auto brightness-0 invert" />
             <div className="text-[10px] text-zinc-400 uppercase tracking-widest leading-relaxed space-y-1 font-black company-info">
               <p className="text-white font-black italic label-supplier">Dodávateľ:</p>
               <p className="text-white company-name">{myCompany.name}</p>
               <p>{myCompany.address}, {myCompany.zip} {myCompany.city}</p>
               <p>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
-              {myCompany.ic_dph && <p>IČ DPH: {myCompany.ic_dph}</p>}
+              <p>{myCompany.phone} | {myCompany.email}</p>
+              {myCompany.web && <p className="text-red-500 lowercase italic">{myCompany.web}</p>}
             </div>
           </div>
           <div className="text-right font-bold invoice-meta">
@@ -144,197 +197,167 @@ export default function DetailFakturyPage() {
               {inv.is_official ? 'Faktúra' : 'Servisný záznam'}
             </h2>
             <p className="text-3xl font-black tracking-tighter mb-4 doc-number">{inv.invoice_number}</p>
-            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black date-info">
-              <p>Dátum vystavenia: <span className="text-white date-val">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</span></p>
-            </div>
-          </div>
-        </div>
-
-        {/* ODBERATEĽ A VOZIDLO */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12 font-bold section-clients">
-          <div className="bg-black/30 p-8 rounded-3xl border border-zinc-800 shadow-inner font-bold client-box">
-            <p className="text-[9px] text-red-600 font-black uppercase tracking-[0.3em] mb-4 italic font-bold">Odberateľ:</p>
-            <div className="space-y-1 font-bold">
-              <p className="text-2xl font-black uppercase italic tracking-tighter leading-none mb-2 font-bold client-name">{inv.customer_name}</p>
-              <p className="text-xs text-zinc-400 font-bold">{inv.customer_email}</p>
-              <p className="text-xs text-zinc-400 font-bold mb-4">{inv.customer_phone}</p>
-              {inv.company_details?.ico && (
-                <div className="pt-4 border-t border-zinc-800/50 text-[10px] uppercase font-bold text-zinc-500 font-bold">
-                   <p>IČO: {inv.company_details.ico} | DIČ: {inv.company_details.dic}</p>
-                   {inv.company_details.ic_dph && <p>IČ DPH: {inv.company_details.ic_dph}</p>}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-zinc-800/20 p-8 rounded-3xl border border-zinc-800 shadow-inner font-bold car-box">
-            <p className="text-[9px] text-zinc-600 font-black uppercase tracking-[0.3em] mb-4 italic font-bold">Vozidlo:</p>
-            <div className="space-y-3 font-bold">
-              <span className="bg-white text-black px-4 py-1 rounded-lg font-black text-lg tracking-widest uppercase inline-block shadow-2xl font-bold plate-val">
-                {inv.car_details?.plate_number}
-              </span>
-              <p className="text-xl font-black uppercase italic tracking-tighter font-bold car-model">{inv.car_details?.brand_model}</p>
-              <div className="text-[10px] uppercase font-black space-y-1 text-zinc-400 car-meta">
-                <p className="flex justify-between font-bold"><span>VIN:</span> <span className="text-zinc-300 font-mono tracking-widest font-bold">{inv.car_details?.vin || '---'}</span></p>
-                <p className="flex justify-between font-bold"><span>Stav km:</span> <span className="text-zinc-300 font-bold">{inv.car_details?.mileage || '---'} KM</span></p>
-              </div>
+            <div className="mt-4 text-[10px] text-zinc-400 uppercase text-right">
+                <p className="text-blue-500 font-black italic">Odberateľ:</p>
+                <p className="text-white font-black">{inv.company_details?.company_name || inv.customer_name}</p>
+                <p>{inv.company_details?.ico ? `IČO: ${inv.company_details.ico}` : ''} {inv.company_details?.dic ? `| DIČ: ${inv.company_details.dic}` : ''}</p>
             </div>
           </div>
         </div>
 
         {/* TABUĽKA POLOŽIEK */}
-        <div className="mb-12 font-bold table-container">
-          <table className="w-full text-left font-bold items-table">
+        <div className="mb-6 font-bold table-container">
+          <table className="w-full text-left font-bold items-table" style={{ borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="bg-zinc-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 font-bold">
-                <th className="p-4 rounded-l-xl font-bold">Položka / Úkon</th>
-                <th className="p-4 text-center font-bold">Množstvo</th>
-                <th className="p-4 text-right font-bold">Cena / J</th>
-                <th className="p-4 text-right rounded-r-xl font-bold">Spolu bez DPH</th>
+              <tr className="bg-zinc-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 font-bold print-header-row">
+                <th className="p-4 border-b border-black print-p1">Položka / Úkon</th>
+                <th className="p-4 text-center border-b border-black print-p1">Množstvo</th>
+                <th className="p-4 text-right border-b border-black print-p1">Cena / J</th>
+                <th className="p-4 text-right border-b border-black print-p1">Spolu bez DPH</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800 font-black uppercase italic text-xs font-bold">
+            <tbody className="divide-y divide-zinc-800 font-black uppercase italic text-xs font-bold print-body-rows">
               {inv.items_json?.map((item, idx) => (
                 <tr key={idx} className="hover:bg-white/5 transition-all">
-                  <td className="p-4 py-6 border-zinc-800 font-bold">
-                    <p className="text-white font-bold item-name">{item.name}</p>
-                    <span className="text-[8px] text-zinc-600 font-bold tracking-widest font-bold item-type">{item.type}</span>
+                  <td className="p-4 py-6 border-zinc-800 font-bold print-py1">
+                    <p className="text-white font-bold item-name print-text-black">{item.name}</p>
+                    <span className="text-[8px] text-zinc-600 font-bold tracking-widest font-bold item-type no-print">{item.type}</span>
                   </td>
-                  <td className="p-4 text-center text-zinc-400 font-mono font-bold">{item.quantity} {item.unit}</td>
-                  <td className="p-4 text-right text-zinc-400 font-mono font-bold">{parseFloat(item.unit_price).toFixed(2)} €</td>
-                  <td className="p-4 text-right text-white font-black font-bold">{(item.quantity * item.unit_price).toFixed(2)} €</td>
+                  <td className="p-4 text-center text-zinc-400 font-mono font-bold print-py1 print-text-black">{item.quantity} {item.unit}</td>
+                  <td className="p-4 text-right text-zinc-400 font-mono font-bold print-py1 print-text-black">{parseFloat(item.unit_price).toFixed(2)} €</td>
+                  <td className="p-4 text-right text-white font-black font-bold print-py1 print-text-black">{(item.quantity * item.unit_price).toFixed(2)} €</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* PLATOBNÉ INFO + QR KÓD */}
-        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 font-bold border-t border-zinc-800 pt-10 footer-section">
-          
-          <div className="flex gap-8 items-center payment-info-area">
-             {myCompany.bank && inv.is_official && (
-               <div className="bg-white p-3 rounded-2xl shadow-2xl no-print qr-code">
-                  <QRCodeSVG value={generateQRValue()} size={120} level="H" />
-                  <p className="text-[7px] text-black font-black uppercase text-center mt-2 tracking-tighter">Skenujte pre platbu</p>
-               </div>
-             )}
-             {myCompany.bank && inv.is_official && (
-               <div className="hidden print-block qr-print">
-                  <QRCodeSVG value={generateQRValue()} size={100} level="H" />
-               </div>
-             )}
+        {/* TLAČOVÁ PÄTA (PLATBA + SUMÁR V TABUĽKE) */}
+        <div className="print-footer-area">
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10pt' }}>
+            <tbody>
+              <tr>
+                <td width="60%" valign="top">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15pt' }}>
+                    {myCompany.bank && inv.is_official && <QRCodeSVG value={generateQRValue()} size={85} level="H" />}
+                    <div style={{ fontSize: '9pt', color: '#000', lineHeight: '1.2' }}>
+                      <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
+                      <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
+                      <p style={{ margin: '0' }}>VS: <strong>{String(inv.invoice_number).replace(/\D/g, '')}</strong></p>
+                      <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
+                      <p style={{ marginTop: '5pt', fontSize: '8pt', color: '#666' }}>Vystavil: {myCompany.name}</p>
+                    </div>
+                  </div>
+                </td>
+                <td width="40%" valign="top">
+                  <div style={{ border: '1.5pt solid #000', padding: '8pt', background: '#f9f9f9' }}>
+                    <table width="100%" style={{ borderCollapse: 'collapse' }}>
+                      <tbody>
+                        <tr style={{ fontSize: '9pt', color: '#000' }}>
+                          <td style={{ paddingBottom: '2pt' }}>Základ dane:</td>
+                          <td align="right">{inv.subtotal_amount.toFixed(2)} €</td>
+                        </tr>
+                        <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
+                          <td style={{ paddingBottom: '2pt' }}>DPH (23%):</td>
+                          <td align="right">{inv.tax_amount.toFixed(2)} €</td>
+                        </tr>
+                        <tr style={{ color: '#000' }}>
+                          <td style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '11pt', color: '#dc2626' }}>CELKOM:</td>
+                          <td align="right" style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '18pt' }}>{inv.total_amount.toFixed(2)} €</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
+          <table style={{ width: '100%', marginTop: '3cm', borderCollapse: 'collapse' }}>
+            <tbody>
+              <tr>
+                <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>
+                  PODPIS PREVZAL (ZÁKAZNÍK)
+                </td>
+                <td width="10%"></td>
+                <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>
+                  PEČIATKA A PODPIS SERVISU
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* WEB SUMÁR (SKRYTÝ PRI TLAČI) */}
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 font-bold border-t border-zinc-800 pt-10 footer-section no-print">
+          <div className="flex gap-8 items-center payment-info-area">
+             {myCompany.bank && inv.is_official && <div className="bg-white p-3 rounded-2xl shadow-2xl no-print"><QRCodeSVG value={generateQRValue()} size={120} level="H" /></div>}
              <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold bank-details">
                 <p className="text-zinc-400">Platobné informácie:</p>
-                <p className="text-white font-black mt-1 uppercase tracking-tight text-sm bank-iban">{myCompany.bank || 'Platba v hotovosti'}</p>
-                {myCompany.swift && <p className="text-zinc-500 mt-1">SWIFT/BIC: {myCompany.swift}</p>}
-                <p className="text-zinc-500 mt-1">Variabilný symbol: {inv.invoice_number.replace(/\D/g, '')}</p>
-                <p className="mt-4">Vystavil: Maroš - AutoAlma</p>
+                <p className="text-white font-black mt-1 uppercase text-sm bank-iban">{myCompany.bank || 'Platba v hotovosti'}</p>
+                <p className="text-zinc-500 mt-1">Variabilný symbol: {String(inv.invoice_number).replace(/\D/g, '')}</p>
+                <p className="text-red-600 mt-1">Splatnosť: {inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : '---'}</p>
              </div>
           </div>
-          
           <div className="bg-black p-10 rounded-[2.5rem] border border-zinc-800 min-w-[340px] space-y-4 shadow-2xl font-bold totals-box">
-            <div className="flex justify-between text-[10px] font-black text-zinc-500 uppercase tracking-widest font-bold">
-              <span>Základ dane:</span>
-              <span>{inv.subtotal_amount.toFixed(2)} €</span>
-            </div>
-            <div className="flex justify-between text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800 pb-4 font-bold">
-              <span>DPH (23%):</span>
-              <span>{inv.tax_amount.toFixed(2)} €</span>
-            </div>
-            <div className="flex justify-between items-end pt-2 font-bold">
-              <span className="text-red-600 font-black uppercase italic tracking-tighter text-2xl leading-none font-bold total-label">Celkom k úhrade:</span>
-              <span className="text-5xl font-black italic tracking-tighter leading-none text-white font-bold total-val">{inv.total_amount.toFixed(2)} <span className="text-red-600 text-lg font-bold">€</span></span>
+            <div className="flex justify-between text-[10px] font-black text-zinc-500 uppercase tracking-widest"><span>Základ dane:</span><span>{inv.subtotal_amount.toFixed(2)} €</span></div>
+            <div className="flex justify-between items-end pt-2">
+              <span className="text-red-600 font-black uppercase text-2xl">Celkom k úhrade:</span>
+              <span className="text-5xl font-black text-white">{inv.total_amount.toFixed(2)} <span className="text-red-600 text-lg">€</span></span>
             </div>
           </div>
         </div>
 
-        <div className="hidden print-block mt-16 grid grid-cols-2 gap-20 text-center text-black font-black uppercase italic text-[10px] tracking-widest font-bold signatures">
-          <div className="border-t border-black pt-4 font-bold">Pečiatka a podpis servisu</div>
-          <div className="border-t border-black pt-4 font-bold">Podpis prevzal (zákazník)</div>
-        </div>
+        {/* SEKCIJA ZÁVAD */}
+        {inv.job_tickets?.complaints && (
+          <div className="mt-6 p-6 bg-red-600/5 border border-red-900/20 rounded-[2rem] complaints-box print-complaints">
+            <p className="text-[9px] text-red-600 font-black uppercase tracking-[0.3em] mb-3 italic">Upozornenie servisu:</p>
+            <p className="text-[11px] text-zinc-400 font-bold whitespace-pre-wrap uppercase leading-relaxed print-text-black">
+              {inv.job_tickets.complaints}
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* --- BRUTÁLNE ČISTÁ TLAČ (BEZ ČIERNYCH BLOKOV) --- */}
       <style jsx global>{`
-        .print-block { display: none; }
+        .print-only-table, .print-footer-area { display: none; }
+        
         @media print {
-          @page { size: A4; margin: 1.5cm; }
-          
-          /* Úplné zrušenie webového prostredia */
+          @page { 
+            size: A4; 
+            margin: 0 !important; /* ODSTRÁNI URL A DÁTUM PREHLIADAČA */
+          }
           html, body { 
             background: #fff !important; 
             color: #000 !important; 
             height: auto !important;
-            overflow: visible !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important; 
           }
-          
-          /* Skrytie nepotrebných prvkov */
-          .no-print, .absolute.top-10.right-10, ::-webkit-scrollbar { display: none !important; }
-          .print-block { display: block !important; }
+          ::-webkit-scrollbar, .no-print, .absolute.top-10.right-10 { display: none !important; }
+          .print-only-table, .print-footer-area { display: table !important; }
+          .print-footer-area { display: block !important; }
           .min-h-screen { min-height: 0 !important; padding: 0 !important; background: #fff !important; }
           
-          /* Čistý papierový kontajner */
           .printable-area { 
             background: #fff !important; 
             color: #000 !important; 
             border: none !important; 
             box-shadow: none !important; 
-            padding: 0 !important; 
-            margin: 0 !important;
+            padding: 2cm 1.5cm 1.5cm 1.5cm !important; /* Horný okraj nastavený na 2cm */
+            margin: 0 !important; 
             width: 100% !important; 
             max-width: none !important; 
             border-radius: 0 !important;
-            overflow: visible !important;
           }
-
-          /* Resetovanie farieb všetkého textu */
-          p, span, h1, h2, h3, h4, td, th, div { 
-            color: #000 !important; 
-            background: none !important; 
-            text-shadow: none !important;
-          }
-
-          /* Úprava hlavičky */
-          .section-header { 
-            border-bottom: 3pt solid #000 !important; 
-            padding-bottom: 20pt !important; 
-            margin-bottom: 30pt !important; 
-          }
-
-          /* Odstránenie tmavých boxov - nahradenie tenkou čiarou */
-          .client-box, .car-box, .totals-box, .items-table thead tr { 
-            background: #fff !important; 
-            border: 1pt solid #000 !important; 
-            border-radius: 0 !important;
-            padding: 10pt !important;
-            box-shadow: none !important;
-          }
-
-          /* Tabuľka - čisté linky */
-          table { width: 100% !important; border-collapse: collapse !important; }
-          th { border-bottom: 2pt solid #000 !important; background: #f0f0f0 !important; color: #000 !important; }
-          td { border-bottom: 0.5pt solid #eee !important; padding: 8pt !important; }
-          
-          /* ŠPZ bez čierneho pozadia */
-          .plate-val { 
-            background: #fff !important; 
-            color: #000 !important; 
-            border: 2pt solid #000 !important; 
-            padding: 2pt 10pt !important;
-            display: inline-block !important;
-          }
-
-          /* Sumár - bez čiernej, len s čiarou */
-          .totals-box { 
-            border: 2pt solid #000 !important; 
-            background: #fff !important;
-          }
-          
-          .border-zinc-800, .border-b, .border-t { border-color: #000 !important; }
+          p, span, h1, h2, h3, h4, td, th, div { color: #000 !important; background: none !important; }
+          .print-text-black { color: #000 !important; }
+          .print-p1 { padding: 3pt !important; }
+          .print-py1 { padding-top: 3pt !important; padding-bottom: 3pt !important; }
+          .print-body-rows td { border-bottom: 0.5pt solid #eee !important; font-size: 8.5pt !important; }
+          .print-header-row th { background: #f4f4f5 !important; -webkit-print-color-adjust: exact; border-bottom: 2pt solid #000 !important; font-size: 8pt !important; padding: 4pt !important; }
+          .print-complaints { border: 1pt solid #000 !important; background: #fff !important; padding: 10pt !important; border-radius: 0 !important; margin-top: 15pt !important; }
         }
       `}</style>
     </div>

@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { useRouter } from 'next/navigation'; // ZACHOVANÝ IMPORT
+import { useRouter } from 'next/navigation';
 
 export default function NastaveniaPage() {
-  const router = useRouter(); // INICIALIZÁCIA ROUTERA
+  const router = useRouter();
 
   // Stav pre prepínanie záložiek
   const [activeTab, setActiveTab] = useState('pracovna_doba');
@@ -22,6 +22,13 @@ export default function NastaveniaPage() {
   const [newSmsLabel, setNewSmsLabel] = useState('');
   const [newSmsContent, setNewSmsContent] = useState('');
 
+  // --- STAVY PRE ČASOVÉ NORMY ---
+  const [serviceCategories, setServiceCategories] = useState([]);
+  const [serviceNorms, setServiceNorms] = useState([]);
+  const [newCatName, setNewCatName] = useState('');
+  const [newNorm, setNewNorm] = useState({ category_id: '', service_name: '', duration_minutes: 30 });
+  const [normFilter, setNormFilter] = useState('all'); // Filter pre zoznam noriem
+
   // Stavy pre MODÁLNE OKNO (Editácia zamestnanca)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', password: '' });
@@ -30,7 +37,7 @@ export default function NastaveniaPage() {
   const [workStart, setWorkStart] = useState('07:00');
   const [workEnd, setWorkEnd] = useState('17:00');
 
-  // STAVY PRE FAKTURAČNÉ ÚDAJE FIRMY
+  // STAVY PRE FAKTURAČNÉ ÚDAJE FIRMY (DOPLNENÉ)
   const [billingData, setBillingData] = useState({
     company_name: '',
     address: '',
@@ -41,7 +48,9 @@ export default function NastaveniaPage() {
     ic_dph: '',
     email: '',
     phone: '',
-    bank_account: ''
+    web_address: '', // DOPLNENÉ
+    bank_account: '',
+    logo_url: '' // DOPLNENÉ
   });
 
   // Stavy pre hodinové sadzby
@@ -56,6 +65,7 @@ export default function NastaveniaPage() {
   const [saveStatus, setSaveStatus] = useState('');
   const [billingSaveStatus, setBillingSaveStatus] = useState('');
   const [ratesSaveStatus, setRatesSaveStatus] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false); // DOPLNENÉ
 
   // 1. Načítanie všetkých dát
   const fetchData = async () => {
@@ -76,6 +86,13 @@ export default function NastaveniaPage() {
       .order('label', { ascending: true });
     if (smsData) setSmsTemplates(smsData);
 
+    // --- NAČÍTANIE NORIEM A KATEGÓRIÍ ---
+    const { data: catData } = await supabase.from('service_categories').select('*').order('name', { ascending: true });
+    if (catData) setServiceCategories(catData);
+
+    const { data: normData } = await supabase.from('service_norms').select('*, service_categories(name)').order('service_name', { ascending: true });
+    if (normData) setServiceNorms(normData);
+
     // Načítanie nastavení z business_settings
     const { data: setData } = await supabase.from('business_settings').select('*');
     if (setData) {
@@ -85,7 +102,7 @@ export default function NastaveniaPage() {
       if (start) setWorkStart(start);
       if (end) setWorkEnd(end);
 
-      // Firemné údaje
+      // Firemné údaje (DOPLNENÉ)
       setBillingData({
         company_name: setData.find(s => s.id === 'company_name')?.value || '',
         address: setData.find(s => s.id === 'company_address')?.value || '',
@@ -96,7 +113,9 @@ export default function NastaveniaPage() {
         ic_dph: setData.find(s => s.id === 'company_ic_dph')?.value || '',
         email: setData.find(s => s.id === 'company_email')?.value || '',
         phone: setData.find(s => s.id === 'company_phone')?.value || '',
+        web_address: setData.find(s => s.id === 'company_web')?.value || '',
         bank_account: setData.find(s => s.id === 'company_bank')?.value || '',
+        logo_url: setData.find(s => s.id === 'company_logo')?.value || '',
       });
 
       // Hodinové sadzby
@@ -111,6 +130,75 @@ export default function NastaveniaPage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // --- LOGIKA PRE LOGO UPLOAD (DOPLNENÉ - OPRAVENÁ FUNKCIA NA getPublicUrl) ---
+  const handleLogoUpload = async (e) => {
+    try {
+      setUploadingLogo(true);
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `logo-${Date.now()}.${fileExt}`;
+
+      // 1. Nahrať do Storage
+      const { error: uploadError } = await supabase.storage
+        .from('logos')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Získať verejnú URL (Opravené na getPublicUrl)
+      const { data: { publicUrl } } = supabase.storage
+        .from('logos')
+        .getPublicUrl(fileName);
+
+      // 3. Uložiť URL do business_settings
+      const { error: dbError } = await supabase
+        .from('business_settings')
+        .upsert({ id: 'company_logo', value: publicUrl });
+
+      if (dbError) throw dbError;
+
+      setBillingData(prev => ({ ...prev, logo_url: publicUrl }));
+      alert("Logo bolo nahraté!");
+    } catch (err) {
+      alert("Chyba nahrávania: " + err.message);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  // --- LOGIKA PRE ČASOVÉ NORMY ---
+  const addCategory = async (e) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+    const { error } = await supabase.from('service_categories').insert([{ name: newCatName.toUpperCase() }]);
+    if (!error) { setNewCatName(''); fetchData(); }
+  };
+
+  const deleteCategory = async (id) => {
+    if (!confirm('Zmazaním kategórie zmažete aj všetky priradené normy. Pokračovať?')) return;
+    await supabase.from('service_categories').delete().eq('id', id);
+    fetchData();
+  };
+
+  const addServiceNorm = async (e) => {
+    e.preventDefault();
+    if (!newNorm.service_name || !newNorm.category_id) return;
+    const { error } = await supabase.from('service_norms').insert([newNorm]);
+    if (!error) { setNewNorm({ ...newNorm, service_name: '' }); fetchData(); }
+  };
+
+  const updateServiceNorm = async (id, field, value) => {
+    await supabase.from('service_norms').update({ [field]: value }).eq('id', id);
+  };
+
+  const deleteNorm = async (id) => {
+    if (!confirm('Naozaj vymazať túto normu?')) return;
+    await supabase.from('service_norms').delete().eq('id', id);
+    fetchData();
+  };
 
   // --- LOGIKA PRE SMS ŠABLÓNY ---
   const addSmsTemplate = async (e) => {
@@ -253,6 +341,7 @@ export default function NastaveniaPage() {
       { id: 'company_ic_dph', value: billingData.ic_dph },
       { id: 'company_email', value: billingData.email },
       { id: 'company_phone', value: billingData.phone },
+      { id: 'company_web', value: billingData.web_address }, 
       { id: 'company_bank', value: billingData.bank_account },
     ];
     const { error } = await supabase.from('business_settings').upsert(payload);
@@ -270,7 +359,7 @@ export default function NastaveniaPage() {
       { id: 'rate_e1', value: rates.e1 },
       { id: 'rate_e2', value: rates.e2 },
     ];
-    const { error } = await supabase.from('business_settings').upsert(payload);
+    const { error = null } = await supabase.from('business_settings').upsert(payload);
     if (!error) {
       setRatesSaveStatus('Uložené!');
       setTimeout(() => setRatesSaveStatus(''), 3000);
@@ -307,13 +396,18 @@ export default function NastaveniaPage() {
           💰 Hodinové sadzby
         </button>
         <button 
+          onClick={() => setActiveTab('normy')}
+          className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'normy' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
+        >
+          ⏱️ Normy prác
+        </button>
+        <button 
           onClick={() => setActiveTab('sms_templates')}
           className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'sms_templates' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
         >
           📱 SMS Šablóny
         </button>
         
-        {/* --- PRIDANÉ TLAČIDLO SYNC & BACKUP --- */}
         <button 
           onClick={() => router.push('/nastavenia/import-export')}
           className="px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 text-zinc-500 hover:text-white hover:bg-zinc-800"
@@ -381,7 +475,83 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        {/* --- SEKCIJA 3: SMS ŠABLÓNY --- */}
+        {/* --- SEKCIJA 3: ČASOVÉ NORMY --- */}
+        {activeTab === 'normy' && (
+          <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
+              <h3 className="text-sm font-black uppercase text-red-600 tracking-widest italic mb-6">Správa kategórií prác</h3>
+              <form onSubmit={addCategory} className="flex gap-4 mb-8">
+                <input required type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="Názov (napr. MOTOR)" className="flex-grow bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 uppercase" />
+                <button type="submit" className="bg-white text-black font-black px-8 py-4 rounded-xl uppercase text-[10px] hover:bg-red-600 hover:text-white transition-all">Pridať +</button>
+              </form>
+              <div className="flex flex-wrap gap-3">
+                {serviceCategories.map(cat => (
+                  <div key={cat.id} className="bg-zinc-800 px-4 py-2 rounded-full border border-zinc-700 flex items-center gap-3">
+                    <span className="text-[10px] font-black uppercase">{cat.name}</span>
+                    <button onClick={() => deleteCategory(cat.id)} className="text-red-500 hover:text-white font-bold">✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h3 className="text-sm font-black uppercase text-blue-500 tracking-widest italic">Zoznam úkonov</h3>
+                <select 
+                  value={normFilter} 
+                  onChange={(e) => setNormFilter(e.target.value)}
+                  className="bg-black border border-zinc-800 p-3 rounded-xl text-zinc-500 text-[10px] font-black uppercase outline-none focus:border-blue-600 cursor-pointer"
+                >
+                  <option value="all">Všetky kategórie</option>
+                  {serviceCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                </select>
+              </div>
+
+              <form onSubmit={addServiceNorm} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10 border-b border-zinc-800 pb-10">
+                <select required value={newNorm.category_id} onChange={(e) => setNewNorm({ ...newNorm, category_id: e.target.value })} className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none">
+                  <option value="">-- Vyberte kategóriu --</option>
+                  {serviceCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                </select>
+                <input required type="text" value={newNorm.service_name} onChange={(e) => setNewNorm({ ...newNorm, service_name: e.target.value })} placeholder="Názov úkonu..." className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" />
+                <div className="flex gap-2">
+                  <input required type="number" value={newNorm.duration_minutes} onChange={(e) => setNewNorm({ ...newNorm, duration_minutes: parseInt(e.target.value) })} className="w-24 bg-black border border-zinc-800 p-4 rounded-xl text-center" />
+                  <button type="submit" className="flex-grow bg-red-600 text-white font-black py-4 rounded-xl uppercase text-[10px]">Uložiť normu</button>
+                </div>
+              </form>
+
+              <div className="space-y-4">
+                {serviceNorms
+                  .filter(n => normFilter === 'all' || n.category_id === normFilter)
+                  .map(norm => (
+                  <div key={norm.id} className="bg-black/40 border border-zinc-800 p-5 rounded-3xl flex justify-between items-center group hover:border-red-600/30 transition-all">
+                    <div className="flex-grow mr-6">
+                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest block mb-1">{norm.service_categories?.name}</span>
+                      <input 
+                        className="bg-transparent border-none text-sm font-black uppercase italic text-zinc-200 w-full focus:ring-0 p-0"
+                        defaultValue={norm.service_name}
+                        onBlur={(e) => updateServiceNorm(norm.id, 'service_name', e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <span className="text-[8px] text-zinc-600 block uppercase mb-1 font-black">Minúty</span>
+                        <input 
+                          type="number"
+                          className="bg-zinc-900 border border-zinc-800 rounded-xl text-lg font-black w-24 text-center focus:border-red-600 outline-none p-1"
+                          defaultValue={norm.duration_minutes}
+                          onBlur={(e) => updateServiceNorm(norm.id, 'duration_minutes', parseInt(e.target.value))}
+                        />
+                      </div>
+                      <button onClick={() => deleteNorm(norm.id)} className="p-3 bg-zinc-800 rounded-xl hover:bg-red-600 transition-all">🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* --- SEKCIJA 4: SMS ŠABLÓNY --- */}
         {activeTab === 'sms_templates' && (
           <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
@@ -418,14 +588,47 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        {/* --- SEKCIJA 4: FAKTURÁCIA --- */}
+        {/* --- SEKCIJA 5: FAKTURÁCIA --- */}
         {activeTab === 'fakturacia' && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3rem] shadow-2xl space-y-6">
+            <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3rem] shadow-2xl space-y-8">
+              
+              {/* NAHRÁVANIE LOGA */}
+              <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50 flex flex-col md:flex-row items-center gap-6">
+                <div className="w-24 h-24 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center overflow-hidden">
+                   {billingData.logo_url ? (
+                     <img src={billingData.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                   ) : (
+                     <span className="text-[9px] text-zinc-600 uppercase text-center p-2">Logo chýba</span>
+                   )}
+                </div>
+                <div className="flex-grow text-center md:text-left">
+                  <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 italic">Logo firmy</p>
+                  <label className="cursor-pointer inline-block bg-zinc-800 hover:bg-zinc-700 px-6 py-2 rounded-xl text-[10px] transition-all">
+                    {uploadingLogo ? 'Nahrávam...' : 'Vybrať a nahrať logo'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                  </label>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-6">
                 <div>
                   <label className="block text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest ml-1 italic">Názov firmy</label>
                   <input type="text" value={billingData.company_name} onChange={(e) => setBillingData({...billingData, company_name: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest ml-1 italic">Firemný telefón</label>
+                    <input type="text" value={billingData.phone} onChange={(e) => setBillingData({...billingData, phone: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" placeholder="+421..." />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest ml-1 italic">Firemný e-mail</label>
+                    <input type="email" value={billingData.email} onChange={(e) => setBillingData({...billingData, email: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" placeholder="servis@..." />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest ml-1 italic">Webová adresa</label>
+                    <input type="text" value={billingData.web_address} onChange={(e) => setBillingData({...billingData, web_address: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" placeholder="www.firma.sk" />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -457,10 +660,9 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        {/* --- SEKCIJA 5: TÍM --- */}
+        {/* --- SEKCIJA 6: TÍM --- */}
         {activeTab === 'tim' && (
           <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* Formulár pre nového zamestnanca */}
             <form onSubmit={addEmployee} className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-[3rem] shadow-xl space-y-6">
               <h3 className="text-sm font-black uppercase text-red-600 tracking-widest italic ml-2">Vytvoriť nový prístup</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -481,7 +683,6 @@ export default function NastaveniaPage() {
               </div>
             </form>
 
-            {/* Zoznam zamestnancov */}
             <div className="space-y-6">
               <h3 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.3em] ml-2 italic">Aktuálny zoznam tímu</h3>
               <div className="grid gap-3">

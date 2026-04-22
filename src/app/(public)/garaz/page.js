@@ -28,6 +28,13 @@ export default function GarazPage() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [bookingType, setBookingType] = useState('manual'); // NOVÉ: 'manual' alebo 'auto'
 
+  // --- NOVÉ STAVY PRE DYNAMICKÝ VÝBER PRÁC ---
+  const [categories, setCategories] = useState([]);
+  const [norms, setNorms] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedNorms, setSelectedNorms] = useState([]); // "Košík" vybratých prác
+  const [customIssue, setCustomIssue] = useState(''); // Manuálny popis
+
   // POMOCNÉ STAVY PRE NOVÝ VÝBER TERMÍNU
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
@@ -88,9 +95,12 @@ export default function GarazPage() {
         // 1. Načítanie notifikácií
         fetchNotifications(user.id);
         
-        // 2. Real-time odber nových správ - OPRAVENÉ NA UNIVERZÁLNY KANÁL
+        // 2. Načítanie dát pre servisné práce
+        fetchServiceData();
+
+        // 3. Real-time odber nových správ
         channel = supabase
-          .channel(`room-${Math.random()}`) // Unikátny názov pre každý render zabráni chybe
+          .channel(`room-${Math.random()}`) 
           .on('postgres_changes', { 
             event: 'INSERT', 
             schema: 'public', 
@@ -140,11 +150,17 @@ export default function GarazPage() {
 
     checkUserAndData();
 
-    // CLEANUP
     return () => {
       if (channel) supabase.removeChannel(channel);
     };
   }, []);
+
+  const fetchServiceData = async () => {
+    const { data: cats } = await supabase.from('service_categories').select('*').order('name', { ascending: true });
+    const { data: nrms } = await supabase.from('service_norms').select('*').order('service_name', { ascending: true });
+    if (cats) setCategories(cats);
+    if (nrms) setNorms(nrms);
+  };
 
   // --- LOGIKA NOTIFIKÁCIÍ (EXTRA MODAL) ---
   const fetchNotifications = async (userId) => {
@@ -180,14 +196,12 @@ export default function GarazPage() {
     setIsInvoiceListOpen(true);
     setInvoiceLoading(true);
     try {
-      // Hľadáme faktúry podľa plate_number v tabuľke invoices
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
-        .ilike('car_details->>plate', plate) // Ak je plate v JSONB stĺpci car_details
+        .ilike('car_details->>plate', plate) 
         .order('created_at', { ascending: false });
       
-      // Fallback ak nemáš plate v JSON ale ako samostatný stĺpec
       if (error || (data && data.length === 0)) {
          const { data: fallbackData } = await supabase
           .from('invoices')
@@ -209,11 +223,22 @@ export default function GarazPage() {
   const openOrderModal = (vehicle) => {
     setOrderingVehicle(vehicle);
     setIssues(['']); 
-    setPreferredDate('');
+    setCustomIssue('');
     setSelectedDay('');
     setSelectedSlot('');
+    setSelectedNorms([]);
+    setSelectedCategory('');
     setBookingType('manual');
     setIsOrderModalOpen(true);
+  };
+
+  const addNormToSelection = (norm) => {
+    if (selectedNorms.find(n => n.id === norm.id)) return;
+    setSelectedNorms([...selectedNorms, norm]);
+  };
+
+  const removeNormFromSelection = (id) => {
+    setSelectedNorms(selectedNorms.filter(n => n.id !== id));
   };
 
   const addIssueField = () => setIssues([...issues, '']);
@@ -226,13 +251,12 @@ export default function GarazPage() {
 
   const handleFinalizeOrder = async (e) => {
     e.preventDefault();
-    const filteredIssues = issues.filter(i => i.trim() !== '');
-    if (filteredIssues.length === 0) {
-      alert("Napíšte prosím aspoň jednu závadu.");
+    
+    if (selectedNorms.length === 0 && !customIssue.trim()) {
+      alert("Prosím vyberte aspoň jednu prácu alebo popíšte závadu.");
       return;
     }
     
-    // Kontrola: Ak je manuálne, musí byť čas. Deň musí byť vždy.
     if (!selectedDay) {
       alert("Prosím vyberte si deň príchodu.");
       return;
@@ -245,28 +269,32 @@ export default function GarazPage() {
     setOrderLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const fullDescription = filteredIssues.map((text, idx) => `${idx + 1}. ${text}`).join('\n');
       
-      // Ak je 'auto', nastavíme čas na 07:00 ráno
+      const totalMinutes = selectedNorms.reduce((acc, curr) => acc + curr.duration_minutes, 0) || 60;
+      const worksList = selectedNorms.map((p, idx) => `${idx + 1}. ${p.service_name}`).join('\n');
+      const finalDescription = customIssue 
+        ? `${worksList}\n\nPOZNÁMKA: ${customIssue}` 
+        : worksList;
+
       const finalDateTime = bookingType === 'manual' 
         ? `${selectedDay}T${selectedSlot}:00` 
         : `${selectedDay}T07:00:00`;
 
       const startTime = new Date(finalDateTime);
-      const endTime = new Date(startTime.getTime() + 60 * 60000); 
+      const endTime = new Date(startTime.getTime() + totalMinutes * 60000); 
+      
+      const endTimeStr = `${selectedDay}T${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}:00`;
 
       const { error } = await supabase
         .from('calendar_events')
         .insert([{
           title: bookingType === 'manual' ? `OBJEDNÁVKA: ${orderingVehicle.license_plate}` : `FLEXI: ${orderingVehicle.license_plate}`,
-          description: `Zákazník žiada o termín cez Klientsku zónu.`,
-          issue_description: fullDescription,
+          description: `Objednávka z klientskej zóny.`,
+          issue_description: finalDescription,
           planned_work: "Bude určené technikom",
-          customer_note: bookingType === 'auto' 
-            ? `[FLEXIBILNÝ TERMÍN] Zákazník si vybral deň ${new Date(selectedDay).toLocaleDateString('sk-SK')}, ale čas príchodu necháva na Vás.`
-            : `Zákazník si vybral presný čas: ${startTime.toLocaleString('sk-SK')}`,
-          start_datetime: startTime.toISOString(), 
-          end_datetime: endTime.toISOString(),
+          customer_note: `Odhadované trvanie: ${totalMinutes} min. ${bookingType === 'auto' ? 'Flexibilný čas.' : 'Presný čas.'}`,
+          start_datetime: finalDateTime, 
+          end_datetime: endTimeStr,
           plate_number: orderingVehicle.license_plate,
           customer_name: userProfile?.full_name || 'Zákazník z garáže',
           customer_phone: userProfile?.phone || null,
@@ -278,7 +306,7 @@ export default function GarazPage() {
         }]);
 
       if (error) throw error;
-      alert(`Vaša požiadavka bola úspešne odoslaná! Prijímací technik vás bude kontaktovať.`);
+      alert(`Vaša požiadavka bola úspešne odoslaná!`);
       setIsOrderModalOpen(false);
     } catch (err) {
       alert("Chyba pri odosielaní: " + err.message);
@@ -470,7 +498,6 @@ export default function GarazPage() {
                       <span className="text-[10px] text-zinc-600 font-bold uppercase">{new Date(n.created_at).toLocaleDateString('sk-SK')}</span>
                     </div>
                     <p className="text-[11px] text-zinc-400 leading-relaxed font-bold uppercase">{n.content}</p>
-                    {/* ODSTRÁNENÉ BLIKAJÚCE "Zobraziť podrobnosti" */}
                   </div>
                 ))
               )}
@@ -519,55 +546,96 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* MODAL OBJEDNÁVKY SERVISU */}
+      {/* MODAL OBJEDNÁVKY SERVISU (UPRAVENÝ O DYNAMICKÝ VÝBER PRÁC) */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-10 rounded-[3rem] w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[95vh]">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 md:p-10 rounded-[3rem] w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar">
+            <div className="flex justify-between items-center mb-8">
               <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white font-bold">Nová <span className="text-red-600">Objednávka</span></h2>
               <button onClick={() => setIsOrderModalOpen(false)} className="text-zinc-500 hover:text-white text-2xl font-bold">✕</button>
             </div>
+            
             <form onSubmit={handleFinalizeOrder} className="font-bold italic">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4 bg-black/40 p-5 rounded-2xl border border-zinc-800 font-bold uppercase italic">
-                    <div>
-                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold">Zákazník</p>
-                      <p className="text-xs font-black uppercase font-bold">{userProfile?.full_name}</p>
+                <div className="space-y-8">
+                  {/* KONFIGURÁCIA PRÁC */}
+                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-6">
+                    <p className="text-[10px] font-black text-red-600 uppercase tracking-widest italic ml-1">1. Výber servisných úkonov</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[9px] text-zinc-500 uppercase ml-2 mb-2 block font-black">Kategória</label>
+                        <select 
+                          className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-white uppercase text-[10px] outline-none focus:border-red-600 cursor-pointer"
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                        >
+                          <option value="">-- Vyberte sekciu --</option>
+                          {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-zinc-500 uppercase ml-2 mb-2 block font-black">Konkrétna práca</label>
+                        <select 
+                          disabled={!selectedCategory}
+                          className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-white uppercase text-[10px] outline-none focus:border-red-600 cursor-pointer disabled:opacity-30"
+                          onChange={(e) => {
+                            const norm = norms.find(n => n.id === e.target.value);
+                            if (norm) addNormToSelection(norm);
+                            e.target.value = "";
+                          }}
+                        >
+                          <option value="">-- Pridať do zoznamu + --</option>
+                          {norms.filter(n => n.category_id === selectedCategory).map(norm => (
+                            <option key={norm.id} value={norm.id}>{norm.service_name} (~{norm.duration_minutes} min)</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Vozidlo</p>
-                      <p className="text-xs font-black uppercase text-red-600 font-bold italic">{orderingVehicle?.brand_model}</p>
-                      <p className="text-[10px] font-black uppercase font-bold italic">{orderingVehicle?.license_plate}</p>
+
+                    <div className="space-y-2 mt-4">
+                      <p className="text-[9px] text-zinc-500 uppercase font-black ml-1 mb-2">Vybrané úkony:</p>
+                      {selectedNorms.length === 0 ? (
+                        <div className="py-6 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
+                      ) : (
+                        selectedNorms.map(sn => (
+                          <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-4 rounded-xl animate-in fade-in zoom-in duration-200">
+                            <span className="text-xs font-black uppercase text-blue-400 italic">{sn.service_name}</span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-[10px] font-black text-zinc-500">~{sn.duration_minutes} min</span>
+                              <button type="button" onClick={() => removeNormFromSelection(sn.id)} className="text-red-500 hover:text-white font-bold">✕</button>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
-                  <div className="space-y-4 font-bold uppercase italic">
-                    <label className="text-[10px] font-black uppercase text-zinc-500 ml-2 block tracking-widest font-bold italic">Zoznam závad / Potrebné úkony</label>
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar font-bold italic">
-                      {issues.map((issue, index) => (
-                        <div key={index} className="flex gap-2">
-                          <input required className="flex-grow bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs font-bold italic uppercase" 
-                            placeholder={`Závada č. ${index + 1}...`} value={issue} onChange={(e) => updateIssue(index, e.target.value)} />
-                          {issues.length > 1 && (<button type="button" onClick={() => removeIssue(index)} className="px-4 bg-zinc-800 rounded-xl text-zinc-500 hover:text-red-600 transition-all font-bold italic font-bold">✕</button>)}
-                        </div>
-                      ))}
-                    </div>
-                    <button type="button" onClick={addIssueField} className="w-full py-3 border-2 border-dashed border-zinc-800 rounded-xl text-[10px] font-black uppercase text-zinc-500 hover:border-blue-600 hover:text-blue-500 transition-all font-bold tracking-widest font-bold italic">+ Pridať ďalšiu závadu</button>
+
+                  {/* MANUÁLNY POPIS */}
+                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4 italic ml-1">2. Iné závady / Poznámky k servisu</p>
+                    <textarea 
+                      className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white text-xs outline-none focus:border-red-600 h-28 resize-none uppercase italic"
+                      placeholder="Ak ste nenašli úkon v zozname, popíšte závadu tu..."
+                      value={customIssue}
+                      onChange={(e) => setCustomIssue(e.target.value)}
+                    />
                   </div>
                 </div>
-                <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 flex flex-col justify-between font-bold italic uppercase">
-                  <div className="space-y-6 font-bold italic uppercase">
+
+                <div className="space-y-6 bg-black/20 p-8 rounded-[3.5rem] border border-zinc-800/50 flex flex-col justify-between font-bold italic uppercase">
+                  <div className="space-y-8">
                     <div className="flex bg-black p-1 rounded-2xl border border-zinc-800 font-bold italic uppercase">
-                      <button type="button" onClick={() => setBookingType('manual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'manual' ? 'bg-blue-600 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Presný čas</button>
-                      <button type="button" onClick={() => setBookingType('auto')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingType === 'auto' ? 'bg-zinc-800 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Navrhnite mi termín</button>
+                      <button type="button" onClick={() => setBookingType('manual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${bookingType === 'manual' ? 'bg-blue-600 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Presný čas</button>
+                      <button type="button" onClick={() => setBookingType('auto')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${bookingType === 'auto' ? 'bg-zinc-800 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Navrhnite mi termín</button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-bold italic uppercase">
                       <div className="space-y-2 font-bold italic uppercase">
-                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">1. Deň</p>
+                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">Deň príchodu</p>
                         <input required type="date" min={getTomorrowDate()} className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs text-white uppercase font-bold italic uppercase" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
                       </div>
                       <div className={`space-y-2 transition-all ${bookingType === 'auto' ? 'opacity-30 pointer-events-none' : ''}`}>
-                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">2. Čas príchodu</p>
+                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">Čas príchodu</p>
                         <div className="grid grid-cols-3 gap-2 p-2 bg-black/30 rounded-xl border border-zinc-800 max-h-[120px] overflow-y-auto custom-scrollbar font-bold italic uppercase">
                           {timeSlots.map((slot) => (
                             <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${selectedSlot === slot ? 'bg-blue-600 border-blue-600 text-white font-bold italic uppercase' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600 font-bold italic uppercase'}`}>{slot}</button>
@@ -576,6 +644,15 @@ export default function GarazPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* SUMÁR ČASU */}
+                  <div className="bg-red-600/10 border-2 border-red-600/30 p-8 rounded-[2.5rem] text-center shadow-2xl">
+                     <p className="text-[10px] font-black text-red-600 uppercase tracking-widest italic mb-2">Celkový predpokladaný čas:</p>
+                     <p className="text-5xl font-black text-white italic tracking-tighter">
+                        {selectedNorms.reduce((a,c) => a + c.duration_minutes, 0) || 60} <span className="text-xl">min</span>
+                     </p>
+                  </div>
+
                   <button type="submit" disabled={orderLoading} className="w-full bg-red-600 py-6 rounded-2xl font-black uppercase text-xs hover:bg-red-700 shadow-[0_10px_20px_rgba(220,38,38,0.3)] transition-all tracking-[0.2em] font-bold italic uppercase">
                     {orderLoading ? 'Odosielam...' : 'Odoslať požiadavku'}
                   </button>
@@ -586,7 +663,7 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* MODAL PROFILU */}
+      {/* MODAL PROFILU (ZACHOVANÉ) */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold uppercase italic">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-3xl shadow-2xl my-auto font-bold uppercase italic">
@@ -626,7 +703,6 @@ export default function GarazPage() {
         </div>
       )}
 
-      {/* MODAL VOZIDLA (ZACHOVANÉ) */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold uppercase italic">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto font-bold uppercase italic">
