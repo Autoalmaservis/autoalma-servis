@@ -61,11 +61,16 @@ export default function DashboardLayout({ children }) {
     setIsMobileOpen(false);
   }, [pathname]);
 
+  // OPRAVENÁ FUNKCIA: Počíta len aktuálne a budúce žiadosti
   const fetchPendingCount = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Nastavíme na začiatok dnešného dňa
+
     const { count, error } = await supabase
       .from('calendar_events')
       .select('*', { count: 'exact', head: true })
-      .eq('is_confirmed', false);
+      .eq('is_confirmed', false)
+      .gte('start_datetime', today.toISOString()); // Filtrujeme len záznamy od dnes vrátane
 
     if (!error) {
       setPendingCount(count || 0);

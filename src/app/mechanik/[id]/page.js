@@ -18,7 +18,7 @@ export default function PracovnyList() {
   const [uploading, setUploading] = useState(false);
 
   // Zisťujeme, či je zákazka už uzavretá (Audit podľa statusu v DB)
-  const isLocked = job?.status === 'Dokončené' || job?.status === 'Archivované';
+  const isLocked = job?.status === 'Dokončené' || job?.status === 'Archivované' || job?.status === 'Čaká na schválenie';
 
   useEffect(() => { if (id) loadData(); }, [id]);
 
@@ -138,7 +138,7 @@ export default function PracovnyList() {
       const { error } = await supabase
         .from('job_tickets')
         .update({ 
-          status: 'Dokončené', 
+          status: 'Čaká na schválenie', 
           updated_at: new Date() 
         })
         .eq('id', id);
