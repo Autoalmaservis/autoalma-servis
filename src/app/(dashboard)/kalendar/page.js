@@ -8,6 +8,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { supabase } from '@/app/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import SmsPanel from '../prijem/SmsPanel'; // Import SMS panela
 
 export default function KalendarPage() {
   const router = useRouter();
@@ -464,7 +465,6 @@ export default function KalendarPage() {
                         {editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}
                       </button>
                       
-                      {/* PRIDANÉ TLAČIDLO VYMAZAŤ V HLAVNEJ SEKCIÍ */}
                       {editingEventId && (
                         <button 
                           type="button" 
@@ -485,7 +485,6 @@ export default function KalendarPage() {
                     ) : (
                       <div className="space-y-8 animate-in slide-in-from-right duration-500 font-bold">
                         
-                        {/* NOVÝ BOX: UPOZORNENIE NA FLEXIBILNÚ ŽIADOSŤ */}
                         {(title?.includes('FLEXI') || title?.includes('ŽIADOSŤ')) && !isConfirmed && (
                           <div className="bg-amber-600/20 border-2 border-amber-600 p-8 rounded-[3rem] animate-pulse space-y-3 shadow-2xl shadow-amber-600/10">
                              <p className="text-[10px] font-black text-amber-500 tracking-[0.3em]">⚠️ Akcia vyžaduje pozornosť</p>
@@ -499,7 +498,21 @@ export default function KalendarPage() {
                               <p className="text-[10px] font-black text-red-500 uppercase tracking-widest font-bold">Kontakt</p>
                               <h4 className="text-2xl font-black text-white uppercase italic font-bold">{tempCustomerContact.customerName || selectedClientName || 'Zákazník'}</h4>
                               <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold"> 📞 <span className="text-white text-lg tracking-widest font-bold">{tempCustomerContact.phone}</span> </p>
-                              <div className="pt-2 font-bold"><a href={`tel:${tempCustomerContact.phone}`} className="inline-block bg-red-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest font-bold">Zavolať ihneď</a></div>
+                              <div className="flex flex-col gap-4 mt-4">
+                                <a href={`tel:${tempCustomerContact.phone}`} className="w-full text-center bg-red-600 text-white px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest font-bold hover:bg-red-500 transition-all">Zavolať ihneď</a>
+                                
+                                {/* SMS PANEL INTEGRÁCIA */}
+                                <div className="border-t border-zinc-800 pt-4 mt-2">
+                                  {tempCustomerContact.phone && (
+                                    <SmsPanel 
+                                      phone={tempCustomerContact.phone} 
+                                      plate={plate} 
+                                      customerName={tempCustomerContact.customerName || selectedClientName}
+                                      userId={tempCustomerContact.userId}
+                                    />
+                                  )}
+                                </div>
+                              </div>
                             </div>
                         )}
 

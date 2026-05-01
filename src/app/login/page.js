@@ -1,12 +1,11 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 function LoginFormContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -15,16 +14,6 @@ function LoginFormContent() {
   const [message, setMessage] = useState(null);
   const [resetMode, setResetMode] = useState(false);
 
-  const ADMIN_EMAIL = 'maros.jurkovic@autoalma.sk';
-  const ADMIN_PASSWORD = 'Autoalma137.';
-
-  useEffect(() => {
-    const role = searchParams.get('role');
-    if (role === 'admin') {
-      setEmail(ADMIN_EMAIL);
-      setPassword(ADMIN_PASSWORD);
-    }
-  }, [searchParams]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

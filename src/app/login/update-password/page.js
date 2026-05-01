@@ -22,10 +22,19 @@ export default function UpdatePasswordPage() {
     if (error) {
       setError("Chyba pri aktualizácii: " + error.message);
     } else {
-      setMessage("Heslo bolo úspešne zmenené. Teraz sa môžete prihlásiť.");
+      setMessage("Heslo bolo úspešne zmenené. Presmerovávam...");
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
       setTimeout(() => {
-        router.push('/login');
-      }, 3000);
+        const role = profile?.role?.toLowerCase();
+        if (role === 'admin') router.push('/system');
+        else if (role === 'mechanik') router.push('/mechanik/login');
+        else router.push('/login');
+      }, 2000);
     }
     setLoading(false);
   };
