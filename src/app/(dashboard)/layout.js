@@ -1,89 +1,112 @@
 'use client';
 import '../globals.css';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/app/lib/supabase'; 
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/app/lib/supabase';
 import { usePathname } from 'next/navigation';
 
 export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [jobUpdateCount, setJobUpdateCount] = useState(0); // Stav pre bodku pri zákazkách
+  const [jobUpdateCount, setJobUpdateCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const jobStatusRef = useRef({});
   const pathname = usePathname();
 
-  // REAL-TIME sledovanie zmien v systéme
+  const addStatusNotification = (notif) => {
+    setNotifications(prev => [notif, ...prev].slice(0, 8));
+    if (!window.location.pathname.startsWith('/zakazky')) {
+      setJobUpdateCount(prev => prev + 1);
+    }
+  };
+
+  const pollJobStatuses = async () => {
+    const { data } = await supabase
+      .from('job_tickets')
+      .select('id, customer_name, plate_number, status')
+      .neq('status', 'Archivované');
+
+    if (!data) return;
+
+    const prev = jobStatusRef.current;
+    const next = {};
+
+    data.forEach(job => {
+      next[job.id] = job.status;
+      const oldStatus = prev[job.id];
+      if (oldStatus !== undefined && oldStatus !== job.status) {
+        addStatusNotification({
+          id: job.id,
+          customerName: job.customer_name,
+          plateNumber: job.plate_number,
+          fromStatus: oldStatus,
+          toStatus: job.status,
+          time: new Date(),
+        });
+      }
+    });
+
+    jobStatusRef.current = next;
+  };
+
   useEffect(() => {
     fetchPendingCount();
+    pollJobStatuses(); // Inicializácia — naplní ref bez notifikácií
 
     const channel = supabase
       .channel('dashboard-global-updates')
-      // 1. Sledovanie kalendára (Upozornenia na nové požiadavky)
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Reaguje na zápis, úpravu aj VYMAZANIE
-          table: 'calendar_events',
-          schema: 'public',
-        },
-        () => {
-          fetchPendingCount(); // Okamžitá aktualizácia počítadla pri kalendári
-        }
-      )
-      // 2. Sledovanie zmien v zákazkách (Pohyby v workflow)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          table: 'job_tickets',
-          schema: 'public',
-        },
-        (payload) => {
-          console.log('Zmena v zákazke zachytená:', payload);
-          // Ak nie sme práve na stránke zákaziek, rozsvietime upozornenie
-          if (!window.location.pathname.startsWith('/zakazky')) {
-            setJobUpdateCount(prev => prev + 1);
-          }
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events' }, () => {
+        fetchPendingCount();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, () => {
+        pollJobStatuses(); // Okamžitá reakcia na zmenu
+      })
       .subscribe();
+
+    const interval = setInterval(pollJobStatuses, 30000); // Záloha každých 30s
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, []);
 
-  // Automatické vynulovanie bodky zákaziek, ak na ne používateľ klikne
   useEffect(() => {
     if (pathname.startsWith('/zakazky')) {
       setJobUpdateCount(0);
+      setNotifications([]);
     }
     setIsMobileOpen(false);
   }, [pathname]);
 
-  // OPRAVENÁ FUNKCIA: Počíta len aktuálne a budúce žiadosti
   const fetchPendingCount = async () => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Nastavíme na začiatok dnešného dňa
-
+    today.setHours(0, 0, 0, 0);
     const { count, error } = await supabase
       .from('calendar_events')
       .select('*', { count: 'exact', head: true })
       .eq('is_confirmed', false)
-      .gte('start_datetime', today.toISOString()); // Filtrujeme len záznamy od dnes vrátane
+      .gte('start_datetime', today.toISOString());
+    if (!error) setPendingCount(count || 0);
+  };
 
-    if (!error) {
-      setPendingCount(count || 0);
+  const statusColor = (status) => {
+    switch (status) {
+      case 'Prebieha': return 'text-blue-400';
+      case 'Čaká na schválenie': return 'text-purple-400';
+      case 'Dokončené': return 'text-green-400';
+      default: return 'text-zinc-400';
     }
   };
 
   return (
     <div className="flex min-h-screen bg-black font-sans">
-      
+
       {/* --- MOBILNÁ HORNÁ LIŠTA --- */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950 border-b border-zinc-800 px-4 flex items-center justify-between z-[100] no-print">
         <h1 className="font-black italic text-red-600 uppercase tracking-tighter text-xl text-white">AutoAlma</h1>
-        <button 
+        <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-xl text-white"
         >
@@ -93,12 +116,12 @@ export default function DashboardLayout({ children }) {
 
       {/* --- SIDEBAR --- */}
       <aside className={`
-        ${isCollapsed ? 'w-20' : 'w-64'} 
-        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} 
-        bg-zinc-950 border-r border-zinc-800 p-4 flex-shrink-0 flex flex-col fixed md:sticky top-0 h-screen transition-all duration-300 z-[150] no-print
+        ${isCollapsed ? 'w-20' : 'w-64'}
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        bg-zinc-950 border-r border-zinc-800 p-4 flex-shrink-0 flex flex-col fixed md:sticky top-0 h-screen transition-all duration-300 z-[150] no-print overflow-y-auto
       `}>
-        
-        <button 
+
+        <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-10 bg-red-600 rounded-full w-6 h-6 hidden md:flex items-center justify-center border-2 border-black hover:scale-110 transition-all z-50 shadow-lg shadow-red-600/40"
         >
@@ -113,35 +136,62 @@ export default function DashboardLayout({ children }) {
             {!isCollapsed && <p className="text-[8px] text-zinc-600 font-mono tracking-[0.3em] uppercase ml-1 font-bold">Service OS</p>}
           </Link>
         </div>
-        
-        <nav className="space-y-2 flex-grow overflow-y-auto pr-1">
+
+        <nav className="space-y-2 flex-grow pr-1">
           {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Hlavné Menu</p>}
-          
+
           <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
           <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
-          
-          <MenuLink 
-            href="/kalendar" 
-            icon="📅" 
-            label="Kalendár / Plán" 
-            collapsed={isCollapsed} 
+          <MenuLink
+            href="/kalendar"
+            icon="📅"
+            label="Kalendár / Plán"
+            collapsed={isCollapsed}
             active={pathname === '/kalendar'}
-            badge={pendingCount} 
+            badge={pendingCount}
+          />
+          <MenuLink
+            href="/zakazky"
+            icon="🛠️"
+            label="Zoznam Zákaziek"
+            collapsed={isCollapsed}
+            active={pathname.startsWith('/zakazky')}
+            badge={jobUpdateCount}
           />
 
-          <MenuLink 
-            href="/zakazky" 
-            icon="🛠️" 
-            label="Zoznam Zákaziek" 
-            collapsed={isCollapsed} 
-            active={pathname.startsWith('/zakazky')} 
-            badge={jobUpdateCount} // Červená bodka pri zmene v zákazkách
-          />
-          
+          {/* --- NOTIFIKÁCIE STAVOV ZÁKAZIEK --- */}
+          {notifications.length > 0 && !isCollapsed && (
+            <div className="mx-1 space-y-1.5 pb-1">
+              {notifications.slice(0, 5).map((n, i) => (
+                <Link
+                  key={i}
+                  href={`/zakazky/${n.id}`}
+                  className="block bg-black border border-zinc-800 hover:border-red-600/50 p-2.5 rounded-xl transition-all group"
+                >
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[9px] font-black uppercase text-white leading-none truncate">{n.customerName}</span>
+                    <span className="text-[8px] font-black text-red-500 shrink-0 ml-1">{n.plateNumber}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[8px] font-black uppercase">
+                    <span className={statusColor(n.fromStatus)}>{n.fromStatus}</span>
+                    <span className="text-zinc-700">→</span>
+                    <span className={statusColor(n.toStatus)}>{n.toStatus}</span>
+                  </div>
+                </Link>
+              ))}
+              <button
+                onClick={() => { setNotifications([]); setJobUpdateCount(0); }}
+                className="w-full text-[8px] font-black uppercase text-zinc-700 hover:text-zinc-400 transition-colors py-1 tracking-widest"
+              >
+                Vymazať notifikácie ✕
+              </button>
+            </div>
+          )}
+
           <MenuLink href="/CP" icon="📄" label="Cenové ponuky" collapsed={isCollapsed} active={pathname.startsWith('/ponuky')} />
           <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
-          
-          <div className={`pt-4 mt-4 border-t border-zinc-900`}>
+
+          <div className="pt-4 mt-4 border-t border-zinc-900">
             {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
             <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
             <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
@@ -149,27 +199,27 @@ export default function DashboardLayout({ children }) {
         </nav>
 
         <div className={`mt-auto pt-4 border-t border-zinc-900 transition-all ${isCollapsed ? 'items-center' : ''}`}>
-           <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
-             <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
-             {!isCollapsed && (
-               <div className="overflow-hidden font-bold">
-                 <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
-                 <div className="flex items-center gap-1 mt-1 font-bold">
-                   <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                   <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
-                 </div>
-               </div>
-             )}
-           </div>
+          <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
+            {!isCollapsed && (
+              <div className="overflow-hidden font-bold">
+                <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
+                <div className="flex items-center gap-1 mt-1 font-bold">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
       {/* --- POZADIE PRE MOBIL --- */}
       {isMobileOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[140] md:hidden"
           onClick={() => setIsMobileOpen(false)}
-        ></div>
+        />
       )}
 
       {/* --- HLAVNÝ OBSAH --- */}
@@ -186,24 +236,24 @@ function MenuLink({ href, icon, label, collapsed, active, badge }) {
   return (
     <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 font-bold' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
       <div className={`flex items-center gap-4 ${collapsed ? 'justify-center' : ''}`}>
-        <span className="text-xl group-hover:scale-110 transition-transform shrink-0">{icon}</span> 
+        <span className="text-xl group-hover:scale-110 transition-transform shrink-0">{icon}</span>
         {!collapsed && <span className="font-bold text-sm whitespace-nowrap tracking-tight">{label}</span>}
       </div>
-      
+
       {!collapsed && badge > 0 && (
         <div className="flex items-center gap-1">
-           <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-           </span>
-           <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center font-bold">{badge}</span>
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
+          <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center font-bold">{badge}</span>
         </div>
       )}
-      
+
       {collapsed && badge > 0 && (
         <span className="absolute top-2 right-2 flex h-2 w-2 font-bold">
-           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-           <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
         </span>
       )}
     </Link>

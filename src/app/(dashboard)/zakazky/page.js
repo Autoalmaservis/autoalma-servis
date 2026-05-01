@@ -1,13 +1,20 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function ZakazkyZoznamPage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('Prebieha');
+  const [filterStatus, setFilterStatus] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const param = new URLSearchParams(window.location.search).get('filter');
+      if (param) return decodeURIComponent(param);
+    }
+    return 'Prebieha';
+  });
 
   // --- LOGIKA NOTIFIKÁCIÍ S PAMÄŤOU (localStorage) ---
   const [notifState, setNotifState] = useState({
@@ -216,11 +223,12 @@ export default function ZakazkyZoznamPage() {
       {/* ZOZNAM ZÁKAZIEK */}
       <div className="space-y-4">
         {filteredJobs.map(job => (
-          <div 
-            key={job.id} 
+          <div
+            key={job.id}
+            onClick={() => router.push(`/zakazky/${job.id}`)}
             className={`
-              p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border
-              ${job.offerStatus === 'Schválené' ? 'bg-blue-900/10 border-blue-600/30' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}
+              cursor-pointer p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border hover:border-red-600
+              ${job.offerStatus === 'Schválené' ? 'bg-blue-900/10 border-blue-600/30' : 'bg-zinc-900/40 border-zinc-800'}
               ${job.status === 'Dokončené' ? 'border-green-600/30 bg-green-900/5' : ''}
               ${job.status === 'Čaká na schválenie' ? 'border-purple-600/30 bg-purple-900/5' : ''}
             `}
@@ -268,18 +276,12 @@ export default function ZakazkyZoznamPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <Link href={`/zakazky/${job.id}`} className="bg-white text-black font-black px-8 py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-xl">
-                  Detail
-                </Link>
-
-                <button 
-                  onClick={() => confirmDelete(job)}
-                  className="w-12 h-12 rounded-xl flex items-center justify-center transition-all border border-zinc-800 text-zinc-700 hover:border-red-600 hover:text-red-600"
-                >
-                  🗑
-                </button>
-              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); confirmDelete(job); }}
+                className="w-12 h-12 rounded-xl flex items-center justify-center transition-all border border-zinc-800 text-zinc-700 hover:border-red-600 hover:text-red-600"
+              >
+                🗑
+              </button>
             </div>
           </div>
         ))}

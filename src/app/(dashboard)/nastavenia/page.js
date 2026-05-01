@@ -3,6 +3,34 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 
+const PRESET_COLORS = [
+  '#ef4444', '#f97316', '#f59e0b', '#eab308',
+  '#84cc16', '#22c55e', '#10b981', '#14b8a6',
+  '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1',
+  '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+  '#f43f5e', '#ffffff', '#a1a1aa', '#dc2626',
+];
+
+function ColorPicker({ value, onChange }) {
+  return (
+    <div className="grid grid-cols-10 gap-1.5 p-3 bg-black rounded-2xl border border-zinc-800">
+      {PRESET_COLORS.map(color => (
+        <button
+          key={color}
+          type="button"
+          onClick={() => onChange(color)}
+          className="w-7 h-7 rounded-full border-2 transition-all hover:scale-110"
+          style={{
+            backgroundColor: color,
+            borderColor: value === color ? '#ffffff' : 'transparent',
+            boxShadow: value === color ? `0 0 0 2px ${color}` : 'none',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function NastaveniaPage() {
   const router = useRouter();
 
@@ -298,11 +326,6 @@ export default function NastaveniaPage() {
     } else {
       alert("Chyba pri aktualizácii: " + error.message);
     }
-  };
-
-  const updateEmployeeColor = async (id, color) => {
-    await supabase.from('employees').update({ color }).eq('id', id);
-    fetchData();
   };
 
   const deleteEmployee = async (id) => {
@@ -669,18 +692,20 @@ export default function NastaveniaPage() {
                 <input required type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Meno mechanika" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600" />
                 <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none">
                   <option value="mechanik">Mechanik</option>
-                  <option value="diagnostik">Diagnostik</option>
-                  <option value="prijem">Prijímací technik</option>
+                  <option value="diagnostik">Diagnostik / Elektrikár</option>
+                  <option value="klampiar">Klampiar</option>
+                  <option value="lakernik">Lakerník</option>
                 </select>
                 <input required type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="E-mail (prihlasovací)" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" />
                 <input required type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Heslo" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" />
               </div>
-              <div className="flex items-center gap-4">
-                <input type="color" value={newColor} onChange={(e) => setNewColor(e.target.value)} className="w-16 h-16 bg-black border border-zinc-800 p-1 rounded-xl cursor-pointer shadow-lg" />
-                <button type="submit" disabled={loading} className="flex-grow bg-red-600 py-5 rounded-2xl font-black hover:bg-red-700 transition-colors shadow-lg uppercase text-[10px] tracking-widest">
-                  {loading ? 'Pracujem...' : 'Vytvoriť zamestnanca +'}
-                </button>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Farba v kalendári</label>
+                <ColorPicker value={newColor} onChange={setNewColor} />
               </div>
+              <button type="submit" disabled={loading} className="w-full bg-red-600 py-5 rounded-2xl font-black hover:bg-red-700 transition-colors shadow-lg uppercase text-[10px] tracking-widest">
+                {loading ? 'Pracujem...' : 'Vytvoriť zamestnanca +'}
+              </button>
             </form>
 
             <div className="space-y-6">
@@ -689,10 +714,16 @@ export default function NastaveniaPage() {
                 {employees.map((emp) => (
                   <div key={emp.id} className={`flex justify-between items-center bg-zinc-900/80 border border-zinc-800 p-5 rounded-[2rem] transition-all hover:border-red-600/50 ${!emp.active ? 'opacity-50 grayscale' : ''}`}>
                     <div className="flex items-center gap-5">
-                      <input type="color" value={emp.color || '#dc2626'} onChange={(e) => updateEmployeeColor(emp.id, e.target.value)} className="w-12 h-12 bg-transparent border-none cursor-pointer rounded-full overflow-hidden border-2 border-zinc-800" />
+                      <div
+                        className="w-12 h-12 rounded-full border-2 border-zinc-700 shrink-0 cursor-pointer"
+                        style={{ backgroundColor: emp.color || '#dc2626' }}
+                        title="Klikni pre zmenu farby"
+                        onClick={() => openEditModal(emp)}
+                      />
                       <div>
                         <p className="font-black uppercase text-sm tracking-tight text-white italic">{emp.name}</p>
                         <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{emp.role} • {emp.email}</p>
+                        <p className="text-[9px] font-mono text-zinc-600 mt-0.5 tracking-widest">🔑 {emp.password || '—'}</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -721,13 +752,16 @@ export default function NastaveniaPage() {
             <form onSubmit={handleUpdateEmployee} className="space-y-4">
               <input required type="text" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} placeholder="Meno" className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none" />
               <input required type="email" value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} placeholder="Email" className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none" />
-              <div className="grid grid-cols-2 gap-4">
-                <select value={editForm.role} onChange={(e) => setEditForm({...editForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-bold">
-                  <option value="mechanik">Mechanik</option>
-                  <option value="diagnostik">Diagnostik</option>
-                  <option value="prijem">Prijímací technik</option>
-                </select>
-                <input type="color" value={editForm.color} onChange={(e) => setEditForm({...editForm, color: e.target.value})} className="w-full h-[60px] bg-zinc-900 border border-zinc-800 p-2 rounded-2xl cursor-pointer" />
+              <input type="text" value={editForm.password} onChange={(e) => setEditForm({...editForm, password: e.target.value})} placeholder="Heslo (nechajte prázdne ak nemeníte)" className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-mono tracking-widest" />
+              <select value={editForm.role} onChange={(e) => setEditForm({...editForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-bold">
+                <option value="mechanik">Mechanik</option>
+                <option value="diagnostik">Diagnostik / Elektrikár</option>
+                <option value="klampiar">Klampiar</option>
+                <option value="lakernik">Lakerník</option>
+              </select>
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1">Farba v kalendári</label>
+                <ColorPicker value={editForm.color} onChange={(color) => setEditForm({...editForm, color})} />
               </div>
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 bg-zinc-800 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest">Zrušiť</button>

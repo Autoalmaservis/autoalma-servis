@@ -23,17 +23,16 @@ export default function GarazPage() {
   // --- STAVY PRE OBJEDNÁVKU SERVISU ---
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderingVehicle, setOrderingVehicle] = useState(null);
-  const [issues, setIssues] = useState(['']); // Pole pre viacero závad
-  const [preferredDate, setPreferredDate] = useState(''); // Preferovaný termín zákazníka
   const [orderLoading, setOrderLoading] = useState(false);
-  const [bookingType, setBookingType] = useState('manual'); // NOVÉ: 'manual' alebo 'auto'
 
   // --- NOVÉ STAVY PRE DYNAMICKÝ VÝBER PRÁC ---
   const [categories, setCategories] = useState([]);
   const [norms, setNorms] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedNorms, setSelectedNorms] = useState([]); // "Košík" vybratých prác
-  const [customIssue, setCustomIssue] = useState(''); // Manuálny popis
+  const [customItems, setCustomItems] = useState([]); // Vlastné úkony zákazníka
+  const [currentCustomIssue, setCurrentCustomIssue] = useState('');
+  const [currentItemDuration, setCurrentItemDuration] = useState('technik');
 
   // POMOCNÉ STAVY PRE NOVÝ VÝBER TERMÍNU
   const [selectedDay, setSelectedDay] = useState('');
@@ -42,6 +41,13 @@ export default function GarazPage() {
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
     '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'
   ];
+
+  // STAVY PRE KALENDÁR OBSADENOSTI
+  const [availabilityMap, setAvailabilityMap] = useState({});
+  const [roleCapacity, setRoleCapacity] = useState({});
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [dayEvents, setDayEvents] = useState([]);
+  const [workHours, setWorkHours] = useState({ start: '07', end: '17' });
 
   // --- STAVY PRE EDITÁCIU VOZIDLA (ZACHOVANÉ) ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -72,14 +78,6 @@ export default function GarazPage() {
     ic_dph: '',
     country: 'Slovensko'
   });
-
-  // POMOCNÁ FUNKCIA: Získa zajtrajší dátum vo formáte YYYY-MM-DD
-  const getTomorrowDate = () => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  };
 
   useEffect(() => {
     let channel;
@@ -220,16 +218,69 @@ export default function GarazPage() {
   };
 
   // --- LOGIKA OBJEDNÁVKY SERVISU ---
+  const fetchAvailability = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const futureDate = new Date(today);
+    futureDate.setDate(today.getDate() + 56); // 8 týždňov dopredu
+
+    const [{ data: emps }, { data: evts }] = await Promise.all([
+      supabase.from('employees').select('id, role').eq('active', true).in('role', ['mechanik', 'diagnostik', 'klampiar', 'lakernik']),
+      supabase.from('calendar_events').select('start_datetime, employee_id').gte('start_datetime', today.toISOString()).lte('start_datetime', futureDate.toISOString()).neq('plate_number', 'BLOK')
+    ]);
+
+    const roleCap = {};
+    emps?.forEach(e => { roleCap[e.role] = (roleCap[e.role] || 0) + 1; });
+    setRoleCapacity(roleCap);
+
+    const totalCapacity = emps?.length || 0;
+
+    // Počet unikátnych zamestnancov obsadených v daný deň
+    const dayBookings = {};
+    evts?.forEach(ev => {
+      const day = ev.start_datetime.split('T')[0];
+      if (!dayBookings[day]) dayBookings[day] = new Set();
+      if (ev.employee_id) dayBookings[day].add(ev.employee_id);
+    });
+
+    const availability = {};
+    const cursor = new Date(today);
+    while (cursor <= futureDate) {
+      const dayStr = cursor.toISOString().split('T')[0];
+      const booked = dayBookings[dayStr]?.size || 0;
+      availability[dayStr] = { total: totalCapacity, booked, free: Math.max(0, totalCapacity - booked) };
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    setAvailabilityMap(availability);
+  };
+
+  const fetchDayEvents = async (dateStr) => {
+    const [{ data: settings }, { data: evts }] = await Promise.all([
+      supabase.from('business_settings').select('*').in('id', ['work_start', 'work_end']),
+      supabase.from('calendar_events')
+        .select('start_datetime, end_datetime, employee_id')
+        .gte('start_datetime', `${dateStr}T00:00:00`)
+        .lte('start_datetime', `${dateStr}T23:59:59`)
+    ]);
+    const start = settings?.find(s => s.id === 'work_start')?.value?.split(':')[0] || '07';
+    const end = settings?.find(s => s.id === 'work_end')?.value?.split(':')[0] || '17';
+    setWorkHours({ start, end });
+    setDayEvents(evts || []);
+  };
+
   const openOrderModal = (vehicle) => {
     setOrderingVehicle(vehicle);
-    setIssues(['']); 
-    setCustomIssue('');
+    setCustomItems([]);
+    setCurrentCustomIssue('');
+    setCurrentItemDuration('technik');
     setSelectedDay('');
     setSelectedSlot('');
     setSelectedNorms([]);
     setSelectedCategory('');
-    setBookingType('manual');
+    setDayEvents([]);
+    setCalendarMonth(new Date());
     setIsOrderModalOpen(true);
+    fetchAvailability();
   };
 
   const addNormToSelection = (norm) => {
@@ -241,19 +292,22 @@ export default function GarazPage() {
     setSelectedNorms(selectedNorms.filter(n => n.id !== id));
   };
 
-  const addIssueField = () => setIssues([...issues, '']);
-  const updateIssue = (index, value) => {
-    const newIssues = [...issues];
-    newIssues[index] = value;
-    setIssues(newIssues);
+  const addCustomItem = () => {
+    if (!currentCustomIssue.trim()) return;
+    setCustomItems([...customItems, {
+      id: Date.now(),
+      description: currentCustomIssue.trim(),
+      duration: currentItemDuration
+    }]);
+    setCurrentCustomIssue('');
+    setCurrentItemDuration('technik');
   };
-  const removeIssue = (index) => setIssues(issues.filter((_, i) => i !== index));
 
   const handleFinalizeOrder = async (e) => {
     e.preventDefault();
-    
-    if (selectedNorms.length === 0 && !customIssue.trim()) {
-      alert("Prosím vyberte aspoň jednu prácu alebo popíšte závadu.");
+
+    if (selectedNorms.length === 0 && customItems.length === 0) {
+      alert("Prosím vyberte aspoň jednu prácu alebo pridajte vlastný úkon.");
       return;
     }
     
@@ -261,7 +315,7 @@ export default function GarazPage() {
       alert("Prosím vyberte si deň príchodu.");
       return;
     }
-    if (bookingType === 'manual' && !selectedSlot) {
+    if (!selectedSlot) {
       alert("Prosím vyberte si konkrétny čas príchodu.");
       return;
     }
@@ -269,30 +323,37 @@ export default function GarazPage() {
     setOrderLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      const totalMinutes = selectedNorms.reduce((acc, curr) => acc + curr.duration_minutes, 0) || 60;
-      const worksList = selectedNorms.map((p, idx) => `${idx + 1}. ${p.service_name}`).join('\n');
-      const finalDescription = customIssue 
-        ? `${worksList}\n\nPOZNÁMKA: ${customIssue}` 
-        : worksList;
 
-      const finalDateTime = bookingType === 'manual' 
-        ? `${selectedDay}T${selectedSlot}:00` 
-        : `${selectedDay}T07:00:00`;
+      const normMinutes = selectedNorms.reduce((acc, curr) => acc + curr.duration_minutes, 0);
+      const customKnownMinutes = customItems
+        .filter(i => i.duration !== 'technik')
+        .reduce((acc, i) => acc + i.duration, 0);
+      const estimatedMinutes = normMinutes + customKnownMinutes || 60;
 
+      const normsList = selectedNorms.length > 0
+        ? `SERVISNÉ ÚKONY:\n${selectedNorms.map((p, idx) => `${idx + 1}. ${p.service_name} (~${p.duration_minutes} min)`).join('\n')}`
+        : '';
+      const customList = customItems.length > 0
+        ? `VLASTNÉ ÚKONY:\n${customItems.map((item, idx) => {
+            const dur = item.duration === 'technik' ? 'čas na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`;
+            return `${idx + 1}. ${item.description} (${dur})`;
+          }).join('\n')}`
+        : '';
+      const finalDescription = [normsList, customList].filter(Boolean).join('\n\n');
+
+      const finalDateTime = `${selectedDay}T${selectedSlot}:00`;
       const startTime = new Date(finalDateTime);
-      const endTime = new Date(startTime.getTime() + totalMinutes * 60000); 
-      
+      const endTime = new Date(startTime.getTime() + estimatedMinutes * 60000);
       const endTimeStr = `${selectedDay}T${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}:00`;
 
       const { error } = await supabase
         .from('calendar_events')
         .insert([{
-          title: bookingType === 'manual' ? `OBJEDNÁVKA: ${orderingVehicle.license_plate}` : `FLEXI: ${orderingVehicle.license_plate}`,
+          title: `OBJEDNÁVKA: ${orderingVehicle.license_plate}`,
           description: `Objednávka z klientskej zóny.`,
           issue_description: finalDescription,
           planned_work: "Bude určené technikom",
-          customer_note: `Odhadované trvanie: ${totalMinutes} min. ${bookingType === 'auto' ? 'Flexibilný čas.' : 'Presný čas.'}`,
+          customer_note: `Odhadované trvanie: ${estimatedMinutes} min.`,
           start_datetime: finalDateTime, 
           end_datetime: endTimeStr,
           plate_number: orderingVehicle.license_plate,
@@ -361,7 +422,7 @@ export default function GarazPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/');
   };
 
   if (loading) return (
@@ -611,38 +672,207 @@ export default function GarazPage() {
                     </div>
                   </div>
 
-                  {/* MANUÁLNY POPIS */}
-                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-4 italic ml-1">2. Iné závady / Poznámky k servisu</p>
-                    <textarea 
-                      className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white text-xs outline-none focus:border-red-600 h-28 resize-none uppercase italic"
-                      placeholder="Ak ste nenašli úkon v zozname, popíšte závadu tu..."
-                      value={customIssue}
-                      onChange={(e) => setCustomIssue(e.target.value)}
+                  {/* VLASTNÉ ÚKONY */}
+                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
+                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest italic ml-1">2. Vlastné úkony / Iné závady</p>
+
+                    {/* Zoznam pridaných vlastných úkonov */}
+                    {customItems.length > 0 && (
+                      <div className="space-y-2">
+                        {customItems.map(item => (
+                          <div key={item.id} className="flex justify-between items-center bg-zinc-800/60 border border-zinc-700 p-3 rounded-xl">
+                            <div>
+                              <span className="text-xs font-black uppercase text-white italic">{item.description}</span>
+                              <span className="text-[9px] text-zinc-500 ml-2 not-italic font-bold">
+                                {item.duration === 'technik' ? '— čas na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`}
+                              </span>
+                            </div>
+                            <button type="button" onClick={() => setCustomItems(customItems.filter(i => i.id !== item.id))} className="text-red-500 hover:text-white font-bold text-sm ml-3">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Input pre nový úkon */}
+                    <input
+                      type="text"
+                      className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-red-600 uppercase italic placeholder:normal-case placeholder:not-italic"
+                      placeholder="Popíšte závadu alebo úkon..."
+                      value={currentCustomIssue}
+                      onChange={(e) => setCurrentCustomIssue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
                     />
+
+                    {/* Odhad času pre tento úkon */}
+                    <div>
+                      <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-2 ml-1">Odhadovaný čas tohto úkonu</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: 'Na technika', value: 'technik' },
+                          { label: '30 min', value: 30 },
+                          { label: '1 hod', value: 60 },
+                          { label: '2 hod', value: 120 },
+                          { label: '3 hod', value: 180 },
+                          { label: '4+ hod', value: 240 },
+                        ].map(opt => (
+                          <button key={opt.value} type="button" onClick={() => setCurrentItemDuration(opt.value)}
+                            className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${currentItemDuration === opt.value ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'}`}>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={addCustomItem}
+                      disabled={!currentCustomIssue.trim()}
+                      className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-white transition-all disabled:opacity-30 not-italic"
+                    >
+                      + Pridať úkon
+                    </button>
                   </div>
                 </div>
 
                 <div className="space-y-6 bg-black/20 p-8 rounded-[3.5rem] border border-zinc-800/50 flex flex-col justify-between font-bold italic uppercase">
-                  <div className="space-y-8">
-                    <div className="flex bg-black p-1 rounded-2xl border border-zinc-800 font-bold italic uppercase">
-                      <button type="button" onClick={() => setBookingType('manual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${bookingType === 'manual' ? 'bg-blue-600 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Presný čas</button>
-                      <button type="button" onClick={() => setBookingType('auto')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${bookingType === 'auto' ? 'bg-zinc-800 text-white shadow-lg font-bold italic uppercase' : 'text-zinc-500 hover:text-white font-bold italic uppercase'}`}>Navrhnite mi termín</button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-bold italic uppercase">
-                      <div className="space-y-2 font-bold italic uppercase">
-                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">Deň príchodu</p>
-                        <input required type="date" min={getTomorrowDate()} className="w-full bg-black border border-zinc-800 p-4 rounded-xl outline-none focus:border-red-600 font-bold text-xs text-white uppercase font-bold italic uppercase" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
+                  <div className="space-y-6">
+
+                    {/* VIZUÁLNY KALENDÁR OBSADENOSTI */}
+                    <div>
+                      <p className="text-[9px] text-red-600 uppercase ml-1 font-black tracking-widest mb-4">Vyber deň príchodu</p>
+
+                      {/* Legenda */}
+                      <div className="flex gap-4 mb-4 ml-1">
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Obmedzené</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
                       </div>
-                      <div className={`space-y-2 transition-all ${bookingType === 'auto' ? 'opacity-30 pointer-events-none' : ''}`}>
-                        <p className="text-[9px] text-zinc-500 uppercase ml-2 font-black tracking-widest font-bold italic uppercase">Čas príchodu</p>
-                        <div className="grid grid-cols-3 gap-2 p-2 bg-black/30 rounded-xl border border-zinc-800 max-h-[120px] overflow-y-auto custom-scrollbar font-bold italic uppercase">
-                          {timeSlots.map((slot) => (
-                            <button key={slot} type="button" onClick={() => setSelectedSlot(slot)} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${selectedSlot === slot ? 'bg-blue-600 border-blue-600 text-white font-bold italic uppercase' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600 font-bold italic uppercase'}`}>{slot}</button>
-                          ))}
+
+                      {/* Navigácia mesiaca */}
+                      <div className="flex justify-between items-center mb-3">
+                        <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">←</button>
+                        <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                          {calendarMonth.toLocaleString('sk-SK', { month: 'long', year: 'numeric' }).toUpperCase()}
+                        </span>
+                        <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">→</button>
+                      </div>
+
+                      {/* Hlavičky dní */}
+                      <div className="grid grid-cols-7 gap-1 mb-1">
+                        {['Po','Ut','St','Št','Pi','So','Ne'].map(d => (
+                          <div key={d} className="text-center text-[8px] text-zinc-700 font-black">{d}</div>
+                        ))}
+                      </div>
+
+                      {/* Dni */}
+                      <div className="grid grid-cols-7 gap-1">
+                        {(() => {
+                          const year = calendarMonth.getFullYear();
+                          const month = calendarMonth.getMonth();
+                          const daysInMonth = new Date(year, month + 1, 0).getDate();
+                          const firstDay = (new Date(year, month, 1).getDay() + 6) % 7; // Pon = 0
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          const cells = [];
+
+                          for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />);
+
+                          for (let d = 1; d <= daysInMonth; d++) {
+                            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                            const dayOfWeek = (firstDay + d - 1) % 7;
+                            const isWeekend = dayOfWeek >= 5;
+                            const isPast = dateStr <= todayStr;
+                            const avail = availabilityMap[dateStr];
+                            const isSelected = selectedDay === dateStr;
+                            const isFull = avail && avail.free === 0;
+                            const isDisabled = isPast || isWeekend || isFull;
+
+                            let cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed';
+                            if (!isPast && !isWeekend && avail) {
+                              const pct = avail.total > 0 ? avail.booked / avail.total : 0;
+                              if (isFull) cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
+                              else if (pct < 0.5) cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
+                              else cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
+                            }
+                            if (isSelected) cls = 'bg-red-600 border border-red-500 text-white cursor-pointer shadow-lg shadow-red-600/30';
+
+                            cells.push(
+                              <button
+                                key={d}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => { setSelectedDay(dateStr); setSelectedSlot(''); fetchDayEvents(dateStr); }}
+                                className={`rounded-lg flex flex-col items-center justify-center py-1.5 transition-all ${cls}`}
+                              >
+                                <span className="text-[10px] font-black">{d}</span>
+                                {avail && !isPast && !isWeekend && avail.total > 0 && (
+                                  <span className="text-[7px] opacity-60 font-bold not-italic normal-case">{avail.free}/{avail.total}</span>
+                                )}
+                              </button>
+                            );
+                          }
+                          return cells;
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* VÝBER ČASU + HODINOVÝ PREHĽAD — zobrazí sa po výbere dňa */}
+                    {selectedDay && (
+                      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
+                        <p className="text-[9px] text-zinc-500 uppercase ml-1 font-black tracking-widest">
+                          {new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+                        </p>
+
+                        {/* HODINOVÝ PREHĽAD DŇA */}
+                        <div className="bg-black/40 rounded-2xl border border-zinc-800 p-4 space-y-1.5">
+                          <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
+                          {(() => {
+                            const startH = parseInt(workHours.start);
+                            const endH = parseInt(workHours.end);
+                            const total = Object.values(roleCapacity).reduce((a, b) => a + b, 0) || 1;
+                            const rows = [];
+                            for (let h = startH; h < endH; h++) {
+                              const slotStart = new Date(`${selectedDay}T${String(h).padStart(2,'0')}:00:00`);
+                              const slotEnd = new Date(`${selectedDay}T${String(h+1).padStart(2,'0')}:00:00`);
+                              const busy = new Set();
+                              dayEvents.forEach(ev => {
+                                const s = new Date(ev.start_datetime);
+                                const e = new Date(ev.end_datetime);
+                                if (ev.employee_id && s < slotEnd && e > slotStart) busy.add(ev.employee_id);
+                              });
+                              const busyCount = busy.size;
+                              const pct = total > 0 ? busyCount / total : 0;
+                              const free = total - busyCount;
+                              const barColor = pct === 0 ? 'bg-green-600/50' : pct < 0.5 ? 'bg-green-600/30' : pct < 1 ? 'bg-amber-500/50' : 'bg-red-600/40';
+                              rows.push(
+                                <div key={h} className="flex items-center gap-2">
+                                  <span className="text-[8px] font-black text-zinc-600 w-9 shrink-0 not-italic">{String(h).padStart(2,'0')}:00</span>
+                                  <div className="flex-grow h-3 bg-zinc-900 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(5, pct * 100)}%` }} />
+                                  </div>
+                                  <span className={`text-[8px] font-black w-10 text-right shrink-0 not-italic ${pct === 1 ? 'text-red-500' : 'text-zinc-500'}`}>
+                                    {pct === 1 ? 'PLNÉ' : `${free}/${total}`}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return rows;
+                          })()}
+                        </div>
+
+                        {/* VÝBER ČASU */}
+                        <div>
+                          <p className="text-[9px] text-zinc-500 uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
+                          <div className="grid grid-cols-4 gap-2">
+                            {timeSlots.map((slot) => (
+                              <button key={slot} type="button" onClick={() => setSelectedSlot(slot)}
+                                className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'}`}>
+                                {slot}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* SUMÁR ČASU */}

@@ -443,7 +443,7 @@ export default function DetailZakazkyPage() {
       if (invError) throw invError;
 
       await updateJobStatus('Archivované');
-      router.push('/faktury');
+      router.push('/zakazky?filter=Archivovan%C3%A9');
     } catch (err) { 
       alert("Chyba pri vytváraní faktúry: " + err.message); 
     } finally { 

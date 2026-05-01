@@ -275,7 +275,7 @@ export default function KlientiPage() {
         {/* ZOZNAM KLIENTOV */}
         <div className="lg:col-span-1">
           <input type="text" placeholder="Hľadať partnera / ŠPZ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-6 shadow-inner" />
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="space-y-3 max-h-[70vh] overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             {filteredKlienti.map((k, i) => (
               <div key={i} className="relative group">
                 <button onClick={() => nacitajVozidla(k)} className={`w-full text-left p-6 rounded-3xl border transition-all relative font-bold ${selectedKlient === k.customer_name ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}`}>
