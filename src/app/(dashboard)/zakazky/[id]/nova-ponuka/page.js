@@ -14,14 +14,18 @@ export default function NovaPonukaPage() {
     const [generatedNumber, setGeneratedNumber] = useState(''); // Stav pre číslo ponuky
 
     const [offerItems, setOfferItems] = useState([]);
-    
-    const [newItem, setNewItem] = useState({ 
-        group_name: '', 
-        name: '', 
-        quantity: 1, 
-        unit: 'ks', 
-        unit_price: '', 
-        type: 'Materiál' 
+    const [rateCategories, setRateCategories] = useState([]);
+    const [jobTasks, setJobTasks] = useState([]);
+    const [jobItems, setJobItems] = useState([]);
+
+    const [newItem, setNewItem] = useState({
+        group_name: '',
+        name: '',
+        quantity: 1,
+        unit: 'ks',
+        unit_price: '',
+        type: 'Materiál',
+        rateType: 'M1',
     });
 
     // --- LOGIKA DÁTUMOV ---
@@ -38,13 +42,42 @@ export default function NovaPonukaPage() {
     const loadInitialData = async () => {
         setLoading(true);
         try {
-            const [jobRes, catalogRes] = await Promise.all([
+            const [jobRes, catalogRes, settingsRes, tasksRes, itemsRes] = await Promise.all([
                 supabase.from('job_tickets').select('*').eq('id', id).single(),
-                supabase.from('inventory_catalog').select('*').order('name', { ascending: true })
+                supabase.from('inventory_catalog').select('*').order('name', { ascending: true }),
+                supabase.from('business_settings').select('*'),
+                supabase.from('job_tasks').select('*').eq('job_id', id).order('created_at', { ascending: true }),
+                supabase.from('job_items').select('*').eq('job_id', id).order('created_at', { ascending: true })
             ]);
 
-            if (jobRes.data) setZakazka(jobRes.data);
+            if (jobRes.data) {
+                let jobData = jobRes.data;
+                if (!jobData.customer_id && jobData.plate_number) {
+                    const { data: vData } = await supabase
+                        .from('vehicles')
+                        .select('owner_id')
+                        .eq('license_plate', jobData.plate_number.toUpperCase())
+                        .maybeSingle();
+                    if (vData?.owner_id) jobData = { ...jobData, customer_id: vData.owner_id };
+                }
+                setZakazka(jobData);
+            }
             if (catalogRes.data) setCatalog(catalogRes.data);
+            if (tasksRes.data) setJobTasks(tasksRes.data);
+            if (itemsRes.data) setJobItems(itemsRes.data.filter(i => i.unit_price === 0 || i.unit_price === null));
+            if (settingsRes.data) {
+                const rateCategoriesRaw = settingsRes.data.find(s => s.id === 'rate_categories')?.value;
+                if (rateCategoriesRaw) {
+                    try { setRateCategories(JSON.parse(rateCategoriesRaw)); } catch {}
+                } else {
+                    setRateCategories([
+                        { key: 'M1', label: 'Základná mechanická', value: settingsRes.data.find(s => s.id === 'rate_m1')?.value || '0' },
+                        { key: 'M2', label: 'Prémiová mechanická', value: settingsRes.data.find(s => s.id === 'rate_m2')?.value || '0' },
+                        { key: 'E1', label: 'Elektrodiagnostika', value: settingsRes.data.find(s => s.id === 'rate_e1')?.value || '0' },
+                        { key: 'E2', label: 'Špeciálne elektro', value: settingsRes.data.find(s => s.id === 'rate_e2')?.value || '0' },
+                    ]);
+                }
+            }
 
             // --- PRED-GENEROVANIE ČÍSLA PONUKY ---
             const teraz = new Date();
@@ -67,6 +100,8 @@ export default function NovaPonukaPage() {
         setLoading(false);
     };
 
+    const getRateValue = (key) => parseFloat(rateCategories.find(c => c.key === key)?.value) || 0;
+
     const addItemToOffer = (e) => {
         e.preventDefault();
         if (!newItem.name || !newItem.group_name) {
@@ -74,16 +109,25 @@ export default function NovaPonukaPage() {
             return;
         }
 
+        const isPraca = newItem.type === 'Práca';
+        const { rateType: _rt, ...itemForOffer } = newItem;
+
         const itemToAdd = {
-            ...newItem,
+            ...itemForOffer,
             id: crypto.randomUUID(),
-            unit_price: parseFloat(newItem.unit_price) || 0,
+            unit_price: isPraca ? getRateValue(newItem.rateType) : (parseFloat(newItem.unit_price) || 0),
+            unit: isPraca ? 'hod' : newItem.unit,
             group_name: newItem.group_name.trim().toUpperCase(),
-            is_selected: true 
+            is_selected: true
         };
 
         setOfferItems([...offerItems, itemToAdd]);
-        setNewItem({ ...newItem, name: '', quantity: 1, unit_price: '' });
+        setNewItem({
+            ...newItem,
+            name: isPraca ? `Servisná práca ${newItem.rateType}` : '',
+            quantity: 1,
+            unit_price: isPraca ? getRateValue(newItem.rateType) : ''
+        });
     };
 
     const removeItem = (tempId) => {
@@ -251,24 +295,86 @@ export default function NovaPonukaPage() {
                         </div>
                     </div>
 
+                    {/* Panel záverov mechanika - SKRYTÝ PRI TLAČI */}
+                    {(jobTasks.length > 0 || jobItems.length > 0 || zakazka?.complaints) && (
+                        <div className="no-print bg-amber-950/30 border border-amber-600/30 rounded-[2rem] p-6 mb-6">
+                            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">🔧 Záznamy mechanika zo zákazky</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {zakazka?.complaints && (
+                                    <div>
+                                        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-2 font-black">Poznámky</p>
+                                        <pre className="text-xs text-zinc-200 whitespace-pre-wrap leading-relaxed font-sans">{zakazka.complaints}</pre>
+                                    </div>
+                                )}
+                                {jobItems.length > 0 && (
+                                    <div>
+                                        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-2 font-black">Závady na vozidle ({jobItems.length})</p>
+                                        <div className="space-y-1.5">
+                                            {jobItems.map(item => (
+                                                <div key={item.id} className="flex items-center justify-between bg-black/30 px-3 py-2 rounded-xl border border-orange-600/20">
+                                                    <span className="text-xs font-bold uppercase text-orange-300">{item.name}</span>
+                                                    <span className="text-[9px] font-black text-zinc-500 shrink-0 ml-2">{item.quantity} {item.unit}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {jobTasks.length > 0 && (
+                                    <div>
+                                        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-2 font-black">Checklist ({jobTasks.filter(t => t.is_completed).length}/{jobTasks.length} hotovo)</p>
+                                        <div className="space-y-1.5">
+                                            {jobTasks.map(task => (
+                                                <div key={task.id} className="flex items-start gap-2">
+                                                    <span className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center shrink-0 text-[9px] font-black ${task.is_completed ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
+                                                        {task.is_completed ? '✓' : '○'}
+                                                    </span>
+                                                    <span className={`text-xs font-bold uppercase ${task.is_completed ? 'text-green-400 line-through opacity-60' : 'text-white'}`}>
+                                                        {task.task_description}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Form Box - SKRYTÝ PRI TLAČI */}
                     <div className="bg-zinc-900 border-t-4 border-blue-600 p-8 rounded-[2.5rem] mb-8 shadow-2xl no-print">
                         <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] mb-6 italic">Nová položka do rozpočtu</h2>
                         <form onSubmit={addItemToOffer} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                             <div className="md:col-span-2">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Skupina</label>
-                                <input type="text" placeholder="MOTOR..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors" value={newItem.group_name} onChange={(e) => setNewItem({...newItem, group_name: e.target.value})} />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Typ</label>
-                                <select className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.type} onChange={(e) => setNewItem({...newItem, type: e.target.value, unit: e.target.value === 'Práca' ? 'hod' : 'ks'})}>
-                                    <option value="Materiál">Materiál</option>
-                                    <option value="Práca">Práca</option>
-                                </select>
+                                <input type="text" placeholder="MOTOR..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors" value={newItem.group_name} onChange={(e) => setNewItem({...newItem, group_name: e.target.value})} onFocus={(e) => e.target.select()} />
                             </div>
                             <div className="md:col-span-3">
+                                <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Typ</label>
+                                <div className="flex gap-1.5">
+                                    <select className="flex-1 bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.type} onChange={(e) => {
+                                        const t = e.target.value;
+                                        const isPraca = t === 'Práca';
+                                        setNewItem({ ...newItem, type: t, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : '', name: isPraca ? `Servisná práca ${newItem.rateType}` : '' });
+                                    }}>
+                                        <option value="Materiál">Materiál</option>
+                                        <option value="Práca">Práca</option>
+                                    </select>
+                                    {newItem.type === 'Práca' && (
+                                        <select className="flex-1 bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.rateType} onChange={(e) => {
+                                            const rt = e.target.value;
+                                            setNewItem({ ...newItem, rateType: rt, unit_price: getRateValue(rt), name: `Servisná práca ${rt}` });
+                                        }}>
+                                            {rateCategories.map(c => (
+                                                <option key={c.key} value={c.key}>{c.key} — {c.value}€</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Položka</label>
-                                <input list="catalog-list" type="text" placeholder="Hľadať v katalógu..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase italic focus:border-blue-500 outline-none transition-colors" value={newItem.name} 
+                                <input list="catalog-list" type="text" placeholder="Hľadať v katalógu..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase italic focus:border-blue-500 outline-none transition-colors" value={newItem.name}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => {
                                         const val = e.target.value;
                                         const match = catalog.find(c => c.name === val.toUpperCase());
@@ -282,7 +388,7 @@ export default function NovaPonukaPage() {
                             </div>
                             <div className="md:col-span-1">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Mn.</label>
-                                <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 0})} />
+                                <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 0})} onFocus={(e) => e.target.select()} />
                             </div>
                             <div className="md:col-span-1">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Jedn.</label>
@@ -292,11 +398,12 @@ export default function NovaPonukaPage() {
                             </div>
                             <div className="md:col-span-1">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-right font-black">Cena/J</label>
-                                <input type="text" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-right text-xs font-black focus:border-blue-500 outline-none" value={newItem.unit_price} placeholder="0.00" 
+                                <input type="text" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-right text-xs font-black focus:border-blue-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed" value={newItem.unit_price} placeholder="0.00" disabled={newItem.type === 'Práca'}
+                                    onFocus={(e) => e.target.select()}
                                     onChange={(e) => {
                                         const val = e.target.value.replace(',', '.');
                                         if (/^\d*\.?\d*$/.test(val)) setNewItem({...newItem, unit_price: val});
-                                    }} 
+                                    }}
                                 />
                             </div>
                             <div className="md:col-span-2">

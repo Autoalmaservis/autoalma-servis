@@ -64,7 +64,7 @@ function PrijemForm() {
         const lines = calData.issue_description
           .split('\n')
           .map(line => line.replace(/^\d+\.\s*/, '').trim())
-          .filter(line => line !== '');
+          .filter(line => line !== '' && !line.endsWith(':'));
 
         if (lines.length > 0) {
           setTasks(lines.map(l => ({ description: l })));

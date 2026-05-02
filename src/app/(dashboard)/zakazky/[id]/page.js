@@ -15,7 +15,7 @@ export default function DetailZakazkyPage() {
   
   // --- NOVÉ STAVY PRE KATALÓG, SADZBY A CENOVÉ PONUKY ZACHOVANÉ ---
   const [catalog, setCatalog] = useState([]);
-  const [globalRates, setGlobalRates] = useState({ m1: 0, m2: 0, e1: 0, e2: 0 });
+  const [rateCategories, setRateCategories] = useState([]);
   const [activeOffer, setActiveOffer] = useState(null);
   const [pastOffers, setPastOffers] = useState([]); // HISTÓRIA PONÚK ZACHOVANÁ
 
@@ -23,17 +23,19 @@ export default function DetailZakazkyPage() {
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
 
+  const [myCompany, setMyCompany] = useState({ name: 'AutoAlma Servis', address: '', city: '', zip: '', ico: '', dic: '', bank: '', phone: '', email: '', web: '', logo_url: '' });
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
-
-  const [newItem, setNewItem] = useState({ 
-    name: '', 
-    quantity: 1, 
-    unit: 'ks', 
-    unit_price: 0, 
-    type: 'Materiál' 
+  const [newItem, setNewItem] = useState({
+    name: '',
+    quantity: 1,
+    unit: 'ks',
+    unit_price: 0,
+    type: 'Materiál',
+    rateType: 'M1',
   });
 
   // --- REAL-TIME ODBERY (Postrážené, aby nič nevypadlo) ---
@@ -82,14 +84,34 @@ export default function DetailZakazkyPage() {
   const fetchSettings = async () => {
     const { data } = await supabase.from('business_settings').select('*');
     if (data) {
-      setGlobalRates({
-        m1: parseFloat(data.find(s => s.id === 'rate_m1')?.value || 0),
-        m2: parseFloat(data.find(s => s.id === 'rate_m2')?.value || 0),
-        e1: parseFloat(data.find(s => s.id === 'rate_e1')?.value || 0),
-        e2: parseFloat(data.find(s => s.id === 'rate_e2')?.value || 0),
+      setMyCompany({
+        name: data.find(s => s.id === 'company_name')?.value || 'AutoAlma Servis',
+        address: data.find(s => s.id === 'company_address')?.value || '',
+        city: data.find(s => s.id === 'company_city')?.value || '',
+        zip: data.find(s => s.id === 'company_zip')?.value || '',
+        ico: data.find(s => s.id === 'company_ico')?.value || '',
+        dic: data.find(s => s.id === 'company_dic')?.value || '',
+        bank: data.find(s => s.id === 'company_bank')?.value || '',
+        phone: data.find(s => s.id === 'company_phone')?.value || '',
+        email: data.find(s => s.id === 'company_email')?.value || '',
+        web: data.find(s => s.id === 'company_web')?.value || '',
+        logo_url: data.find(s => s.id === 'company_logo')?.value || '',
       });
+      const rateCategoriesRaw = data.find(s => s.id === 'rate_categories')?.value;
+      if (rateCategoriesRaw) {
+        try { setRateCategories(JSON.parse(rateCategoriesRaw)); } catch {}
+      } else {
+        setRateCategories([
+          { key: 'M1', label: 'Základná mechanická', value: data.find(s => s.id === 'rate_m1')?.value || '0' },
+          { key: 'M2', label: 'Prémiová mechanická', value: data.find(s => s.id === 'rate_m2')?.value || '0' },
+          { key: 'E1', label: 'Elektrodiagnostika', value: data.find(s => s.id === 'rate_e1')?.value || '0' },
+          { key: 'E2', label: 'Špeciálne elektro', value: data.find(s => s.id === 'rate_e2')?.value || '0' },
+        ]);
+      }
     }
   };
+
+  const getRateValue = (key) => parseFloat(rateCategories.find(c => c.key === key)?.value) || 0;
 
   const fetchDetail = async () => {
     try {
@@ -439,11 +461,11 @@ export default function DetailZakazkyPage() {
         }
       };
 
-      const { error: invError } = await supabase.from('invoices').insert([invoicePayload]);
+      const { data: invData, error: invError } = await supabase.from('invoices').insert([invoicePayload]).select().single();
       if (invError) throw invError;
 
       await updateJobStatus('Archivované');
-      router.push('/zakazky?filter=Archivovan%C3%A9');
+      router.push(`/faktury/${invData.id}`);
     } catch (err) { 
       alert("Chyba pri vytváraní faktúry: " + err.message); 
     } finally { 
@@ -477,20 +499,21 @@ export default function DetailZakazkyPage() {
   const addItem = async (e) => {
     e.preventDefault();
     if (!newItem.name) return;
-    
-    let itemToSave = { ...newItem };
-    if (['M1', 'M2', 'E1', 'E2'].includes(newItem.type)) {
-        itemToSave.name = `SERVISNÁ PRÁCA ${newItem.type}`;
-        itemToSave.unit_price = globalRates[newItem.type.toLowerCase()] || 0;
-        itemToSave.type = 'Práca';
-        itemToSave.unit = 'hod';
-    }
 
-    syncToCatalog(itemToSave);
+    const isPraca = newItem.type === 'Práca';
+    const itemToSave = {
+      ...newItem,
+      type: isPraca ? 'Práca' : 'Materiál',
+      unit_price: isPraca ? getRateValue(newItem.rateType) : newItem.unit_price,
+      unit: isPraca ? 'hod' : newItem.unit,
+    };
 
-    const { error } = await supabase.from('job_items').insert([{ ...itemToSave, job_id: id }]);
+    if (!isPraca) syncToCatalog(itemToSave);
+
+    const { rateType: _rt, ...itemForDb } = itemToSave;
+    const { error } = await supabase.from('job_items').insert([{ ...itemForDb, job_id: id }]);
     if (!error) {
-      setNewItem({ name: '', quantity: 1, unit: 'ks', unit_price: 0, type: newItem.type });
+      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType });
       fetchItems();
     }
   };
@@ -528,6 +551,7 @@ export default function DetailZakazkyPage() {
         
         <div className="flex bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800 gap-2">
             <button onClick={() => updateJobStatus('Prebieha')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${zakazka.status === 'Prebieha' ? 'bg-amber-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>Prebieha</button>
+            <button onClick={() => updateJobStatus('Čaká na schválenie')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${zakazka.status === 'Čaká na schválenie' ? 'bg-purple-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>Čaká na schválenie</button>
             <button onClick={() => updateJobStatus('Dokončené')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${zakazka.status === 'Dokončené' ? 'bg-green-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>Dokončené</button>
             <button onClick={() => updateJobStatus('Archivované')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${zakazka.status === 'Archivované' ? 'bg-zinc-700 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>Archivovať</button>
         </div>
@@ -538,7 +562,7 @@ export default function DetailZakazkyPage() {
         </div>
       </div>
 
-      <div className="printable-area bg-zinc-900 border border-zinc-800 p-8 md:p-16 rounded-[3rem] shadow-2xl max-w-5xl mx-auto text-white">
+      <div className="printable-area no-print bg-zinc-900 border border-zinc-800 p-8 md:p-16 rounded-[3rem] shadow-2xl max-w-5xl mx-auto text-white">
         
         <div className="flex justify-between items-start border-b-2 border-red-600 pb-8 mb-8 font-bold">
           <div>
@@ -776,52 +800,72 @@ export default function DetailZakazkyPage() {
                 
                 <tr className="no-print bg-black/50 border-t-2 border-red-600/20">
                   <td className="p-3">
-                    <select 
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-red-600 cursor-pointer" 
-                      value={newItem.type} 
+                    <div className="flex gap-1.5">
+                    <select
+                      className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-red-600 cursor-pointer"
+                      value={newItem.type}
                       onChange={(e) => {
                         const t = e.target.value;
-                        setNewItem({...newItem, type: t, unit: t === 'Materiál' ? 'ks' : 'hod'});
+                        const isPraca = t === 'Práca';
+                        setNewItem({
+                          ...newItem,
+                          type: t,
+                          unit: isPraca ? 'hod' : 'ks',
+                          unit_price: isPraca ? getRateValue(newItem.rateType) : 0,
+                          name: isPraca ? `Servisná práca ${newItem.rateType}` : '',
+                        });
                       }}
                     >
                       <option value="Materiál">MATERIÁL</option>
-                      <option value="M1">M1</option>
-                      <option value="M2">M2</option>
-                      <option value="E1">E1</option>
-                      <option value="E2">E2</option>
+                      <option value="Práca">PRÁCA</option>
                     </select>
+                    {newItem.type === 'Práca' && (
+                      <select
+                        className="bg-zinc-900 border border-red-600/50 p-3 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-red-600 cursor-pointer"
+                        value={newItem.rateType}
+                        onChange={(e) => {
+                          const rt = e.target.value;
+                          setNewItem({ ...newItem, rateType: rt, unit_price: getRateValue(rt), name: `Servisná práca ${rt}` });
+                        }}
+                      >
+                        {rateCategories.map(c => (
+                          <option key={c.key} value={c.key}>{c.key} — {c.value}€</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   </td>
                   <td className="p-3 relative">
-                    <input 
+                    <input
                       list="catalog-list"
-                      type="text" 
-                      placeholder="Názov položky..." 
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600 text-xs font-black uppercase italic" 
-                      value={newItem.name} 
+                      type="text"
+                      placeholder="Názov položky..."
+                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600 text-xs font-black uppercase italic"
+                      value={newItem.name}
                       onChange={(e) => {
                         const val = e.target.value;
                         const match = catalog.find(c => c.name === val.toUpperCase());
                         if (match) {
-                           setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit, type: match.type === 'práca' ? 'Práca' : 'Materiál' });
+                          setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit, type: match.type === 'práca' ? 'Práca' : 'Materiál' });
                         } else {
-                           setNewItem({...newItem, name: val});
+                          setNewItem({ ...newItem, name: val });
                         }
-                      }} 
+                      }}
                     />
                     <datalist id="catalog-list">
                       {catalog.map((c, i) => (<option key={i} value={c.name}>{c.unit_price} €</option>))}
                     </datalist>
                   </td>
                   <td className="p-3">
-                    <input type="number" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value)})} />
+                    <input type="number" min="0.5" step="0.5" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 1})} />
                   </td>
                   <td className="p-3 w-32">
-                    <input 
-                      type="number" 
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-right text-xs font-black outline-none" 
-                      value={ (['M1', 'M2', 'E1', 'E2'].includes(newItem.type) ? globalRates[newItem.type.toLowerCase()] : newItem.unit_price) || 0 }
-                      disabled={['M1', 'M2', 'E1', 'E2'].includes(newItem.type)}
-                      onChange={(e) => setNewItem({...newItem, unit_price: parseFloat(e.target.value)})}
+                    <input
+                      type="number"
+                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-right text-xs font-black outline-none disabled:opacity-40"
+                      value={newItem.unit_price || 0}
+                      disabled={newItem.type === 'Práca'}
+                      onChange={(e) => setNewItem({...newItem, unit_price: parseFloat(e.target.value) || 0})}
                     />
                   </td>
                   <td className="p-3"><button onClick={addItem} className="w-full bg-red-600 text-white font-black py-3 rounded-xl hover:bg-red-500 transition-all shadow-xl text-lg">+</button></td>
@@ -872,19 +916,181 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        <div className="mt-12 no-print font-bold">
-            <button 
-                onClick={() => setIsInvoiceModalOpen(true)}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-8 rounded-[2rem] uppercase text-sm tracking-[0.4em] shadow-2xl transition-all italic hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-4 shadow-blue-900/40 font-black"
-            >
-                <span className="text-2xl">💰</span> UZAVRIEŤ ZÁKAZKU A VYÚČTOVAŤ
-            </button>
+        <div className="mt-12 no-print font-bold space-y-4">
+            {zakazka.status !== 'Dokončené' && zakazka.status !== 'Archivované' && (
+                <button
+                    onClick={() => updateJobStatus('Dokončené')}
+                    className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-8 rounded-[2rem] uppercase text-sm tracking-[0.4em] shadow-2xl transition-all italic hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-4 shadow-green-900/40"
+                >
+                    <span className="text-2xl">✅</span> AUTO JE PRIPRAVENÉ — OZNAČIŤ AKO DOKONČENÉ
+                </button>
+            )}
+
+            {(zakazka.status === 'Dokončené' || zakazka.status === 'Archivované') && (
+                <button
+                    onClick={() => setIsInvoiceModalOpen(true)}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-8 rounded-[2rem] uppercase text-sm tracking-[0.4em] shadow-2xl transition-all italic hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-4 shadow-blue-900/40"
+                >
+                    <span className="text-2xl">💰</span> ZÁKAZNÍK PRIŠIEL — VYSTAVIŤ FAKTÚRU
+                </button>
+            )}
         </div>
 
         <div className="grid grid-cols-2 gap-20 mt-20 text-center font-black italic tracking-[0.4em] uppercase font-black">
           <div className="border-t border-zinc-800 pt-4 text-[9px] text-zinc-500 italic">Pečiatka a podpis servisu</div>
           <div className="border-t border-zinc-800 pt-4 text-[9px] text-zinc-500 italic">Podpis zákazníka</div>
         </div>
+      </div>
+
+      {/* ===== ČISTÁ TLAČOVÁ FORMA ===== */}
+      <div className="zakazka-print-area">
+
+        {/* HLAVIČKA */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
+          <tbody><tr>
+            <td width="50%" valign="top">
+              <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" style={{ width: '100px', height: 'auto', marginBottom: '10pt' }} />
+              <div style={{ fontSize: '8.5pt', color: '#000', lineHeight: '1.4' }}>
+                <p style={{ margin: '0', color: '#666', fontWeight: '900' }}>DODÁVATEĽ:</p>
+                <p style={{ margin: '0' }}><strong>{myCompany.name}</strong></p>
+                <p style={{ margin: '0' }}>{myCompany.address}</p>
+                <p style={{ margin: '0' }}>{myCompany.zip} {myCompany.city}</p>
+                <p style={{ margin: '3pt 0 0 0' }}>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
+                <p style={{ margin: '0' }}>{myCompany.phone} | {myCompany.email}</p>
+                {myCompany.web && <p style={{ margin: '0' }}>{myCompany.web}</p>}
+              </div>
+            </td>
+            <td width="50%" valign="top" align="right">
+              <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>Servisný príkaz</h2>
+              <p style={{ fontSize: '22pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{zakazka.job_number || `#${zakazka.id.slice(0,8)}`}</p>
+              <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum príjmu: <strong>{new Date(zakazka.created_at).toLocaleDateString('sk-SK')}</strong></p>
+              <p style={{ margin: '2pt 0 0 0', fontSize: '9pt', color: '#000' }}>Stav: <strong style={{ color: zakazka.status === 'Dokončené' ? '#16a34a' : '#d97706' }}>{zakazka.status}</strong></p>
+            </td>
+          </tr></tbody>
+        </table>
+
+        {/* ADRESY */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
+          <tbody><tr>
+            <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
+              <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>ODBERATEĽ / ZÁKAZNÍK:</p>
+              <p style={{ margin: '0', fontSize: '11pt', color: '#000', fontWeight: '900' }}>{zakazka.company_name || zakazka.customer_name}</p>
+              <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{zakazka.address || zakazka.customer_address || ''}</p>
+              <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{zakazka.zip || ''} {zakazka.city || ''}</p>
+              {(zakazka.ico || zakazka.dic) && (
+                <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>IČO: {zakazka.ico || '---'} | DIČ: {zakazka.dic || '---'}</p>
+              )}
+              <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>Tel: {zakazka.customer_phone || '---'}</p>
+            </td>
+            <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
+              <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>VOZIDLO:</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3pt' }}>
+                <span style={{ border: '1.5pt solid #000', padding: '1pt 4pt', fontWeight: '900', fontSize: '11pt', color: '#000' }}>{zakazka.plate_number || '---'}</span>
+                <span style={{ fontSize: '10pt', fontWeight: '900', color: '#000' }}>{zakazka.car_brand_model || '---'}</span>
+              </div>
+              <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>VIN: {zakazka.vin_number || '---'}</p>
+              <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {zakazka.mileage || '---'} km | Mechanik: {zakazka.technician_name || '---'}</p>
+            </td>
+          </tr></tbody>
+        </table>
+
+        {/* ZÁVADY */}
+        {zakazka.complaints && (
+          <div style={{ border: '1pt solid #000', padding: '8pt', marginBottom: '12pt' }}>
+            <p style={{ margin: '0 0 4pt 0', fontSize: '8pt', color: '#dc2626', fontWeight: '900' }}>ZISTENÉ ZÁVADY / POŽIADAVKY ZÁKAZNÍKA:</p>
+            <p style={{ margin: '0', fontSize: '8.5pt', color: '#000', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>{zakazka.complaints}</p>
+          </div>
+        )}
+
+        {/* CHECKLIST ÚKONOV */}
+        {tasks.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12pt' }}>
+            <thead>
+              <tr style={{ background: '#f4f4f5' }}>
+                <th style={{ border: '1pt solid #000', padding: '4pt 6pt', fontSize: '8pt', fontWeight: '900', textAlign: 'left' }}>SERVISNÉ ÚKONY — CHECKLIST</th>
+                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'center', width: '60pt' }}>STAV</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((task) => (
+                <tr key={task.id}>
+                  <td style={{ border: '0.5pt solid #eee', padding: '4pt 6pt', fontSize: '8.5pt', color: '#000' }}>{task.task_description}</td>
+                  <td style={{ border: '0.5pt solid #eee', padding: '4pt', textAlign: 'center', fontSize: '8pt', fontWeight: '900', color: task.is_completed ? '#16a34a' : '#dc2626' }}>
+                    {task.is_completed ? '✓ HOTOVO' : '○ ČAKÁ'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* MATERIÁL A PRÁCE */}
+        {items.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8pt' }}>
+            <thead>
+              <tr style={{ background: '#f4f4f5' }}>
+                <th style={{ border: '1pt solid #000', padding: '4pt 6pt', fontSize: '8pt', fontWeight: '900', textAlign: 'left' }}>MATERIÁL A SERVISNÉ PRÁCE</th>
+                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'center', width: '40pt' }}>MNŽ.</th>
+                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'right', width: '55pt' }}>CENA/J</th>
+                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'right', width: '60pt' }}>SPOLU</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td style={{ border: '0.5pt solid #eee', padding: '3pt 6pt', fontSize: '8.5pt', color: '#000' }}>
+                    <span style={{ fontSize: '7pt', color: item.type === 'Práca' ? '#2563eb' : '#ea580c', fontWeight: '900' }}>[{item.type.toUpperCase()}]</span>{' '}{item.name}
+                  </td>
+                  <td style={{ border: '0.5pt solid #eee', padding: '3pt', textAlign: 'center', fontSize: '8.5pt', color: '#000' }}>{item.quantity} {item.unit}</td>
+                  <td style={{ border: '0.5pt solid #eee', padding: '3pt', textAlign: 'right', fontSize: '8.5pt', color: '#000' }}>{parseFloat(item.unit_price).toFixed(2)} €</td>
+                  <td style={{ border: '0.5pt solid #eee', padding: '3pt', textAlign: 'right', fontWeight: '900', fontSize: '8.5pt', color: '#000' }}>{(item.quantity * item.unit_price).toFixed(2)} €</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* SUMÁR */}
+        {items.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10pt' }}>
+            <tbody><tr>
+              <td></td>
+              <td width="200pt" style={{ border: '1.5pt solid #000', padding: '8pt' }}>
+                <table width="100%" style={{ borderCollapse: 'collapse' }}>
+                  <tbody>
+                    <tr style={{ fontSize: '9pt', color: '#000' }}>
+                      <td style={{ paddingBottom: '2pt' }}>Základ dane:</td>
+                      <td align="right">{subtotal.toFixed(2)} €</td>
+                    </tr>
+                    <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
+                      <td style={{ paddingBottom: '2pt' }}>DPH (23%):</td>
+                      <td align="right">{tax.toFixed(2)} €</td>
+                    </tr>
+                    <tr>
+                      <td style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '11pt', color: '#dc2626' }}>CELKOM:</td>
+                      <td align="right" style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '16pt' }}>{total.toFixed(2)} €</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr></tbody>
+          </table>
+        )}
+
+        {/* SPACER — podpisy na spodok */}
+        <div className="print-spacer" />
+
+        {/* PODPISY */}
+        <div className="print-signature-area">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody><tr>
+              <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>PODPIS PREVZAL (ZÁKAZNÍK)</td>
+              <td width="10%"></td>
+              <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>PEČIATKA A PODPIS SERVISU</td>
+            </tr></tbody>
+          </table>
+        </div>
+
       </div>
 
       {isInvoiceModalOpen && (
@@ -911,20 +1117,34 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
       )}
-
       <style jsx global>{`
-        .print-block { display: none; }
+        .zakazka-print-area { display: none; }
+        .print-spacer { display: none; }
+        .print-signature-area { display: none; }
+
         @media print {
-          @page { size: A4; margin: 1.5cm; }
-          body { background: white !important; color: black !important; }
+          @page { size: A4; margin: 0 !important; }
+          html, body { background: #fff !important; color: #000 !important; margin: 0 !important; padding: 0 !important; }
           .no-print { display: none !important; }
-          .print-block { display: block !important; }
-          .printable-area { border: none !important; box-shadow: none !important; background: white !important; width: 100% !important; max-width: none !important; color: black !important; padding: 0 !important; }
-          .bg-zinc-900, .bg-black, .bg-black/30, .bg-zinc-800/50, .bg-zinc-800/20, .bg-zinc-900/30 { background: white !important; }
-          .text-white, .text-zinc-300, .text-zinc-400, .text-zinc-500, .text-zinc-600 { color: black !important; }
-          .border-zinc-800, .border-zinc-700 { border-color: #ddd !important; }
-          .text-red-600 { color: #dc2626 !important; font-weight: 900 !important; }
-          .text-blue-400, .text-orange-400 { color: black !important; border-color: #000 !important; }
+          .min-h-screen { min-height: 0 !important; padding: 0 !important; background: #fff !important; }
+
+          body * { visibility: hidden !important; }
+          .zakazka-print-area { visibility: visible !important; display: flex !important; }
+          .zakazka-print-area * { visibility: visible !important; }
+
+          .zakazka-print-area {
+            flex-direction: column !important;
+            min-height: 26.7cm !important;
+            background: #fff !important;
+            padding: 0.8cm 1.5cm 1.5cm 1.5cm !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
+            overflow: visible !important;
+            box-sizing: border-box !important;
+          }
+          .print-spacer { display: block !important; flex: 1 !important; visibility: visible !important; }
+          .print-signature-area { display: block !important; visibility: visible !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>

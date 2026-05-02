@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:autoalma.sk)"
+      "WebFetch(domain:autoalma.sk)",
+      "Bash(curl -s \"http://localhost:3000/api/seed-normy\")",
+      "Bash(curl -s --max-time 10 \"http://localhost:3000/api/seed-normy\")",
+      "Bash(node seed_normy.mjs)",
+      "Bash(node --input-type=module)"
     ]
   }
 }

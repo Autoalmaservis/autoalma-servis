@@ -65,12 +65,12 @@ export default function NotificationsModal({ userId, isOpen, onClose, onRead }) 
                 className={`p-6 rounded-[2rem] border transition-all cursor-pointer group ${n.is_read ? 'bg-zinc-900/20 border-zinc-900 opacity-50' : 'bg-zinc-900 border-zinc-700 shadow-xl hover:border-red-600/50'}`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <h4 className={`text-sm font-black uppercase italic ${n.title.includes('ponuka') ? 'text-blue-500' : 'text-red-500'}`}>
+                  <h4 className={`text-sm font-black uppercase italic ${n.type === 'success' ? 'text-green-400' : n.type === 'info' ? 'text-blue-400' : n.title.includes('ponuka') ? 'text-blue-400' : 'text-red-400'}`}>
                     {n.title} {!n.is_read && "•"}
                   </h4>
-                  <span className="text-[9px] text-zinc-600 font-bold uppercase">{new Date(n.created_at).toLocaleDateString('sk-SK')}</span>
+                  <span className="text-[9px] text-zinc-500 font-bold uppercase">{new Date(n.created_at).toLocaleDateString('sk-SK')}</span>
                 </div>
-                <p className="text-xs text-zinc-400 leading-relaxed font-bold uppercase">{n.content}</p>
+                <p className="text-sm text-white leading-relaxed font-semibold tracking-wide">{n.content}</p>
                 {n.link && !n.is_read && (
                   <div className="mt-4 flex items-center gap-2 text-blue-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
                     Zobraziť detail ponuky ➔

@@ -33,6 +33,7 @@ export default function GarazPage() {
   const [customItems, setCustomItems] = useState([]); // Vlastné úkony zákazníka
   const [currentCustomIssue, setCurrentCustomIssue] = useState('');
   const [currentItemDuration, setCurrentItemDuration] = useState('technik');
+  const [normSearchOrder, setNormSearchOrder] = useState('');
 
   // POMOCNÉ STAVY PRE NOVÝ VÝBER TERMÍNU
   const [selectedDay, setSelectedDay] = useState('');
@@ -224,9 +225,10 @@ export default function GarazPage() {
     const futureDate = new Date(today);
     futureDate.setDate(today.getDate() + 56); // 8 týždňov dopredu
 
-    const [{ data: emps }, { data: evts }] = await Promise.all([
+    const [{ data: emps }, { data: evts }, { data: bloks }] = await Promise.all([
       supabase.from('employees').select('id, role').eq('active', true).in('role', ['mechanik', 'diagnostik', 'klampiar', 'lakernik']),
-      supabase.from('calendar_events').select('start_datetime, employee_id').gte('start_datetime', today.toISOString()).lte('start_datetime', futureDate.toISOString()).neq('plate_number', 'BLOK')
+      supabase.from('calendar_events').select('start_datetime, employee_id').gte('start_datetime', today.toISOString()).lte('start_datetime', futureDate.toISOString()).neq('plate_number', 'BLOK'),
+      supabase.from('calendar_events').select('start_datetime, employee_id').gte('start_datetime', today.toISOString()).lte('start_datetime', futureDate.toISOString()).eq('plate_number', 'BLOK'),
     ]);
 
     const roleCap = {};
@@ -234,6 +236,7 @@ export default function GarazPage() {
     setRoleCapacity(roleCap);
 
     const totalCapacity = emps?.length || 0;
+    const allEmpIds = emps?.map(e => e.id) || [];
 
     // Počet unikátnych zamestnancov obsadených v daný deň
     const dayBookings = {};
@@ -241,6 +244,17 @@ export default function GarazPage() {
       const day = ev.start_datetime.split('T')[0];
       if (!dayBookings[day]) dayBookings[day] = new Set();
       if (ev.employee_id) dayBookings[day].add(ev.employee_id);
+    });
+
+    // BLOK eventy — ak employee_id null = blok všetkých
+    bloks?.forEach(ev => {
+      const day = ev.start_datetime.split('T')[0];
+      if (!dayBookings[day]) dayBookings[day] = new Set();
+      if (ev.employee_id) {
+        dayBookings[day].add(ev.employee_id);
+      } else {
+        allEmpIds.forEach(id => dayBookings[day].add(id));
+      }
     });
 
     const availability = {};
@@ -277,6 +291,7 @@ export default function GarazPage() {
     setSelectedSlot('');
     setSelectedNorms([]);
     setSelectedCategory('');
+    setNormSearchOrder('');
     setDayEvents([]);
     setCalendarMonth(new Date());
     setIsOrderModalOpen(true);
@@ -354,7 +369,7 @@ export default function GarazPage() {
           issue_description: finalDescription,
           planned_work: "Bude určené technikom",
           customer_note: `Odhadované trvanie: ${estimatedMinutes} min.`,
-          start_datetime: finalDateTime, 
+          start_datetime: finalDateTime,
           end_datetime: endTimeStr,
           plate_number: orderingVehicle.license_plate,
           customer_name: userProfile?.full_name || 'Zákazník z garáže',
@@ -367,6 +382,14 @@ export default function GarazPage() {
         }]);
 
       if (error) throw error;
+
+      await supabase.from('notifications').insert([{
+        user_id: user.id,
+        title: '📅 Žiadosť o termín odoslaná',
+        content: `Vaša žiadosť o servisný termín pre vozidlo ${orderingVehicle.license_plate} na ${new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK')} o ${selectedSlot} bola úspešne odoslaná. Čakáme na potvrdenie zo strany servisu.`,
+        type: 'info'
+      }]);
+
       alert(`Vaša požiadavka bola úspešne odoslaná!`);
       setIsOrderModalOpen(false);
     } catch (err) {
@@ -529,6 +552,64 @@ export default function GarazPage() {
         </div>
       </div>
 
+      {/* --- SPÄTNÁ VÄZBA — FIXED PRAVÝ DOLNÝ ROH --- */}
+      <div className="fixed bottom-6 right-5 z-[90] w-64 bg-zinc-950 border border-zinc-800 rounded-[1.75rem] shadow-2xl shadow-black/60 overflow-hidden">
+        {/* červená linka navrchu */}
+        <div className="h-[2px] bg-gradient-to-r from-transparent via-red-600/70 to-transparent" />
+        <div className="p-5">
+          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-red-600 mb-1">Ste spokojní?</p>
+          <p className="text-white font-black uppercase italic tracking-tight text-base leading-tight mb-1">
+            Budeme radi za vašu recenziu
+          </p>
+          <p className="text-zinc-400 text-[10px] font-bold leading-snug mb-4">
+            Pomôžete nám aj ďalším zákazníkom, ktorí nás ešte nepoznajú.
+          </p>
+          <div className="flex flex-col gap-2">
+            <a
+              href="https://www.facebook.com/AutoalmaAutoservis/reviews"
+              target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-3 bg-blue-600/10 border border-blue-600/25 hover:border-blue-500/60 hover:bg-blue-600/20 px-4 py-3 rounded-xl transition-all group"
+            >
+              <svg className="w-4 h-4 text-blue-400 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              <span className="text-blue-300 font-black uppercase text-[10px] tracking-widest group-hover:text-white transition-colors">Recenzia na Facebooku</span>
+            </a>
+            <a
+              href="https://www.google.com/maps?cid=15276782726525162"
+              target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800 px-4 py-3 rounded-xl transition-all group"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              <span className="text-zinc-300 font-black uppercase text-[10px] tracking-widest group-hover:text-white transition-colors">Recenzia na Google</span>
+            </a>
+
+            {/* ODDEĽOVAČ */}
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex-grow h-px bg-zinc-800" />
+              <span className="text-[8px] font-black uppercase tracking-widest text-zinc-700">alebo</span>
+              <div className="flex-grow h-px bg-zinc-800" />
+            </div>
+
+            <a
+              href={`mailto:autoalma@autoalma.sk?subject=Spätná väzba od zákazníka&body=Dobrý deň,%0A%0ATu je moja spätná väzba:%0A%0A`}
+              className="flex items-center gap-3 bg-red-600/10 border border-red-600/20 hover:border-red-500/50 hover:bg-red-600/15 px-4 py-3 rounded-xl transition-all group"
+            >
+              <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <div>
+                <span className="text-red-300 font-black uppercase text-[10px] tracking-widest group-hover:text-white transition-colors block">Napísať priamo nám</span>
+                <span className="text-zinc-400 text-[9px] font-bold">Vaša väzba nám pomôže zlepšiť sa</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* --- EXTRA OKNO PRE NOTIFIKÁCIE (ZVONČEK MODAL) --- */}
       {isInboxOpen && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[500] flex items-center justify-center p-4">
@@ -583,26 +664,46 @@ export default function GarazPage() {
                <div className="py-20 text-center animate-pulse text-zinc-500 uppercase tracking-widest text-xs font-bold italic">Sťahujem dáta faktúr...</div>
             ) : vehicleInvoices.length === 0 ? (
                <div className="py-20 text-center text-zinc-600 uppercase text-xs italic border-2 border-dashed border-zinc-800 rounded-[2rem]">Zatiaľ neboli k tomuto vozidlu vystavené žiadne faktúry.</div>
-            ) : (
-               <div className="space-y-4 font-bold uppercase">
-                  {vehicleInvoices.map(inv => (
-                    <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all font-bold italic">
-                       <div>
-                         <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo dokladu</p>
-                         <p className="text-lg font-black uppercase tracking-tight font-bold italic">{inv.invoice_number}</p>
-                         <p className="text-[10px] text-zinc-600 mt-1 font-bold italic">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
-                       </div>
-                       <div className="text-right flex items-center gap-6 font-bold italic">
-                         <div>
-                           <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Suma s DPH</p>
-                           <p className="text-2xl font-black text-white italic font-bold">{inv.total_amount?.toFixed(2)} €</p>
-                         </div>
-                         <button onClick={() => router.push(`/garaz/faktura/${inv.id}`)} className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg font-bold italic">👁️</button>
-                       </div>
+            ) : (() => {
+               const officialInvoices = vehicleInvoices.filter(inv => !String(inv.invoice_number).startsWith('A'));
+               const deferredInvoices = vehicleInvoices.filter(inv => String(inv.invoice_number).startsWith('A'));
+               const InvoiceRow = ({ inv }) => (
+                 <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all font-bold italic">
+                    <div>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo dokladu</p>
+                      <p className="text-lg font-black uppercase tracking-tight font-bold italic">{inv.invoice_number}</p>
+                      <p className="text-[10px] text-zinc-600 mt-1 font-bold italic">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
                     </div>
-                  ))}
-               </div>
-            )}
+                    <div className="text-right flex items-center gap-6 font-bold italic">
+                      <div>
+                        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Suma s DPH</p>
+                        <p className="text-2xl font-black text-white italic font-bold">{inv.total_amount?.toFixed(2)} €</p>
+                      </div>
+                      <button onClick={() => router.push(`/garaz/faktura/${inv.id}`)} className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg font-bold italic">👁️</button>
+                    </div>
+                 </div>
+               );
+               return (
+                 <div className="space-y-8 font-bold uppercase">
+                   {officialInvoices.length > 0 && (
+                     <div>
+                       <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.25em] mb-3 ml-1">Faktúry</p>
+                       <div className="space-y-3">
+                         {officialInvoices.map(inv => <InvoiceRow key={inv.id} inv={inv} />)}
+                       </div>
+                     </div>
+                   )}
+                   {deferredInvoices.length > 0 && (
+                     <div>
+                       <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.25em] mb-3 ml-1">Odložené faktúry</p>
+                       <div className="space-y-3">
+                         {deferredInvoices.map(inv => <InvoiceRow key={inv.id} inv={inv} />)}
+                       </div>
+                     </div>
+                   )}
+                 </div>
+               );
+            })()}
           </div>
         </div>
       )}
@@ -620,51 +721,87 @@ export default function GarazPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                 <div className="space-y-8">
                   {/* KONFIGURÁCIA PRÁC */}
-                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-6">
+                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
                     <p className="text-[10px] font-black text-red-600 uppercase tracking-widest italic ml-1">1. Výber servisných úkonov</p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase ml-2 mb-2 block font-black">Kategória</label>
-                        <select 
-                          className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-white uppercase text-[10px] outline-none focus:border-red-600 cursor-pointer"
-                          value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value)}
-                        >
-                          <option value="">-- Vyberte sekciu --</option>
-                          {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-zinc-500 uppercase ml-2 mb-2 block font-black">Konkrétna práca</label>
-                        <select 
-                          disabled={!selectedCategory}
-                          className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-white uppercase text-[10px] outline-none focus:border-red-600 cursor-pointer disabled:opacity-30"
-                          onChange={(e) => {
-                            const norm = norms.find(n => n.id === e.target.value);
-                            if (norm) addNormToSelection(norm);
-                            e.target.value = "";
-                          }}
-                        >
-                          <option value="">-- Pridať do zoznamu + --</option>
-                          {norms.filter(n => n.category_id === selectedCategory).map(norm => (
-                            <option key={norm.id} value={norm.id}>{norm.service_name} (~{norm.duration_minutes} min)</option>
-                          ))}
-                        </select>
-                      </div>
+
+                    {/* KATEGÓRIE — pills */}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button"
+                        onClick={() => setSelectedCategory('')}
+                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === '' ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}>
+                        Všetky
+                      </button>
+                      {categories.map(cat => (
+                        <button key={cat.id} type="button"
+                          onClick={() => setSelectedCategory(cat.id === selectedCategory ? '' : cat.id)}
+                          className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === cat.id ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}>
+                          {cat.name}
+                        </button>
+                      ))}
                     </div>
 
-                    <div className="space-y-2 mt-4">
-                      <p className="text-[9px] text-zinc-500 uppercase font-black ml-1 mb-2">Vybrané úkony:</p>
+                    {/* SEARCH BOX */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Hľadať úkon... (napr. brzdy, olej, klima)"
+                        value={normSearchOrder}
+                        onChange={e => setNormSearchOrder(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-700 focus:border-red-600 p-4 pl-5 pr-10 rounded-2xl text-white text-xs font-black outline-none transition-all not-italic normal-case placeholder:font-bold placeholder:normal-case placeholder:not-italic placeholder:text-zinc-600"
+                      />
+                      {normSearchOrder
+                        ? <button type="button" onClick={() => setNormSearchOrder('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-sm">✕</button>
+                        : <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-20 text-sm">🔍</span>
+                      }
+                    </div>
+
+                    {/* VÝSLEDKY — kategória alebo hľadanie */}
+                    {(selectedCategory || normSearchOrder.trim().length >= 2) && (() => {
+                      const nd = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                      const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
+                      const hits = norms.filter(n =>
+                        (!selectedCategory || n.category_id === selectedCategory) &&
+                        (!normSearchOrder.trim() || nd(n.service_name).includes(nd(normSearchOrder))) &&
+                        !selectedNorms.find(s => s.id === n.id)
+                      ).slice(0, 15);
+                      return hits.length === 0
+                        ? <p className="text-center text-zinc-700 text-[10px] italic py-3">Žiadny úkon nenájdený</p>
+                        : (
+                          <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                            {hits.map(norm => (
+                              <button key={norm.id} type="button"
+                                onClick={() => { addNormToSelection(norm); setNormSearchOrder(''); }}
+                                className="w-full flex items-center justify-between gap-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-red-600/40 px-4 py-3 rounded-xl transition-all group text-left"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {!selectedCategory && (
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg shrink-0">
+                                      {catMap[norm.category_id] || ''}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-black uppercase italic text-zinc-300 group-hover:text-white transition-colors truncate">
+                                    {norm.service_name}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-zinc-600 shrink-0 not-italic font-bold">~{norm.duration_minutes} min</span>
+                              </button>
+                            ))}
+                          </div>
+                        );
+                    })()}
+
+                    {/* VYBRANÉ ÚKONY (KOŠÍK) */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] text-zinc-500 uppercase font-black ml-1">Vybrané úkony:</p>
                       {selectedNorms.length === 0 ? (
-                        <div className="py-6 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
+                        <div className="py-5 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
                       ) : (
                         selectedNorms.map(sn => (
-                          <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-4 rounded-xl animate-in fade-in zoom-in duration-200">
-                            <span className="text-xs font-black uppercase text-blue-400 italic">{sn.service_name}</span>
-                            <div className="flex items-center gap-4">
-                              <span className="text-[10px] font-black text-zinc-500">~{sn.duration_minutes} min</span>
-                              <button type="button" onClick={() => removeNormFromSelection(sn.id)} className="text-red-500 hover:text-white font-bold">✕</button>
+                          <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-3 rounded-xl animate-in fade-in zoom-in duration-200">
+                            <span className="text-xs font-black uppercase text-blue-400 italic truncate mr-3">{sn.service_name}</span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="text-[10px] font-black text-zinc-500 not-italic">~{sn.duration_minutes} min</span>
+                              <button type="button" onClick={() => removeNormFromSelection(sn.id)} className="text-red-500 hover:text-white font-bold not-italic">✕</button>
                             </div>
                           </div>
                         ))
@@ -742,9 +879,10 @@ export default function GarazPage() {
                       <p className="text-[9px] text-red-600 uppercase ml-1 font-black tracking-widest mb-4">Vyber deň príchodu</p>
 
                       {/* Legenda */}
-                      <div className="flex gap-4 mb-4 ml-1">
+                      <div className="flex flex-wrap gap-3 mb-4 ml-1">
                         <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
-                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Obmedzené</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Čiastočne</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block"/> Takmer plné</span>
                         <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
                       </div>
 
@@ -789,9 +927,10 @@ export default function GarazPage() {
                             let cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed';
                             if (!isPast && !isWeekend && avail) {
                               const pct = avail.total > 0 ? avail.booked / avail.total : 0;
-                              if (isFull) cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
-                              else if (pct < 0.5) cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
-                              else cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
+                              if (isFull)      cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
+                              else if (pct >= 0.8) cls = 'bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 cursor-pointer';
+                              else if (pct >= 0.4) cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
+                              else             cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
                             }
                             if (isSelected) cls = 'bg-red-600 border border-red-500 text-white cursor-pointer shadow-lg shadow-red-600/30';
 
@@ -876,12 +1015,27 @@ export default function GarazPage() {
                   </div>
 
                   {/* SUMÁR ČASU */}
-                  <div className="bg-red-600/10 border-2 border-red-600/30 p-8 rounded-[2.5rem] text-center shadow-2xl">
-                     <p className="text-[10px] font-black text-red-600 uppercase tracking-widest italic mb-2">Celkový predpokladaný čas:</p>
-                     <p className="text-5xl font-black text-white italic tracking-tighter">
-                        {selectedNorms.reduce((a,c) => a + c.duration_minutes, 0) || 60} <span className="text-xl">min</span>
-                     </p>
-                  </div>
+                  {(() => {
+                    const normMin = selectedNorms.reduce((a, c) => a + c.duration_minutes, 0);
+                    const customMin = customItems.filter(i => i.duration !== 'technik').reduce((a, i) => a + i.duration, 0);
+                    const hasTechnik = customItems.some(i => i.duration === 'technik');
+                    const totalMin = normMin + customMin || 60;
+                    return (
+                      <div className="bg-red-600/10 border-2 border-red-600/30 p-8 rounded-[2.5rem] text-center shadow-2xl">
+                        <p className="text-[10px] font-black text-red-600 uppercase tracking-widest italic mb-2">Celkový predpokladaný čas:</p>
+                        <p className="text-5xl font-black text-white italic tracking-tighter">
+                          {totalMin}{hasTechnik && <span className="text-2xl text-red-400">+</span>} <span className="text-xl">min</span>
+                        </p>
+                        {(customMin > 0 || hasTechnik) && (
+                          <div className="mt-3 text-[9px] font-black text-zinc-500 uppercase tracking-widest space-y-0.5 not-italic">
+                            {normMin > 0 && <p>Servisné normy: {normMin} min</p>}
+                            {customMin > 0 && <p>Vlastné úkony: {customMin} min</p>}
+                            {hasTechnik && <p className="text-amber-500">+ čas na technikovi</p>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <button type="submit" disabled={orderLoading} className="w-full bg-red-600 py-6 rounded-2xl font-black uppercase text-xs hover:bg-red-700 shadow-[0_10px_20px_rgba(220,38,38,0.3)] transition-all tracking-[0.2em] font-bold italic uppercase">
                     {orderLoading ? 'Odosielam...' : 'Odoslať požiadavku'}

@@ -56,19 +56,24 @@ export default function DashboardLayout({ children }) {
 
     const channel = supabase
       .channel('dashboard-global-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, () => {
+        fetchPendingCount();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, () => {
         fetchPendingCount();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, () => {
-        pollJobStatuses(); // Okamžitá reakcia na zmenu
+        pollJobStatuses();
       })
       .subscribe();
 
-    const interval = setInterval(pollJobStatuses, 30000); // Záloha každých 30s
+    const pendingInterval = setInterval(fetchPendingCount, 10000);
+    const jobInterval = setInterval(pollJobStatuses, 30000);
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(interval);
+      clearInterval(pendingInterval);
+      clearInterval(jobInterval);
     };
   }, []);
 
@@ -195,6 +200,7 @@ export default function DashboardLayout({ children }) {
             {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
             <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
             <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
+            <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
           </div>
         </nav>
 
@@ -223,11 +229,20 @@ export default function DashboardLayout({ children }) {
       )}
 
       {/* --- HLAVNÝ OBSAH --- */}
-      <main className={`flex-grow overflow-y-auto bg-black transition-all duration-300 ${isMobileOpen ? 'blur-sm md:blur-none' : ''}`}>
-        <div className="w-full h-full p-0 mt-16 md:mt-0">
+      <main className={`flex-grow overflow-y-auto bg-black transition-all duration-300 print:!w-full print:!max-w-none print:!flex-none print:!overflow-visible ${isMobileOpen ? 'blur-sm md:blur-none' : ''}`}>
+        <div className="w-full h-full p-0 mt-16 md:mt-0 print:mt-0">
           {children}
         </div>
       </main>
+
+      <style jsx global>{`
+        @media print {
+          /* Skryje sidebar a flex wrapper tak, aby main zaujal plnú šírku */
+          aside { display: none !important; }
+          .flex.min-h-screen { display: block !important; }
+          main { width: 100% !important; max-width: none !important; overflow: visible !important; }
+        }
+      `}</style>
     </div>
   );
 }

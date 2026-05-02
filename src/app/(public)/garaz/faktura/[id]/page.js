@@ -71,23 +71,6 @@ export default function DetailFakturyPage() {
     setLoading(false);
   };
 
-  const handleReopenJob = async () => {
-    if (!confirm("Pozor! Vymazaním faktúry sa pôvodná zákazka opäť otvorí v stave 'Dokončené'. Chcete pokračovať?")) return;
-    try {
-      setLoading(true);
-      if (inv.job_id) {
-        await supabase.from('job_tickets').update({ status: 'Dokončené' }).eq('id', inv.job_id);
-      }
-      await supabase.from('invoices').delete().eq('id', id);
-      alert("Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná.");
-      router.push('/zakazky');
-    } catch (err) {
-      alert("Chyba pri znovuotváraní: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const generateQRValue = () => {
     if (!inv || !myCompany.bank) return '';
     return `SPD*1.0*ACC:${myCompany.bank.replace(/\s/g, '')}*AM:${inv.total_amount}*CUR:EUR*VS:${String(inv.invoice_number).replace(/\D/g, '')}*MSG:Oprava vozidla ${inv.car_details?.plate || inv.car_details?.plate_number || ''}`;
@@ -103,14 +86,9 @@ export default function DetailFakturyPage() {
       
       {/* OVLÁDACIA LIŠTA */}
       <div className="max-w-5xl mx-auto mb-8 flex justify-between items-center no-print">
-        <div className="flex gap-4">
-          <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs font-black uppercase tracking-widest font-bold">
-            ← Späť
-          </button>
-          <button onClick={handleReopenJob} className="bg-zinc-900 border border-red-900/30 text-red-500 hover:bg-red-600 hover:text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
-            🔓 Zrušiť faktúru / Otvoriť zákazku
-          </button>
-        </div>
+        <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs font-black uppercase tracking-widest font-bold">
+          ← Späť
+        </button>
         <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2 font-bold">
           🖨️ Tlačiť dokument
         </button>
@@ -123,15 +101,12 @@ export default function DetailFakturyPage() {
           {inv.is_official ? 'INVOICE' : 'ARCHIVE'}
         </div>
 
-        {/* --- TLAČOVÁ TABUĽKA HLAVIČKY (LOGO NAHRADILO TEXT) --- */}
+        {/* --- TLAČOVÁ TABUĽKA HLAVIČKY --- */}
         <table className="print-only-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
           <tbody>
             <tr>
-              <td width="15%" valign="middle">
-                {/* DYNAMICKÉ LOGO PRE TLAČ */}
-                <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" style={{ width: '90px', height: 'auto', display: 'block' }} />
-              </td>
-              <td width="45%" valign="top" style={{ paddingLeft: '15pt' }}>
+              <td width="50%" valign="top">
+                <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" style={{ width: '100px', height: 'auto', marginBottom: '10pt' }} />
                 <div style={{ fontSize: '8.5pt', color: '#000', lineHeight: '1.2' }}>
                   <p style={{ margin: '0', color: '#666', fontWeight: '900' }}>DODÁVATEĽ:</p>
                   <p style={{ margin: '0' }}><strong>{myCompany.name}</strong></p>
@@ -142,8 +117,8 @@ export default function DetailFakturyPage() {
                   {myCompany.web && <p style={{ margin: '0' }}>{myCompany.web}</p>}
                 </div>
               </td>
-              <td width="40%" valign="top" align="right">
-                <h2 style={{ fontSize: '14pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
+              <td width="50%" valign="top" align="right">
+                <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
                 <p style={{ fontSize: '24pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{inv.invoice_number}</p>
                 <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum: <strong>{new Date(inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
               </td>
@@ -179,28 +154,32 @@ export default function DetailFakturyPage() {
           </tbody>
         </table>
 
-        {/* WEB HLAVIČKA (LOGO NAHRADILO TEXT) */}
+        {/* WEB HLAVIČKA */}
         <div className="flex justify-between items-start border-b-4 border-red-600 pb-10 mb-10 relative z-10 font-bold section-header no-print">
-          <div className="flex items-center gap-6">
+          <div className="flex gap-6 items-center">
             <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" className="w-24 h-auto brightness-0 invert" />
             <div className="text-[10px] text-zinc-400 uppercase tracking-widest leading-relaxed space-y-1 font-black company-info">
               <p className="text-white font-black italic label-supplier">Dodávateľ:</p>
               <p className="text-white company-name">{myCompany.name}</p>
               <p>{myCompany.address}, {myCompany.zip} {myCompany.city}</p>
               <p>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
-              <p>{myCompany.phone} | {myCompany.email}</p>
-              {myCompany.web && <p className="text-red-500 lowercase italic">{myCompany.web}</p>}
+              <p className="text-zinc-300">{myCompany.phone} | {myCompany.email}</p>
             </div>
           </div>
-          <div className="text-right font-bold invoice-meta">
-            <h2 className="text-xl font-black uppercase text-red-600 mb-2 italic font-bold doc-type">
+          <div className="text-right invoice-meta">
+            <h2 className="text-xl font-black uppercase text-red-600 mb-2 italic doc-type">
               {inv.is_official ? 'Faktúra' : 'Servisný záznam'}
             </h2>
             <p className="text-3xl font-black tracking-tighter mb-4 doc-number">{inv.invoice_number}</p>
             <div className="mt-4 text-[10px] text-zinc-400 uppercase text-right">
                 <p className="text-blue-500 font-black italic">Odberateľ:</p>
                 <p className="text-white font-black">{inv.company_details?.company_name || inv.customer_name}</p>
-                <p>{inv.company_details?.ico ? `IČO: ${inv.company_details.ico}` : ''} {inv.company_details?.dic ? `| DIČ: ${inv.company_details.dic}` : ''}</p>
+                {(inv.company_details?.ico || inv.company_details?.dic) && (
+                  <p className="text-zinc-400 mt-1">IČO: {inv.company_details?.ico || '---'} | DIČ: {inv.company_details?.dic || '---'}</p>
+                )}
+                {inv.company_details?.ic_dph && (
+                  <p className="text-zinc-400">IČ DPH: {inv.company_details.ic_dph}</p>
+                )}
             </div>
           </div>
         </div>
@@ -232,7 +211,7 @@ export default function DetailFakturyPage() {
           </table>
         </div>
 
-        {/* TLAČOVÁ PÄTA (PLATBA + SUMÁR V TABUĽKE) */}
+        {/* TLAČOVÁ PÄTA — PLATOBNÉ ÚDAJE */}
         <div className="print-footer-area">
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10pt' }}>
             <tbody>
@@ -245,7 +224,6 @@ export default function DetailFakturyPage() {
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
                       <p style={{ margin: '0' }}>VS: <strong>{String(inv.invoice_number).replace(/\D/g, '')}</strong></p>
                       <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
-                      <p style={{ marginTop: '5pt', fontSize: '8pt', color: '#666' }}>Vystavil: {myCompany.name}</p>
                     </div>
                   </div>
                 </td>
@@ -272,8 +250,14 @@ export default function DetailFakturyPage() {
               </tr>
             </tbody>
           </table>
+        </div>
 
-          <table style={{ width: '100%', marginTop: '3cm', borderCollapse: 'collapse' }}>
+        {/* FLEXOVÝ SPACER — tlačí podpisy na spodok strany */}
+        <div className="print-spacer" />
+
+        {/* PODPISY — vždy na spodku poslednej strany */}
+        <div className="print-signature-area">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
               <tr>
                 <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>
@@ -288,21 +272,19 @@ export default function DetailFakturyPage() {
           </table>
         </div>
 
-        {/* WEB SUMÁR (SKRYTÝ PRI TLAČI) */}
-        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 font-bold border-t border-zinc-800 pt-10 footer-section no-print">
-          <div className="flex gap-8 items-center payment-info-area">
-             {myCompany.bank && inv.is_official && <div className="bg-white p-3 rounded-2xl shadow-2xl no-print"><QRCodeSVG value={generateQRValue()} size={120} level="H" /></div>}
-             <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold bank-details">
+        {/* WEB SUMÁR */}
+        <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 border-t border-zinc-800 pt-10 no-print">
+          <div className="flex gap-8 items-center">
+             {myCompany.bank && inv.is_official && <div className="bg-white p-3 rounded-2xl shadow-2xl"><QRCodeSVG value={generateQRValue()} size={120} level="H" /></div>}
+             <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold">
                 <p className="text-zinc-400">Platobné informácie:</p>
-                <p className="text-white font-black mt-1 uppercase text-sm bank-iban">{myCompany.bank || 'Platba v hotovosti'}</p>
+                <p className="text-white font-black mt-1 uppercase text-sm">{myCompany.bank || 'Platba v hotovosti'}</p>
                 <p className="text-zinc-500 mt-1">Variabilný symbol: {String(inv.invoice_number).replace(/\D/g, '')}</p>
-                <p className="text-red-600 mt-1">Splatnosť: {inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : '---'}</p>
              </div>
           </div>
-          <div className="bg-black p-10 rounded-[2.5rem] border border-zinc-800 min-w-[340px] space-y-4 shadow-2xl font-bold totals-box">
-            <div className="flex justify-between text-[10px] font-black text-zinc-500 uppercase tracking-widest"><span>Základ dane:</span><span>{inv.subtotal_amount.toFixed(2)} €</span></div>
+          <div className="bg-black p-10 rounded-[2.5rem] border border-zinc-800 min-w-[340px] shadow-2xl">
             <div className="flex justify-between items-end pt-2">
-              <span className="text-red-600 font-black uppercase text-2xl">Celkom k úhrade:</span>
+              <span className="text-red-600 font-black uppercase text-2xl">Celkom:</span>
               <span className="text-5xl font-black text-white">{inv.total_amount.toFixed(2)} <span className="text-red-600 text-lg">€</span></span>
             </div>
           </div>
@@ -320,44 +302,54 @@ export default function DetailFakturyPage() {
       </div>
 
       <style jsx global>{`
-        .print-only-table, .print-footer-area { display: none; }
-        
+        .print-only-table, .print-footer-area, .print-signature-area, .print-spacer { display: none; }
+
         @media print {
-          @page { 
-            size: A4; 
-            margin: 0 !important; /* ODSTRÁNI URL A DÁTUM PREHLIADAČA */
-          }
-          html, body { 
-            background: #fff !important; 
-            color: #000 !important; 
-            height: auto !important;
+          @page { size: A4; margin: 0 !important; }
+
+          html, body {
+            background: #fff !important;
+            color: #000 !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: visible !important; 
           }
-          ::-webkit-scrollbar, .no-print, .absolute.top-10.right-10 { display: none !important; }
-          .print-only-table, .print-footer-area { display: table !important; }
-          .print-footer-area { display: block !important; }
+          .no-print { display: none !important; }
           .min-h-screen { min-height: 0 !important; padding: 0 !important; background: #fff !important; }
-          
-          .printable-area { 
-            background: #fff !important; 
-            color: #000 !important; 
-            border: none !important; 
-            box-shadow: none !important; 
-            padding: 2cm 1.5cm 1.5cm 1.5cm !important; /* Horný okraj nastavený na 2cm */
-            margin: 0 !important; 
-            width: 100% !important; 
-            max-width: none !important; 
+
+          body * { visibility: hidden !important; }
+          .printable-area { visibility: visible !important; }
+          .printable-area * { visibility: visible !important; }
+          .printable-area .no-print,
+          .printable-area .no-print * { visibility: hidden !important; display: none !important; }
+
+          .print-only-table { display: table !important; visibility: visible !important; }
+          .print-footer-area { display: block !important; visibility: visible !important; }
+          .print-signature-area { display: block !important; visibility: visible !important; }
+          .print-spacer { display: block !important; flex: 1 !important; }
+
+          .printable-area {
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: 26.7cm !important;
+            background: #fff !important;
+            color: #000 !important;
+            border: none !important;
+            padding: 0.8cm 1.5cm 1.5cm 1.5cm !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
             border-radius: 0 !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            box-sizing: border-box !important;
           }
-          p, span, h1, h2, h3, h4, td, th, div { color: #000 !important; background: none !important; }
+          p, span, h1, h2, td, th, div { color: #000 !important; }
           .print-text-black { color: #000 !important; }
           .print-p1 { padding: 3pt !important; }
           .print-py1 { padding-top: 3pt !important; padding-bottom: 3pt !important; }
           .print-body-rows td { border-bottom: 0.5pt solid #eee !important; font-size: 8.5pt !important; }
-          .print-header-row th { background: #f4f4f5 !important; -webkit-print-color-adjust: exact; border-bottom: 2pt solid #000 !important; font-size: 8pt !important; padding: 4pt !important; }
-          .print-complaints { border: 1pt solid #000 !important; background: #fff !important; padding: 10pt !important; border-radius: 0 !important; margin-top: 15pt !important; }
+          .print-header-row th { background: #f4f4f5 !important; border-bottom: 2pt solid #000 !important; font-size: 8pt !important; padding: 4pt !important; }
+          .print-complaints { border: 1pt solid #000 !important; padding: 10pt !important; margin-top: 15pt !important; }
         }
       `}</style>
     </div>

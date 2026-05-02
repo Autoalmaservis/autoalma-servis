@@ -157,6 +157,12 @@ export default function DetailFakturyPage() {
                 <p style={{ margin: '0', fontSize: '11pt', color: '#000', fontWeight: '900' }}>{inv.company_details?.company_name || inv.customer_name}</p>
                 <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.company_details?.address || '---'}</p>
                 <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{inv.company_details?.zip} {inv.company_details?.city}</p>
+                {(inv.company_details?.ico || inv.company_details?.dic) && (
+                  <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>IČO: {inv.company_details?.ico || '---'} | DIČ: {inv.company_details?.dic || '---'}</p>
+                )}
+                {inv.company_details?.ic_dph && (
+                  <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>IČ DPH: {inv.company_details.ic_dph}</p>
+                )}
               </td>
               <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
                 <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>VOZIDLO:</p>
@@ -191,6 +197,12 @@ export default function DetailFakturyPage() {
             <div className="mt-4 text-[10px] text-zinc-400 uppercase text-right">
                 <p className="text-blue-500 font-black italic">Odberateľ:</p>
                 <p className="text-white font-black">{inv.company_details?.company_name || inv.customer_name}</p>
+                {(inv.company_details?.ico || inv.company_details?.dic) && (
+                  <p className="text-zinc-400 mt-1">IČO: {inv.company_details?.ico || '---'} | DIČ: {inv.company_details?.dic || '---'}</p>
+                )}
+                {inv.company_details?.ic_dph && (
+                  <p className="text-zinc-400">IČ DPH: {inv.company_details.ic_dph}</p>
+                )}
             </div>
           </div>
         </div>
@@ -222,7 +234,7 @@ export default function DetailFakturyPage() {
           </table>
         </div>
 
-        {/* TLAČOVÁ PÄTA S MEDZEROU PRE PODPISY */}
+        {/* TLAČOVÁ PÄTA — PLATOBNÉ ÚDAJE */}
         <div className="print-footer-area">
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10pt' }}>
             <tbody>
@@ -261,9 +273,14 @@ export default function DetailFakturyPage() {
               </tr>
             </tbody>
           </table>
+        </div>
 
-          {/* MEDZERA 3CM MEDZI SUMOU A PODPISMI */}
-          <table style={{ width: '100%', marginTop: '3cm', borderCollapse: 'collapse' }}>
+        {/* FLEXOVÝ SPACER — tlačí podpisy na spodok strany */}
+        <div className="print-spacer" />
+
+        {/* PODPISY — vždy na spodku poslednej strany */}
+        <div className="print-signature-area">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
               <tr>
                 <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>
@@ -312,30 +329,48 @@ export default function DetailFakturyPage() {
       </p>
 
       <style jsx global>{`
-        .print-only-table, .print-footer-area { display: none; }
-        
+        .print-only-table, .print-footer-area, .print-signature-area, .print-spacer { display: none; }
+
         @media print {
           @page { size: A4; margin: 0 !important; }
-          html, body { 
-            background: #fff !important; 
-            color: #000 !important; 
+
+          html, body {
+            background: #fff !important;
+            color: #000 !important;
             margin: 0 !important;
             padding: 0 !important;
           }
-          .no-print, .absolute.top-10.right-10 { display: none !important; }
-          .print-only-table, .print-footer-area { display: table !important; }
-          .print-footer-area { display: block !important; }
+          /* Remove all non-print elements from flow so they don't push content down */
+          .no-print { display: none !important; }
           .min-h-screen { min-height: 0 !important; padding: 0 !important; background: #fff !important; }
-          
-          .printable-area { 
-            background: #fff !important; 
-            color: #000 !important; 
-            border: none !important; 
-            padding: 1.5cm 1.5cm 1.5cm 1.5cm !important; 
-            margin: 0 !important; 
-            width: 100% !important; 
-            max-width: none !important; 
+
+          /* Hide everything, then reveal only the printable area */
+          body * { visibility: hidden !important; }
+          .printable-area { visibility: visible !important; }
+          .printable-area * { visibility: visible !important; }
+          .printable-area .no-print,
+          .printable-area .no-print * { visibility: hidden !important; display: none !important; }
+
+          .print-only-table { display: table !important; visibility: visible !important; }
+          .print-footer-area { display: block !important; visibility: visible !important; }
+          .print-signature-area { display: block !important; visibility: visible !important; }
+          .print-spacer { display: block !important; flex: 1 !important; }
+
+          .printable-area {
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: 26.7cm !important;
+            background: #fff !important;
+            color: #000 !important;
+            border: none !important;
+            padding: 0.8cm 1.5cm 1.5cm 1.5cm !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
             border-radius: 0 !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            box-sizing: border-box !important;
           }
           p, span, h1, h2, td, th, div { color: #000 !important; }
           .print-text-black { color: #000 !important; }

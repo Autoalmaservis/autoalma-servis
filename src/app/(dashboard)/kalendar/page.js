@@ -91,6 +91,7 @@ export default function KalendarPage() {
           plannedWork: ev.planned_work,
           isConfirmed: ev.is_confirmed,
           isBlocked: isActuallyBlocked,
+          employeeColor: ev.employees?.color || null,
           customerPhone: ev.customer_phone,
           customerEmail: ev.customer_email,
           userId: ev.user_id
@@ -226,9 +227,9 @@ export default function KalendarPage() {
 
   const openRequestFromPanel = (ev) => {
     const calendarApi = calendarRef.current.getApi();
-    calendarApi.gotoDate(ev.start); 
-    handleEventClick({ event: ev }); 
-    setIsInboxOpen(false); 
+    calendarApi.changeView('timeGridDay');
+    calendarApi.gotoDate(ev.start);
+    setIsInboxOpen(false);
   };
 
   const handlePlateBlur = async (spz) => { loadCarDetails(spz); };
@@ -294,11 +295,11 @@ export default function KalendarPage() {
     }
     
     if (!error) {
-      if (tempCustomerContact.userId && !isBlocking) {
+      if (tempCustomerContact.userId && !isBlocking && editingEventId && !isConfirmed) {
         await supabase.from('notifications').insert([{
           user_id: tempCustomerContact.userId,
-          title: 'Termín potvrdený',
-          content: `Váš termín pre vozidlo ${plate} bol potvrdený na ${new Date(selectedDate).toLocaleDateString('sk-SK')} o ${startTime}.`,
+          title: '✅ Termín bol potvrdený',
+          content: `Váš servisný termín pre vozidlo ${plate} bol potvrdený na ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('sk-SK')} o ${startTime}. Tešíme sa na Vás!`,
           type: 'success'
         }]);
       }
@@ -385,6 +386,12 @@ export default function KalendarPage() {
           eventDrop={handleEventChange}
           eventResize={handleEventChange}
           eventClick={handleEventClick}
+          eventDidMount={(info) => {
+            if (info.event.extendedProps.isBlocked) {
+              const color = info.event.extendedProps.employeeColor || '#dc2626';
+              info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+            }
+          }}
           slotMinTime={`${workStart}:00`}
           slotMaxTime={`${workEnd}:00`}
           allDaySlot={false}
@@ -448,6 +455,16 @@ export default function KalendarPage() {
                             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
                           </select>
                         </div>
+                      </div>
+                    )}
+
+                    {selectionMode === 'block' && (
+                      <div>
+                        <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
+                        <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
+                          <option value="">-- Všetci / Interné --</option>
+                          {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
+                        </select>
                       </div>
                     )}
 

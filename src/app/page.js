@@ -1,21 +1,27 @@
 'use client';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/app/lib/supabase';
 
 const services = [
   {
     icon: '🔧',
     name: 'Mechanické práce',
-    items: ['Výmena oleja', 'Výmena pneu', 'Výmena bŕzd', 'Rozvodový remeň', 'Spojka a prevodovka'],
+    slug: 'mechanicke-prace',
+    items: ['Pravidelný servis', 'Výmena bŕzd', 'Oprava podvozku', 'Čistenie DPF/CAT', 'Spojka a prevodovka', 'Dekarbonizácia'],
   },
   {
     icon: '⚡',
     name: 'Elektro a diagnostika',
-    items: ['Diagnostika', 'Chiptuning', 'Oprava ABS', 'Oprava AdBlue', 'Oprava alternátora'],
+    slug: 'elektro-diagnostika',
+    items: ['Diagnostika', 'Oprava / hľadanie elektrických závad', 'Chiptuning', 'Oprava ABS', 'Oprava AdBlue', 'Oprava budíkov', 'Nahratie nových kľúčov', 'RJM oprava'],
   },
   {
-    icon: '✨',
-    name: 'Doplnkové služby',
-    items: ['Čistenie DPF/CAT', 'Dekarbonizácia', 'Ozonizácia', 'Plnenie klimatizácie', 'RJM oprava'],
+    icon: '❄️',
+    name: 'Klimatizácia',
+    slug: 'klimatizacia',
+    items: ['Čistenie ozónom', 'Plnenie klimatizácie'],
   },
 ];
 
@@ -26,63 +32,147 @@ const slogans = [
 ];
 
 export default function HomePage() {
+  const [scrolled, setScrolled] = useState(false);
+  const [galleryPhotos, setGalleryPhotos] = useState([]);
+  const [lightbox, setLightbox] = useState(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    supabase
+      .from('gallery_photos')
+      .select('id, url, caption')
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => { if (data) setGalleryPhotos(data); });
+  }, []);
+
+  const toSlug = (str) =>
+    str.toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\//g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-');
+
   return (
     <div className="min-h-screen bg-black text-white font-sans">
 
       {/* NAVIGÁCIA */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 md:px-10 py-5 bg-black/80 backdrop-blur-md border-b border-zinc-900">
-        <h1 className="text-2xl font-black uppercase italic tracking-tighter">
-          Auto<span className="text-red-600">Alma</span>
-        </h1>
-        <div className="flex items-center gap-3 md:gap-5">
-          <a
-            href="tel:0940449449"
-            className="hidden md:block text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all"
-          >
-            0940 449 449
-          </a>
-          <Link
-            href="/system"
-            className="text-zinc-700 hover:text-zinc-400 transition-all text-xl"
-            title="Pre zamestnancov"
-          >
-            ⚙
-          </Link>
+      <nav className={`fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-b border-blue-500/25 transition-all duration-300 ${scrolled ? 'shadow-lg shadow-blue-500/5' : ''}`}>
+        {/* TENKÁ MODRÁ LINKA NAVRCHU */}
+        <div className="h-[2px] bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
+
+        <div className={`flex items-center justify-between px-6 md:px-12 transition-all duration-300 ${scrolled ? 'py-2' : 'py-4'}`}>
+
+          {/* LOGO + NAV LINKY */}
+          <div className="flex items-center gap-8 md:gap-12">
+            <a href="#" className={`font-black uppercase italic tracking-tighter transition-all duration-300 hover:opacity-80 ${scrolled ? 'text-lg' : 'text-2xl'}`}>
+              Auto<span className="text-red-600">Alma</span>
+            </a>
+
+            <div className="hidden md:flex items-center gap-1">
+              {[
+                { href: '#sluzby', label: 'Naše služby' },
+                { href: '#galeria', label: 'Galéria' },
+              ].map(link => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="relative px-4 py-2 text-[11px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all rounded-lg hover:bg-white/5 group"
+                >
+                  {link.label}
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-[1px] bg-blue-500 group-hover:w-4/5 transition-all duration-300" />
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {/* PRAVÁ STRANA */}
+          <div className="flex items-center gap-3 md:gap-5">
+            <a
+              href="tel:0940449449"
+              className="hidden md:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
+            >
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+              0940 449 449
+            </a>
+
+            <div className="hidden md:block w-px h-4 bg-zinc-800" />
+
+            <Link
+              href="/login"
+              className={`bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest transition-all rounded-xl shadow-lg shadow-red-600/20 hover:shadow-red-600/30 ${scrolled ? 'text-[9px] px-4 py-2' : 'text-[10px] px-5 py-2.5'}`}
+            >
+              🏎️ Moja Garáž
+            </Link>
+
+            <Link
+              href="/system"
+              className="text-zinc-800 hover:text-zinc-500 transition-all text-base"
+              title="Pre zamestnancov"
+            >
+              ⚙
+            </Link>
+          </div>
         </div>
       </nav>
 
       {/* HERO */}
-      <section className="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-16 relative overflow-hidden">
+      <section className="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-red-600/5 via-transparent to-transparent pointer-events-none" />
 
-        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-red-600 mb-8 italic">
+        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-red-600 mb-5 italic">
           Bratislava · Svornosti 119
         </p>
 
-        <h1 className="text-7xl md:text-[10rem] font-black uppercase italic tracking-tighter leading-none mb-8">
+        <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter leading-none mb-4">
           Auto<span className="text-red-600">Alma</span>
         </h1>
 
-        <p className="text-zinc-400 text-lg md:text-xl font-bold max-w-lg mb-4 leading-relaxed">
+        <p className="text-zinc-400 text-sm md:text-base font-bold max-w-lg mb-2 leading-relaxed">
           Máme možno prvý autoservis,
         </p>
-        <p className="text-white text-xl md:text-2xl font-black italic max-w-lg mb-12">
+        <p className="text-white text-base md:text-lg font-black italic max-w-lg mb-10">
           ktorému budete veriť.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Link
-            href="/login"
-            className="bg-red-600 hover:bg-red-500 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all shadow-2xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-105"
-          >
-            🏎️ Moja Garáž — Prihlásiť sa
-          </Link>
+        {/* VÝHODY GARÁŽE — viditeľné hneď */}
+        <div className="w-full max-w-4xl mb-10">
+          <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-6 italic">
+            🏎️ Moja Garáž — váš online servisný účet
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {[
+              { icon: '📡', title: 'Stav opravy naživo', desc: 'Vidíte čo sa s autom deje — bez volania' },
+              { icon: '📋', title: 'Schvaľujete práce online', desc: 'Cenová ponuka priamo na telefón' },
+              { icon: '🧾', title: 'Faktúry vždy po ruke', desc: 'Všetky doklady na jednom mieste' },
+              { icon: '🚗', title: 'História každého auta', desc: 'Kompletná servisná karta vozidla' },
+              { icon: '📱', title: 'Funguje na mobile', desc: 'Bez aplikácie, stačí prehliadač' },
+              { icon: '🔒', title: 'Len váš účet', desc: 'Súkromný prístup, vaše dáta' },
+            ].map((b, i) => (
+              <div key={i} className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-5 md:p-7 rounded-[1.5rem] text-left transition-all group">
+                <span className="text-3xl md:text-4xl mb-3 block">{b.icon}</span>
+                <p className="text-white text-xs md:text-sm font-black uppercase italic tracking-tight leading-tight mb-1.5 group-hover:text-red-500 transition-colors">{b.title}</p>
+                <p className="text-zinc-500 text-[11px] md:text-xs font-bold leading-snug">{b.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-zinc-700 animate-bounce">
-          <span className="text-[9px] uppercase tracking-widest font-black">Viac info</span>
-          <span className="text-sm">↓</span>
-        </div>
+        <Link
+          href="/login"
+          className="bg-red-600 hover:bg-red-500 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all shadow-2xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-105"
+        >
+          Aktivovať Moju Garáž — zadarmo
+        </Link>
+        <p className="text-zinc-700 text-[9px] font-black uppercase tracking-widest mt-4">
+          Vytvorí vám ju servis po prvej návšteve
+        </p>
       </section>
 
       {/* SLOGANY */}
@@ -98,7 +188,7 @@ export default function HomePage() {
       </section>
 
       {/* SLUŽBY */}
-      <section className="py-24 px-6">
+      <section id="sluzby" className="py-24 px-6">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Čo robíme</p>
@@ -108,17 +198,26 @@ export default function HomePage() {
             {services.map((s, i) => (
               <div
                 key={i}
-                className="bg-zinc-950 border border-zinc-900 p-8 rounded-[2rem] hover:border-red-600/30 transition-all group"
+                className="bg-zinc-950 border border-zinc-800 p-8 rounded-[2rem] flex flex-col relative overflow-hidden"
               >
+                <div className="h-[2px] absolute top-0 left-0 right-0 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
                 <span className="text-5xl mb-6 block">{s.icon}</span>
-                <h3 className="text-xl font-black uppercase italic tracking-tight mb-6 group-hover:text-red-600 transition-colors">
+                <h3 className="text-xl font-black uppercase italic tracking-tight mb-5 text-white">
                   {s.name}
                 </h3>
-                <ul className="space-y-2">
+                <ul className="space-y-2 flex-grow">
                   {s.items.map((item, j) => (
-                    <li key={j} className="text-zinc-500 text-sm font-bold flex items-center gap-3">
-                      <span className="w-1.5 h-1.5 bg-red-600 rounded-full shrink-0" />
-                      {item}
+                    <li key={j}>
+                      <button
+                        onClick={() => router.push(`/sluzby/${s.slug}/${toSlug(item)}`)}
+                        className="w-full text-left flex items-center gap-3 group/item py-1 px-2 -mx-2 rounded-lg hover:bg-white/5 transition-all"
+                      >
+                        <span className="w-1.5 h-1.5 bg-blue-500/50 group-hover/item:bg-red-500 rounded-full shrink-0 transition-colors" />
+                        <span className="text-zinc-500 group-hover/item:text-white text-sm font-bold transition-colors">
+                          {item}
+                        </span>
+                        <span className="ml-auto text-zinc-800 group-hover/item:text-blue-400 text-xs transition-colors opacity-0 group-hover/item:opacity-100">→</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -127,6 +226,64 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* GALÉRIA */}
+      <section id="galeria" className="py-24 px-6 border-t border-zinc-900 bg-black">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Naša práca</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Galéria</h2>
+          </div>
+
+          {galleryPhotos.length === 0 ? (
+            <div className="border-2 border-dashed border-zinc-800 rounded-[2rem] py-24 text-center text-zinc-700 text-xs font-black uppercase tracking-widest italic">
+              Fotky z dielne — pripravujeme
+            </div>
+          ) : (
+            <>
+              <div className="columns-2 md:columns-3 gap-4">
+                {galleryPhotos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="break-inside-avoid mb-4 rounded-2xl overflow-hidden cursor-pointer group relative"
+                    onClick={() => setLightbox(photo)}
+                  >
+                    <img
+                      src={photo.url}
+                      alt={photo.caption || 'AutoAlma servis'}
+                      className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    {photo.caption && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3 opacity-0 group-hover:opacity-100 transition-all">
+                        <p className="text-white text-xs font-bold">{photo.caption}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* LIGHTBOX */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[500] flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="max-w-4xl w-full relative" onClick={e => e.stopPropagation()}>
+            <img src={lightbox.url} alt={lightbox.caption} className="w-full rounded-2xl object-contain max-h-[85vh]" />
+            {lightbox.caption && (
+              <p className="text-center text-zinc-400 font-bold text-sm mt-4">{lightbox.caption}</p>
+            )}
+            <button
+              onClick={() => setLightbox(null)}
+              className="absolute -top-10 right-0 text-zinc-500 hover:text-white text-2xl font-black transition-colors"
+            >✕</button>
+          </div>
+        </div>
+      )}
 
       {/* KONTAKT */}
       <section className="py-24 px-6 bg-zinc-950 border-t border-zinc-900">
@@ -188,6 +345,7 @@ export default function HomePage() {
           Pre zamestnancov →
         </Link>
       </footer>
+
 
     </div>
   );

@@ -50,13 +50,6 @@ export default function NastaveniaPage() {
   const [newSmsLabel, setNewSmsLabel] = useState('');
   const [newSmsContent, setNewSmsContent] = useState('');
 
-  // --- STAVY PRE ČASOVÉ NORMY ---
-  const [serviceCategories, setServiceCategories] = useState([]);
-  const [serviceNorms, setServiceNorms] = useState([]);
-  const [newCatName, setNewCatName] = useState('');
-  const [newNorm, setNewNorm] = useState({ category_id: '', service_name: '', duration_minutes: 30 });
-  const [normFilter, setNormFilter] = useState('all'); // Filter pre zoznam noriem
-
   // Stavy pre MODÁLNE OKNO (Editácia zamestnanca)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', password: '' });
@@ -82,13 +75,14 @@ export default function NastaveniaPage() {
   });
 
   // Stavy pre hodinové sadzby
-  const [rates, setRates] = useState({
-    m1: '0',
-    m2: '0',
-    e1: '0',
-    e2: '0'
-  });
-  
+  const [rateCategories, setRateCategories] = useState([
+    { key: 'M1', label: 'Základná mechanická', value: '0' },
+    { key: 'M2', label: 'Prémiová mechanická', value: '0' },
+    { key: 'E1', label: 'Elektrodiagnostika', value: '0' },
+    { key: 'E2', label: 'Špeciálne elektro', value: '0' },
+  ]);
+  const [newRate, setNewRate] = useState({ key: '', label: '', value: '' });
+
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
   const [billingSaveStatus, setBillingSaveStatus] = useState('');
@@ -113,13 +107,6 @@ export default function NastaveniaPage() {
       .select('*')
       .order('label', { ascending: true });
     if (smsData) setSmsTemplates(smsData);
-
-    // --- NAČÍTANIE NORIEM A KATEGÓRIÍ ---
-    const { data: catData } = await supabase.from('service_categories').select('*').order('name', { ascending: true });
-    if (catData) setServiceCategories(catData);
-
-    const { data: normData } = await supabase.from('service_norms').select('*, service_categories(name)').order('service_name', { ascending: true });
-    if (normData) setServiceNorms(normData);
 
     // Načítanie nastavení z business_settings
     const { data: setData } = await supabase.from('business_settings').select('*');
@@ -147,12 +134,17 @@ export default function NastaveniaPage() {
       });
 
       // Hodinové sadzby
-      setRates({
-        m1: setData.find(s => s.id === 'rate_m1')?.value || '0',
-        m2: setData.find(s => s.id === 'rate_m2')?.value || '0',
-        e1: setData.find(s => s.id === 'rate_e1')?.value || '0',
-        e2: setData.find(s => s.id === 'rate_e2')?.value || '0',
-      });
+      const rateCategoriesRaw = setData.find(s => s.id === 'rate_categories')?.value;
+      if (rateCategoriesRaw) {
+        try { setRateCategories(JSON.parse(rateCategoriesRaw)); } catch {}
+      } else {
+        setRateCategories([
+          { key: 'M1', label: 'Základná mechanická', value: setData.find(s => s.id === 'rate_m1')?.value || '0' },
+          { key: 'M2', label: 'Prémiová mechanická', value: setData.find(s => s.id === 'rate_m2')?.value || '0' },
+          { key: 'E1', label: 'Elektrodiagnostika', value: setData.find(s => s.id === 'rate_e1')?.value || '0' },
+          { key: 'E2', label: 'Špeciálne elektro', value: setData.find(s => s.id === 'rate_e2')?.value || '0' },
+        ]);
+      }
     }
     setLoading(false);
   };
@@ -195,37 +187,6 @@ export default function NastaveniaPage() {
     } finally {
       setUploadingLogo(false);
     }
-  };
-
-  // --- LOGIKA PRE ČASOVÉ NORMY ---
-  const addCategory = async (e) => {
-    e.preventDefault();
-    if (!newCatName.trim()) return;
-    const { error } = await supabase.from('service_categories').insert([{ name: newCatName.toUpperCase() }]);
-    if (!error) { setNewCatName(''); fetchData(); }
-  };
-
-  const deleteCategory = async (id) => {
-    if (!confirm('Zmazaním kategórie zmažete aj všetky priradené normy. Pokračovať?')) return;
-    await supabase.from('service_categories').delete().eq('id', id);
-    fetchData();
-  };
-
-  const addServiceNorm = async (e) => {
-    e.preventDefault();
-    if (!newNorm.service_name || !newNorm.category_id) return;
-    const { error } = await supabase.from('service_norms').insert([newNorm]);
-    if (!error) { setNewNorm({ ...newNorm, service_name: '' }); fetchData(); }
-  };
-
-  const updateServiceNorm = async (id, field, value) => {
-    await supabase.from('service_norms').update({ [field]: value }).eq('id', id);
-  };
-
-  const deleteNorm = async (id) => {
-    if (!confirm('Naozaj vymazať túto normu?')) return;
-    await supabase.from('service_norms').delete().eq('id', id);
-    fetchData();
   };
 
   // --- LOGIKA PRE SMS ŠABLÓNY ---
@@ -374,19 +335,31 @@ export default function NastaveniaPage() {
     }
   };
 
-  const saveRates = async () => {
+  const saveRateCategories = async () => {
     setRatesSaveStatus('Ukladám...');
-    const payload = [
-      { id: 'rate_m1', value: rates.m1 },
-      { id: 'rate_m2', value: rates.m2 },
-      { id: 'rate_e1', value: rates.e1 },
-      { id: 'rate_e2', value: rates.e2 },
-    ];
-    const { error = null } = await supabase.from('business_settings').upsert(payload);
+    const { error } = await supabase.from('business_settings').upsert({
+      id: 'rate_categories',
+      value: JSON.stringify(rateCategories)
+    });
     if (!error) {
       setRatesSaveStatus('Uložené!');
       setTimeout(() => setRatesSaveStatus(''), 3000);
     }
+  };
+
+  const addRateCategory = () => {
+    if (!newRate.key.trim() || !newRate.label.trim()) return;
+    const key = newRate.key.trim().toUpperCase();
+    if (rateCategories.find(c => c.key === key)) {
+      alert('Kategória s týmto kódom už existuje!');
+      return;
+    }
+    setRateCategories([...rateCategories, { key, label: newRate.label.trim(), value: newRate.value || '0' }]);
+    setNewRate({ key: '', label: '', value: '' });
+  };
+
+  const deleteRateCategory = (key) => {
+    setRateCategories(rateCategories.filter(c => c.key !== key));
   };
 
   return (
@@ -418,13 +391,7 @@ export default function NastaveniaPage() {
         >
           💰 Hodinové sadzby
         </button>
-        <button 
-          onClick={() => setActiveTab('normy')}
-          className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'normy' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
-        >
-          ⏱️ Normy prác
-        </button>
-        <button 
+        <button
           onClick={() => setActiveTab('sms_templates')}
           className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'sms_templates' ? 'bg-red-600 text-white shadow-lg italic' : 'text-zinc-500 hover:text-white hover:bg-zinc-800'}`}
         >
@@ -472,103 +439,98 @@ export default function NastaveniaPage() {
         {/* --- SEKCIJA 2: SADZBY --- */}
         {activeTab === 'sadzby' && (
           <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3rem] shadow-2xl">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-                <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50">
-                  <label className="block text-[10px] font-black text-red-600 uppercase mb-3 tracking-widest italic font-bold">M1 (Základná mechanická)</label>
-                  <input type="number" value={rates.m1} onChange={(e) => setRates({...rates, m1: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-xl font-black text-white outline-none focus:border-red-600 transition-all" placeholder="0.00" />
-                </div>
-                <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50">
-                  <label className="block text-[10px] font-black text-red-600 uppercase mb-3 tracking-widest italic font-bold">M2 (Prémiová mechanická)</label>
-                  <input type="number" value={rates.m2} onChange={(e) => setRates({...rates, m2: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-xl font-black text-white outline-none focus:border-red-600 transition-all" placeholder="0.00" />
-                </div>
-                <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50">
-                  <label className="block text-[10px] font-black text-blue-500 uppercase mb-3 tracking-widest italic font-bold">E1 (Elektrodiagnostika)</label>
-                  <input type="number" value={rates.e1} onChange={(e) => setRates({...rates, e1: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-xl font-black text-white outline-none focus:border-red-600 transition-all" placeholder="0.00" />
-                </div>
-                <div className="bg-black/40 p-6 rounded-2xl border border-zinc-800/50">
-                  <label className="block text-[10px] font-black text-blue-500 uppercase mb-3 tracking-widest italic font-bold">E2 (Špeciálne elektro)</label>
-                  <input type="number" value={rates.e2} onChange={(e) => setRates({...rates, e2: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-xl font-black text-white outline-none focus:border-red-600 transition-all" placeholder="0.00" />
-                </div>
-              </div>
-              <button onClick={saveRates} className="w-full md:w-auto px-12 bg-red-600 text-white hover:bg-red-700 font-black py-5 rounded-2xl transition-all uppercase text-xs tracking-[0.2em] shadow-xl">
-                {ratesSaveStatus || 'Uložiť cenník prác'}
-              </button>
-            </div>
-          </section>
-        )}
+            <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3rem] shadow-2xl space-y-4">
 
-        {/* --- SEKCIJA 3: ČASOVÉ NORMY --- */}
-        {activeTab === 'normy' && (
-          <section className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
-              <h3 className="text-sm font-black uppercase text-red-600 tracking-widest italic mb-6">Správa kategórií prác</h3>
-              <form onSubmit={addCategory} className="flex gap-4 mb-8">
-                <input required type="text" value={newCatName} onChange={(e) => setNewCatName(e.target.value)} placeholder="Názov (napr. MOTOR)" className="flex-grow bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 uppercase" />
-                <button type="submit" className="bg-white text-black font-black px-8 py-4 rounded-xl uppercase text-[10px] hover:bg-red-600 hover:text-white transition-all">Pridať +</button>
-              </form>
-              <div className="flex flex-wrap gap-3">
-                {serviceCategories.map(cat => (
-                  <div key={cat.id} className="bg-zinc-800 px-4 py-2 rounded-full border border-zinc-700 flex items-center gap-3">
-                    <span className="text-[10px] font-black uppercase">{cat.name}</span>
-                    <button onClick={() => deleteCategory(cat.id)} className="text-red-500 hover:text-white font-bold">✕</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[3rem] shadow-2xl">
-              <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                <h3 className="text-sm font-black uppercase text-blue-500 tracking-widest italic">Zoznam úkonov</h3>
-                <select 
-                  value={normFilter} 
-                  onChange={(e) => setNormFilter(e.target.value)}
-                  className="bg-black border border-zinc-800 p-3 rounded-xl text-zinc-500 text-[10px] font-black uppercase outline-none focus:border-blue-600 cursor-pointer"
-                >
-                  <option value="all">Všetky kategórie</option>
-                  {serviceCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                </select>
-              </div>
-
-              <form onSubmit={addServiceNorm} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10 border-b border-zinc-800 pb-10">
-                <select required value={newNorm.category_id} onChange={(e) => setNewNorm({ ...newNorm, category_id: e.target.value })} className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none">
-                  <option value="">-- Vyberte kategóriu --</option>
-                  {serviceCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                </select>
-                <input required type="text" value={newNorm.service_name} onChange={(e) => setNewNorm({ ...newNorm, service_name: e.target.value })} placeholder="Názov úkonu..." className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" />
-                <div className="flex gap-2">
-                  <input required type="number" value={newNorm.duration_minutes} onChange={(e) => setNewNorm({ ...newNorm, duration_minutes: parseInt(e.target.value) })} className="w-24 bg-black border border-zinc-800 p-4 rounded-xl text-center" />
-                  <button type="submit" className="flex-grow bg-red-600 text-white font-black py-4 rounded-xl uppercase text-[10px]">Uložiť normu</button>
-                </div>
-              </form>
-
-              <div className="space-y-4">
-                {serviceNorms
-                  .filter(n => normFilter === 'all' || n.category_id === normFilter)
-                  .map(norm => (
-                  <div key={norm.id} className="bg-black/40 border border-zinc-800 p-5 rounded-3xl flex justify-between items-center group hover:border-red-600/30 transition-all">
-                    <div className="flex-grow mr-6">
-                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest block mb-1">{norm.service_categories?.name}</span>
-                      <input 
-                        className="bg-transparent border-none text-sm font-black uppercase italic text-zinc-200 w-full focus:ring-0 p-0"
-                        defaultValue={norm.service_name}
-                        onBlur={(e) => updateServiceNorm(norm.id, 'service_name', e.target.value)}
+              {/* Existujúce kategórie */}
+              <div className="space-y-3">
+                {rateCategories.map((cat, idx) => (
+                  <div key={cat.key} className="bg-black/40 p-4 rounded-2xl border border-zinc-800 flex items-center gap-4 group">
+                    <div className="w-14 shrink-0 text-center bg-zinc-900 border border-zinc-700 rounded-xl py-2">
+                      <span className="text-red-600 font-black uppercase text-sm italic">{cat.key}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={cat.label}
+                      onChange={(e) => {
+                        const updated = [...rateCategories];
+                        updated[idx] = { ...updated[idx], label: e.target.value };
+                        setRateCategories(updated);
+                      }}
+                      className="flex-grow bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black outline-none focus:border-red-600 transition-all"
+                      placeholder="Popis kategórie"
+                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input
+                        type="number"
+                        value={cat.value}
+                        onChange={(e) => {
+                          const updated = [...rateCategories];
+                          updated[idx] = { ...updated[idx], value: e.target.value };
+                          setRateCategories(updated);
+                        }}
+                        className="w-24 bg-black border border-zinc-800 p-3 rounded-xl text-white text-right font-mono font-black text-sm outline-none focus:border-red-600 transition-all"
+                        placeholder="0"
                       />
+                      <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">€/hod</span>
                     </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <span className="text-[8px] text-zinc-600 block uppercase mb-1 font-black">Minúty</span>
-                        <input 
-                          type="number"
-                          className="bg-zinc-900 border border-zinc-800 rounded-xl text-lg font-black w-24 text-center focus:border-red-600 outline-none p-1"
-                          defaultValue={norm.duration_minutes}
-                          onBlur={(e) => updateServiceNorm(norm.id, 'duration_minutes', parseInt(e.target.value))}
-                        />
-                      </div>
-                      <button onClick={() => deleteNorm(norm.id)} className="p-3 bg-zinc-800 rounded-xl hover:bg-red-600 transition-all">🗑️</button>
-                    </div>
+                    <button
+                      onClick={() => deleteRateCategory(cat.key)}
+                      className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-700 hover:text-red-600 hover:border-red-600/50 transition-all opacity-0 group-hover:opacity-100 shrink-0"
+                    >
+                      🗑
+                    </button>
                   </div>
                 ))}
+              </div>
+
+              {/* Pridať novú kategóriu */}
+              <div className="border-t border-zinc-800 pt-6">
+                <p className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-4 italic">Pridať novú kategóriu práce</p>
+                <div className="flex gap-3 items-end flex-wrap">
+                  <div>
+                    <label className="text-[8px] uppercase text-zinc-600 mb-1 block tracking-widest font-black">Kód</label>
+                    <input
+                      type="text"
+                      value={newRate.key}
+                      onChange={(e) => setNewRate({ ...newRate, key: e.target.value.toUpperCase() })}
+                      className="w-20 bg-black border border-zinc-800 p-3 rounded-xl text-white text-sm font-black uppercase outline-none focus:border-red-600 transition-all"
+                      placeholder="K1"
+                      maxLength={4}
+                    />
+                  </div>
+                  <div className="flex-grow min-w-[160px]">
+                    <label className="text-[8px] uppercase text-zinc-600 mb-1 block tracking-widest font-black">Popis</label>
+                    <input
+                      type="text"
+                      value={newRate.label}
+                      onChange={(e) => setNewRate({ ...newRate, label: e.target.value })}
+                      className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black outline-none focus:border-red-600 transition-all"
+                      placeholder="Napr. Karosárske práce"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[8px] uppercase text-zinc-600 mb-1 block tracking-widest font-black">€/hod</label>
+                    <input
+                      type="number"
+                      value={newRate.value}
+                      onChange={(e) => setNewRate({ ...newRate, value: e.target.value })}
+                      className="w-24 bg-black border border-zinc-800 p-3 rounded-xl text-white text-right font-mono font-black outline-none focus:border-red-600 transition-all"
+                      placeholder="0"
+                    />
+                  </div>
+                  <button
+                    onClick={addRateCategory}
+                    className="bg-zinc-800 hover:bg-red-600 border border-zinc-700 hover:border-red-600 text-zinc-400 hover:text-white font-black px-5 py-3 rounded-xl transition-all text-lg"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-6">
+                <button onClick={saveRateCategories} className="w-full md:w-auto px-12 bg-red-600 text-white hover:bg-red-700 font-black py-5 rounded-2xl transition-all uppercase text-xs tracking-[0.2em] shadow-xl">
+                  {ratesSaveStatus || 'Uložiť cenník prác'}
+                </button>
               </div>
             </div>
           </section>
