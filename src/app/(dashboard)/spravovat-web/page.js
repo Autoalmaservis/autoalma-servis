@@ -40,9 +40,10 @@ export default function SpravovatWebPage() {
   };
 
   const createSection = async () => {
-    if (!newForm.slug || !newForm.name) return;
+    if (!newForm.name) return;
     setSaving(true);
-    const slug = newForm.slug.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const raw = newForm.slug || newForm.name;
+    const slug = raw.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     await supabase.from('web_sections').upsert({ slug, icon: newForm.icon, name: newForm.name, items: [], image_urls: [], description: '', sort_order: sections.length });
     setNewOpen(false);
     setNewForm({ slug: '', icon: '🔧', name: '' });

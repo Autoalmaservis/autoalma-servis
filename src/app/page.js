@@ -23,6 +23,12 @@ const services = [
     slug: 'klimatizacia',
     items: ['Čistenie ozónom', 'Plnenie klimatizácie'],
   },
+  {
+    icon: '🛞',
+    name: 'Pneuservis',
+    slug: 'pneuservis',
+    items: ['Kódovanie ventilov pneumatík', 'Prehodenie kolies', 'Prezúvanie pneumatiky', 'Vyvažovanie', 'Vyrovnávanie diskov'],
+  },
 ];
 
 const slogans = [
@@ -142,11 +148,11 @@ export default function HomePage() {
         </p>
 
         {/* VÝHODY GARÁŽE — viditeľné hneď */}
-        <div className="w-full max-w-4xl mb-10">
+        <div className="w-full max-w-6xl mb-10">
           <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-6 italic">
             🏎️ Moja Garáž — váš online servisný účet
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
               { icon: '📡', title: 'Stav opravy naživo', desc: 'Vidíte čo sa s autom deje — bez volania' },
               { icon: '📋', title: 'Schvaľujete práce online', desc: 'Cenová ponuka priamo na telefón' },
@@ -155,10 +161,12 @@ export default function HomePage() {
               { icon: '📱', title: 'Funguje na mobile', desc: 'Bez aplikácie, stačí prehliadač' },
               { icon: '🔒', title: 'Len váš účet', desc: 'Súkromný prístup, vaše dáta' },
             ].map((b, i) => (
-              <div key={i} className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-5 md:p-7 rounded-[1.5rem] text-left transition-all group">
-                <span className="text-3xl md:text-4xl mb-3 block">{b.icon}</span>
-                <p className="text-white text-xs md:text-sm font-black uppercase italic tracking-tight leading-tight mb-1.5 group-hover:text-red-500 transition-colors">{b.title}</p>
-                <p className="text-zinc-500 text-[11px] md:text-xs font-bold leading-snug">{b.desc}</p>
+              <div key={i} className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-8 md:p-10 rounded-[2rem] text-left transition-all group flex items-start gap-6">
+                <span className="text-4xl md:text-5xl shrink-0 mt-0.5">{b.icon}</span>
+                <div>
+                  <p className="text-white text-sm md:text-base font-black uppercase italic tracking-tight leading-tight mb-2 group-hover:text-red-500 transition-colors">{b.title}</p>
+                  <p className="text-zinc-500 text-xs md:text-sm font-bold leading-relaxed">{b.desc}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -292,7 +300,7 @@ export default function HomePage() {
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Kde nás nájdete</p>
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Kontakt</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <a
               href="tel:0940449449"
               className="bg-black border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer"
@@ -329,6 +337,17 @@ export default function HomePage() {
                 autoalma@autoalma.sk
               </p>
             </a>
+
+            <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] text-center">
+              <span className="text-4xl mb-4 block">🧾</span>
+              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Fakturačné údaje</p>
+              <p className="text-white font-black text-base">Autoalma s.r.o.</p>
+              <div className="mt-3 space-y-1">
+                <p className="text-zinc-500 font-bold text-sm">IČO: 46044876</p>
+                <p className="text-zinc-500 font-bold text-sm">DIČ: 2023194316</p>
+                <p className="text-zinc-500 font-bold text-sm">IČ DPH: SK2023194316</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>

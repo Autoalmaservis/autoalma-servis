@@ -11,10 +11,19 @@ export async function middleware(req) {
   const url = req.nextUrl.clone();
   const path = url.pathname;
 
-  // Ak nie je prihlásený a skúša ísť do chránenej zóny, pošli ho na login
+  const ADMIN_ROUTES = [
+    '/dashboard', '/klienti', '/kalendar', '/zakazky', '/CP',
+    '/faktury', '/nastavenia', '/databaza', '/spravovat-web',
+    '/statistiky', '/prijem', '/historia',
+  ];
+  const isAdminRoute   = ADMIN_ROUTES.some(r => path === r || path.startsWith(r + '/'));
+  const isMechanikRoute = path.startsWith('/mechanik');
+  const isGarazRoute   = path.startsWith('/garaz');
+
+  // Ak nie je prihlásený — presmeruj na login
   if (!session) {
-    if (path.startsWith('/dashboard') || path.startsWith('/mechanik') || path.startsWith('/garaz')) {
-      url.pathname = '/login'; // Tu uprav na tvoju reálnu login cestu ak je iná
+    if (isAdminRoute || isMechanikRoute || isGarazRoute) {
+      url.pathname = '/login';
       return NextResponse.redirect(url);
     }
     return res;
@@ -30,30 +39,43 @@ export async function middleware(req) {
   const role = profile?.role;
 
   // 3. LOGIKA BLOKOVANIA (Smerovanie podľa oprávnenia)
-  
-  // Ak mechanik lezie do dashboardu technika
-  if (path.startsWith('/dashboard') && role !== 'admin') {
-    url.pathname = '/unauthorized'; // Stránka "Nemáte prístup"
-    return NextResponse.redirect(url);
-  }
 
-  // Ak admin (prijímací technik) lezie do rozhrania mechanika (voliteľné, ak mu to chceš zakázať)
-  if (path.startsWith('/mechanik') && role !== 'mechanik') {
-    // Ak chceš, aby admin mohol všetko, túto podmienku vymaž
+  // Mechanik nemôže do admin sekcie
+  if (isAdminRoute && role !== 'admin') {
     url.pathname = '/unauthorized';
     return NextResponse.redirect(url);
   }
 
-  // Ak zákazník lezie k mechanikom alebo do dashboardu
-  if ((path.startsWith('/dashboard') || path.startsWith('/mechanik')) && role === 'zakaznik') {
-    url.pathname = '/garaz'; // Zákazníka vždy vrátime do jeho garáže
+  // Admin nemôže do sekcie mechanika
+  if (isMechanikRoute && role !== 'mechanik') {
+    url.pathname = '/unauthorized';
+    return NextResponse.redirect(url);
+  }
+
+  // Zákazník patrí do garáže
+  if ((isAdminRoute || isMechanikRoute) && role === 'zakaznik') {
+    url.pathname = '/garaz';
     return NextResponse.redirect(url);
   }
 
   return res;
 }
 
-// Tento riadok hovorí Next.js, na ktoré adresy má Middleware dávať pozor
 export const config = {
-  matcher: ['/dashboard/:path*', '/mechanik/:path*', '/garaz/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/klienti/:path*',
+    '/kalendar/:path*',
+    '/zakazky/:path*',
+    '/CP/:path*',
+    '/faktury/:path*',
+    '/nastavenia/:path*',
+    '/databaza/:path*',
+    '/spravovat-web/:path*',
+    '/statistiky/:path*',
+    '/prijem/:path*',
+    '/historia/:path*',
+    '/mechanik/:path*',
+    '/garaz/:path*',
+  ],
 };

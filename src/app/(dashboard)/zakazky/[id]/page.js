@@ -58,6 +58,16 @@ export default function DetailZakazkyPage() {
     }
   }, [id]);
 
+  const ensureAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) return true;
+    // Skúsime refresh
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    if (refreshed?.session) return true;
+    router.push('/login');
+    return false;
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     // Spustíme fetchDetail ako prvý, aby sme získali ŠPZ pre históriu
@@ -165,6 +175,7 @@ export default function DetailZakazkyPage() {
   // --- NOVÁ FUNKCIA: IMPORT POLOŽIEK ZO STAREJ PONUKY ---
   const importOfferItems = async (oldOffer) => {
     if (!confirm(`Importovať ${oldOffer.items_json.length} položiek z ponuky ${oldOffer.offer_number || 'bez čísla'}?`)) return;
+    if (!await ensureAuth()) return;
     
     try {
         const itemsToInsert = oldOffer.items_json.map(item => {
@@ -499,6 +510,7 @@ export default function DetailZakazkyPage() {
   const addItem = async (e) => {
     e.preventDefault();
     if (!newItem.name) return;
+    if (!await ensureAuth()) return;
 
     const isPraca = newItem.type === 'Práca';
     const itemToSave = {
@@ -519,6 +531,7 @@ export default function DetailZakazkyPage() {
   };
 
   const deleteItem = async (itemId) => {
+    if (!await ensureAuth()) return;
     const { error } = await supabase.from('job_items').delete().eq('id', itemId);
     if (!error) fetchItems();
   };
