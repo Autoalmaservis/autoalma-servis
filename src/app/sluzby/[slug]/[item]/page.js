@@ -1,12 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/app/lib/supabase';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import ImageGallery from './ImageGallery';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
 
 const toSlug = (str) =>
   str.toLowerCase()
@@ -16,43 +12,38 @@ const toSlug = (str) =>
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-');
 
-export async function generateMetadata({ params }) {
-  const { data } = await supabase
-    .from('web_sections')
-    .select('name, items')
-    .eq('slug', params.slug)
-    .single();
-  if (!data) return { title: 'Služba nenájdená' };
-  const found = (data.items || []).find(i => toSlug(i.title || i) === params.item);
-  if (!found) return { title: data.name };
-  const title = typeof found === 'string' ? found : found.title;
-  const desc = typeof found === 'string' ? '' : (found.desc || '');
-  return {
-    title: `${title} – ${data.name}`,
-    description: desc.replace(/\*\*/g, '').slice(0, 160),
-    alternates: { canonical: `https://autoalma.sk/sluzby/${params.slug}/${params.item}` },
-    openGraph: {
-      title: `${title} | AutoAlma Servis`,
-      description: desc.replace(/\*\*/g, '').slice(0, 160),
-      url: `https://autoalma.sk/sluzby/${params.slug}/${params.item}`,
-    },
-  };
-}
+export default function ItemDetailPage() {
+  const { slug, item: itemSlug } = useParams();
+  const [section, setSection] = useState(null);
+  const [itemData, setItemData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [lightbox, setLightbox] = useState(null);
 
-export default async function ItemDetailPage({ params }) {
-  const { data } = await supabase
-    .from('web_sections')
-    .select('*')
-    .eq('slug', params.slug)
-    .single();
+  useEffect(() => {
+    supabase.from('web_sections').select('*').eq('slug', slug).single()
+      .then(({ data }) => {
+        if (data) {
+          setSection(data);
+          const found = (data.items || []).find(i => toSlug(i.title || i) === itemSlug);
+          if (found) setItemData(typeof found === 'string' ? { title: found, desc: '', image_urls: [] } : found);
+        }
+        setLoading(false);
+      });
+  }, [slug, itemSlug]);
 
-  if (!data) notFound();
+  if (loading) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
-  const found = (data.items || []).find(i => toSlug(i.title || i) === params.item);
-  if (!found) notFound();
-
-  const section = data;
-  const itemData = typeof found === 'string' ? { title: found, desc: '', image_urls: [] } : found;
+  if (!itemData) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center px-6">
+      <p className="text-5xl mb-6">🔧</p>
+      <h1 className="text-2xl font-black uppercase italic text-white mb-4">Služba nenájdená</h1>
+      <Link href="/#sluzby" className="text-red-600 font-black uppercase text-xs tracking-widest hover:underline">← Späť</Link>
+    </div>
+  );
 
   const images = itemData.image_urls?.filter(Boolean) || [];
   const paragraphs = (itemData.desc || '').split('\n').filter(p => p.trim());
@@ -138,7 +129,17 @@ export default async function ItemDetailPage({ params }) {
           )}
 
           {/* FOTKY — bočný stĺpec alebo plná šírka */}
-          {images.length > 0 && <ImageGallery images={images} />}
+          {images.length > 0 && (
+            <div className="space-y-3">
+              {images.map((url, i) => (
+                <div key={i} onClick={() => setLightbox(url)}
+                  className="relative rounded-2xl overflow-hidden border border-zinc-900 hover:border-blue-500/30 cursor-zoom-in transition-all group">
+                  <img src={url} alt="" className="w-full object-cover aspect-video group-hover:scale-[1.02] transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
 
@@ -167,6 +168,13 @@ export default async function ItemDetailPage({ params }) {
         </div>
 
       </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-[600] bg-black/97 backdrop-blur-xl flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <button className="absolute top-6 right-6 w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center text-zinc-400 hover:text-white text-xl transition-all">✕</button>
+          <img src={lightbox} alt="" className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
 
     </div>
   );

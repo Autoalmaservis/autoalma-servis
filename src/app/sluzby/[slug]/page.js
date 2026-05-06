@@ -1,39 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+'use client';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/app/lib/supabase';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+export default function SluzbaPage() {
+  const { slug } = useParams();
+  const [section, setSection] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-export async function generateMetadata({ params }) {
-  const { data } = await supabase
-    .from('web_sections')
-    .select('name, description')
-    .eq('slug', params.slug)
-    .single();
-  if (!data) return { title: 'Služba nenájdená' };
-  return {
-    title: data.name,
-    description: (data.description || '').slice(0, 160),
-    alternates: { canonical: `https://autoalma.sk/sluzby/${params.slug}` },
-    openGraph: {
-      title: `${data.name} | AutoAlma Servis`,
-      description: (data.description || '').slice(0, 160),
-      url: `https://autoalma.sk/sluzby/${params.slug}`,
-    },
-  };
-}
+  useEffect(() => {
+    supabase.from('web_sections').select('*').eq('slug', slug).single()
+      .then(({ data }) => { setSection(data || null); setLoading(false); });
+  }, [slug]);
 
-export default async function SluzbaPage({ params }) {
-  const { data: section } = await supabase
-    .from('web_sections')
-    .select('*')
-    .eq('slug', params.slug)
-    .single();
+  if (loading) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-zinc-600 font-black uppercase text-xs tracking-widest animate-pulse">Načítavam...</div>
+    </div>
+  );
 
-  if (!section) notFound();
+  if (!section) return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center px-6">
+      <p className="text-6xl mb-6">🔧</p>
+      <h1 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-4">Sekcia nenájdená</h1>
+      <Link href="/#sluzby" className="text-red-600 font-black uppercase text-xs tracking-widest hover:underline">← Späť na služby</Link>
+    </div>
+  );
 
   const items = Array.isArray(section.items) ? section.items : [];
   const images = Array.isArray(section.image_urls) ? section.image_urls.filter(Boolean) : [];
