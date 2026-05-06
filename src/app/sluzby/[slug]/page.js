@@ -1,36 +1,39 @@
-'use client';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/app/lib/supabase';
-import { useParams } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 
-export default function SluzbaPage() {
-  const { slug } = useParams();
-  const [section, setSection] = useState(null);
-  const [loading, setLoading] = useState(true);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-  useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase.from('web_sections').select('*').eq('slug', slug).single();
-      setSection(data || null);
-      setLoading(false);
-    };
-    fetch();
-  }, [slug]);
+export async function generateMetadata({ params }) {
+  const { data } = await supabase
+    .from('web_sections')
+    .select('name, description')
+    .eq('slug', params.slug)
+    .single();
+  if (!data) return { title: 'Služba nenájdená' };
+  return {
+    title: data.name,
+    description: (data.description || '').slice(0, 160),
+    alternates: { canonical: `https://autoalma.sk/sluzby/${params.slug}` },
+    openGraph: {
+      title: `${data.name} | AutoAlma Servis`,
+      description: (data.description || '').slice(0, 160),
+      url: `https://autoalma.sk/sluzby/${params.slug}`,
+    },
+  };
+}
 
-  if (loading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="text-zinc-600 font-black uppercase text-xs tracking-widest animate-pulse">Načítavam...</div>
-    </div>
-  );
+export default async function SluzbaPage({ params }) {
+  const { data: section } = await supabase
+    .from('web_sections')
+    .select('*')
+    .eq('slug', params.slug)
+    .single();
 
-  if (!section) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center text-center px-6">
-      <p className="text-6xl mb-6">🔧</p>
-      <h1 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-4">Sekcia nenájdená</h1>
-      <Link href="/#sluzby" className="text-red-600 font-black uppercase text-xs tracking-widest hover:underline">← Späť na služby</Link>
-    </div>
-  );
+  if (!section) notFound();
 
   const items = Array.isArray(section.items) ? section.items : [];
   const images = Array.isArray(section.image_urls) ? section.image_urls.filter(Boolean) : [];
@@ -92,9 +95,9 @@ export default function SluzbaPage() {
                   <div key={i} className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-7 rounded-[2rem] transition-all group">
                     <div className="flex items-start gap-3 mb-3">
                       <span className="w-2 h-2 bg-red-600 rounded-full shrink-0 mt-2" />
-                      <h3 className="text-base font-black uppercase italic tracking-tight text-white group-hover:text-red-500 transition-colors">
+                      <h2 className="text-base font-black uppercase italic tracking-tight text-white group-hover:text-red-500 transition-colors">
                         {title}
-                      </h3>
+                      </h2>
                     </div>
                     {desc && <p className="text-zinc-500 text-sm font-bold leading-relaxed pl-5">{desc}</p>}
                   </div>

@@ -65,8 +65,37 @@ export default function HomePage() {
       .replace(/[^a-z0-9-]/g, '')
       .replace(/-+/g, '-');
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'AutoRepair',
+    name: 'AutoAlma Servis',
+    description: 'Autoservis v Bratislave, Petržalka. Mechanické práce, elektrodiagnostika, klimatizácia, pneuservis.',
+    url: 'https://autoalma.sk',
+    telephone: '+421940449449',
+    email: 'autoalma@autoalma.sk',
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: 'Svornosti 119',
+      addressLocality: 'Bratislava',
+      postalCode: '821 06',
+      addressCountry: 'SK',
+    },
+    geo: {
+      '@type': 'GeoCoordinates',
+      latitude: 48.1221,
+      longitude: 17.1077,
+    },
+    openingHoursSpecification: [
+      { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday'], opens: '08:00', closes: '17:00' },
+    ],
+    priceRange: '€€',
+    servesCuisine: undefined,
+    hasMap: 'https://maps.google.com/?q=Svornosti+119+Bratislava',
+  };
+
   return (
     <div className="min-h-screen bg-black text-white font-sans">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       {/* NAVIGÁCIA */}
       <nav className={`fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-b border-blue-500/25 transition-all duration-300 ${scrolled ? 'shadow-lg shadow-blue-500/5' : ''}`}>

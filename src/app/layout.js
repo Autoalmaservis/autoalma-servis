@@ -1,15 +1,50 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'AutoAlma ERP',
-  description: 'Systém správy autoservisu',
+  metadataBase: new URL('https://autoalma.sk'),
+  title: {
+    default: 'AutoAlma Servis | Autoservis Bratislava – Petržalka',
+    template: '%s | AutoAlma Servis',
+  },
+  description: 'Autoservis v Bratislave, Petržalka. Mechanické práce, elektrodiagnostika, klimatizácia, pneuservis. Férovosť, transparentnosť a odbornosť. Svornosti 119, 821 06 Bratislava.',
+  keywords: [
+    'autoservis Bratislava', 'servis auta Petržalka', 'oprava auta Bratislava',
+    'elektrodiagnostika Bratislava', 'pneuservis Bratislava', 'chiptuning Bratislava',
+    'klimatizacia auto Bratislava', 'AutoAlma', 'autoservis Svornosti',
+    'výmena oleja Bratislava', 'oprava podvozku Bratislava',
+  ],
+  authors: [{ name: 'AutoAlma Servis' }],
+  creator: 'AutoAlma Servis',
+  publisher: 'AutoAlma Servis',
+  formatDetection: { email: false, address: false, telephone: false },
+  openGraph: {
+    type: 'website',
+    locale: 'sk_SK',
+    url: 'https://autoalma.sk',
+    siteName: 'AutoAlma Servis',
+    title: 'AutoAlma Servis | Autoservis Bratislava – Petržalka',
+    description: 'Autoservis v Bratislave, Petržalka. Mechanické práce, elektrodiagnostika, klimatizácia, pneuservis. Svornosti 119.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  alternates: {
+    canonical: 'https://autoalma.sk',
+  },
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="sk">
       <body className="bg-black text-white antialiased" suppressHydrationWarning>
-        {/* Tu sa bude vykresľovať buď (dashboard) so sidebarom, alebo (public) bez neho */}
         {children}
       </body>
     </html>
