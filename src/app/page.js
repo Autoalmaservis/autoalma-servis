@@ -41,6 +41,7 @@ export default function HomePage() {
   const [scrolled, setScrolled] = useState(false);
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [lightbox, setLightbox] = useState(null);
+  const [cennik, setCennik] = useState([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -55,6 +56,12 @@ export default function HomePage() {
       .select('id, url, caption')
       .order('sort_order', { ascending: true })
       .then(({ data }) => { if (data) setGalleryPhotos(data); });
+    supabase
+      .from('business_settings')
+      .select('value')
+      .eq('id', 'cennik')
+      .single()
+      .then(({ data }) => { if (data?.value) setCennik(JSON.parse(data.value)); });
   }, []);
 
   const toSlug = (str) =>
@@ -99,8 +106,8 @@ export default function HomePage() {
 
       {/* NAVIGÁCIA */}
       <nav className={`fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-b border-blue-500/25 transition-all duration-300 ${scrolled ? 'shadow-lg shadow-blue-500/5' : ''}`}>
-        {/* TENKÁ MODRÁ LINKA NAVRCHU */}
-        <div className="h-[2px] bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
+        {/* MODRÁ LINKA NAVRCHU */}
+        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
 
         <div className={`flex items-center justify-between px-6 md:px-12 transition-all duration-300 ${scrolled ? 'py-2' : 'py-4'}`}>
 
@@ -113,6 +120,7 @@ export default function HomePage() {
             <div className="hidden md:flex items-center gap-1">
               {[
                 { href: '#sluzby', label: 'Naše služby' },
+                { href: '#cennik', label: 'Cenník' },
                 { href: '#galeria', label: 'Galéria' },
               ].map(link => (
                 <a
@@ -320,6 +328,43 @@ export default function HomePage() {
             >✕</button>
           </div>
         </div>
+      )}
+
+      {/* CENNÍK */}
+      {cennik.length > 0 && (
+        <section id="cennik" className="py-24 px-6 border-t border-zinc-900 bg-zinc-950">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-16">
+              <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Orientačné ceny</p>
+              <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Cenník</h2>
+              <p className="text-zinc-500 text-sm font-bold mt-4 max-w-lg mx-auto">Ceny sú orientačné a závisia od konkrétneho vozidla. Presná cena vždy po diagnostike.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {cennik.map((cat, ci) => (
+                <div key={ci} className="bg-black border border-zinc-900 rounded-[2rem] overflow-hidden">
+                  <div className="px-8 py-5 border-b border-zinc-900 flex items-center gap-3">
+                    {cat.icon && <span className="text-2xl">{cat.icon}</span>}
+                    <h3 className="text-sm font-black uppercase italic tracking-tight text-white">{cat.name}</h3>
+                  </div>
+                  <div className="divide-y divide-zinc-900">
+                    {(cat.items || []).map((item, ii) => (
+                      <div key={ii} className="px-8 py-4 flex items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors">
+                        <div>
+                          <p className="text-zinc-300 text-sm font-bold">{item.name}</p>
+                          {item.note && <p className="text-zinc-600 text-[11px] font-bold mt-0.5">{item.note}</p>}
+                        </div>
+                        <span className="text-red-500 font-black text-sm shrink-0">{item.price}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-zinc-700 text-[10px] font-black uppercase tracking-widest mt-10">
+              Hodinová sadzba · Práce účtované podľa skutočného času · Bez skrytých poplatkov
+            </p>
+          </div>
+        </section>
       )}
 
       {/* KONTAKT */}

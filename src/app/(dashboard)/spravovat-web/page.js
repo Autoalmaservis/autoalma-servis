@@ -115,6 +115,24 @@ export default function SpravovatWebPage() {
             </div>
           </button>
 
+          {/* CENNÍK — pevná karta */}
+          <button
+            onClick={() => router.push('/spravovat-web/cennik')}
+            className="bg-zinc-950 border border-zinc-900 hover:border-red-600/40 p-7 rounded-[2rem] text-left transition-all group"
+          >
+            <span className="text-4xl mb-4 block">💰</span>
+            <h2 className="text-base font-black uppercase italic tracking-tight text-white group-hover:text-red-500 transition-colors mb-2">
+              Cenník
+            </h2>
+            <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-4">
+              Orientačné ceny · hlavná stránka
+            </p>
+            <div className="mt-4 pt-4 border-t border-zinc-900 flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-700 group-hover:text-red-500 transition-colors">Spravovať</span>
+              <span className="text-zinc-700 group-hover:text-red-500 transition-all group-hover:translate-x-1 inline-block">→</span>
+            </div>
+          </button>
+
           {sections.map((s, i) => (
             <button
               key={s.slug}
