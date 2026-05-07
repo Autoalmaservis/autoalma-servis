@@ -45,6 +45,7 @@ export default function SluzbaPage() {
             ← Späť na služby
           </Link>
         </div>
+        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
       </nav>
 
       {/* HERO */}

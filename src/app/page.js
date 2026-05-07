@@ -163,6 +163,8 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+        {/* MODRÁ LINKA DOLE */}
+        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
       </nav>
 
       {/* HERO */}

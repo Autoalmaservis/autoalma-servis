@@ -53,7 +53,7 @@ export default function ItemDetailPage() {
 
       {/* NAV */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-b border-blue-500/25">
-        <div className="h-[2px] bg-gradient-to-r from-transparent via-blue-500/60 to-transparent" />
+        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
         <div className="flex items-center justify-between px-6 md:px-12 py-4">
           <Link href="/" className="text-xl font-black uppercase italic tracking-tighter hover:opacity-80 transition-all">
             Auto<span className="text-red-600">Alma</span>
@@ -69,6 +69,7 @@ export default function ItemDetailPage() {
             </Link>
           </div>
         </div>
+        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
       </nav>
 
       {/* HERO */}
