@@ -5,22 +5,31 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { usePathname } from 'next/navigation';
 
+const PRIORITY_ICON  = { red: '🔴', yellow: '🟡', green: '🟢' };
+const PRIORITY_LABEL = { red: 'Naliehavé', yellow: 'Stredné', green: 'Nízka priorita' };
+const PRIORITY_BORDER = { red: 'border-red-900/60', yellow: 'border-yellow-900/60', green: 'border-green-900/60' };
+const PRIORITY_HEADER = { red: 'text-red-400', yellow: 'text-yellow-400', green: 'text-green-400' };
+
 export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [jobUpdateCount, setJobUpdateCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
-  const [todoOpen, setTodoOpen] = useState(false);
+  const [todoModalOpen, setTodoModalOpen] = useState(false);
+  const [addingTodo, setAddingTodo] = useState(false);
   const [todos, setTodos] = useState([]);
   const [newTodo, setNewTodo] = useState('');
-  const [newPriority, setNewPriority] = useState('green');
+  const [newPriority, setNewPriority] = useState('red');
   const jobStatusRef = useRef({});
   const pathname = usePathname();
 
   useEffect(() => {
     const saved = localStorage.getItem('autoalma_todos');
-    if (saved) try { setTodos(JSON.parse(saved)); } catch {}
+    if (saved) try {
+      const parsed = JSON.parse(saved);
+      setTodos(parsed.map(t => ({ ...t, priority: t.priority === 'orange' ? 'yellow' : t.priority })));
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -31,108 +40,65 @@ export default function DashboardLayout({ children }) {
     if (!newTodo.trim()) return;
     setTodos(prev => [...prev, { id: Date.now(), text: newTodo.trim(), priority: newPriority, done: false }]);
     setNewTodo('');
+    setAddingTodo(false);
   };
-
   const toggleTodo = (id) => setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
   const deleteTodo = (id) => setTodos(prev => prev.filter(t => t.id !== id));
   const undoneTodos = todos.filter(t => !t.done);
-  const priorityIcon = (p) => p === 'red' ? '🔴' : p === 'orange' ? '🟠' : '🟢';
 
   const addStatusNotification = (notif) => {
     setNotifications(prev => [notif, ...prev].slice(0, 8));
-    if (!window.location.pathname.startsWith('/zakazky')) {
-      setJobUpdateCount(prev => prev + 1);
-    }
+    if (!window.location.pathname.startsWith('/zakazky')) setJobUpdateCount(prev => prev + 1);
   };
 
   const pollJobStatuses = async () => {
-    const { data } = await supabase
-      .from('job_tickets')
-      .select('id, customer_name, plate_number, status')
-      .neq('status', 'Archivované');
-
+    const { data } = await supabase.from('job_tickets').select('id, customer_name, plate_number, status').neq('status', 'Archivované');
     if (!data) return;
-
     const prev = jobStatusRef.current;
     const next = {};
-
     data.forEach(job => {
       next[job.id] = job.status;
       const oldStatus = prev[job.id];
       if (oldStatus !== undefined && oldStatus !== job.status) {
-        addStatusNotification({
-          id: job.id,
-          customerName: job.customer_name,
-          plateNumber: job.plate_number,
-          fromStatus: oldStatus,
-          toStatus: job.status,
-          time: new Date(),
-        });
+        addStatusNotification({ id: job.id, customerName: job.customer_name, plateNumber: job.plate_number, fromStatus: oldStatus, toStatus: job.status });
       }
     });
-
     jobStatusRef.current = next;
   };
 
   useEffect(() => {
     fetchPendingCount();
     pollJobStatuses();
-
-    const channel = supabase
-      .channel('dashboard-global-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, () => { fetchPendingCount(); })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, () => { fetchPendingCount(); })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, () => { pollJobStatuses(); })
+    const channel = supabase.channel('dashboard-global-updates')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, fetchPendingCount)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, fetchPendingCount)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, pollJobStatuses)
       .subscribe();
-
     const pendingInterval = setInterval(fetchPendingCount, 10000);
     const jobInterval = setInterval(pollJobStatuses, 30000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(pendingInterval);
-      clearInterval(jobInterval);
-    };
+    return () => { supabase.removeChannel(channel); clearInterval(pendingInterval); clearInterval(jobInterval); };
   }, []);
 
   useEffect(() => {
-    if (pathname.startsWith('/zakazky')) {
-      setJobUpdateCount(0);
-      setNotifications([]);
-    }
+    if (pathname.startsWith('/zakazky')) { setJobUpdateCount(0); setNotifications([]); }
     setIsMobileOpen(false);
   }, [pathname]);
 
   const fetchPendingCount = async () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const { count, error } = await supabase
-      .from('calendar_events')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_confirmed', false)
-      .gte('start_datetime', today.toISOString());
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const { count, error } = await supabase.from('calendar_events').select('*', { count: 'exact', head: true }).eq('is_confirmed', false).gte('start_datetime', today.toISOString());
     if (!error) setPendingCount(count || 0);
   };
 
-  const statusColor = (status) => {
-    switch (status) {
-      case 'Prebieha': return 'text-blue-400';
-      case 'Čaká na schválenie': return 'text-purple-400';
-      case 'Dokončené': return 'text-green-400';
-      default: return 'text-zinc-400';
-    }
-  };
+  const statusColor = (s) => ({ 'Prebieha': 'text-blue-400', 'Čaká na schválenie': 'text-purple-400', 'Dokončené': 'text-green-400' }[s] || 'text-zinc-400');
 
   return (
     <div className="flex min-h-screen bg-black font-sans">
 
-      {/* MOBILNÁ HORNÁ LIŠTA */}
+      {/* MOBILNÁ LIŠTA */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950 border-b border-zinc-800 px-4 flex items-center justify-between z-[100] no-print">
-        <h1 className="font-black italic text-red-600 uppercase tracking-tighter text-xl text-white">AutoAlma</h1>
-        <button
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-xl text-white"
-        >
+        <h1 className="font-black italic text-red-600 uppercase tracking-tighter text-xl">AutoAlma</h1>
+        <button onClick={() => setIsMobileOpen(!isMobileOpen)} className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-xl text-white">
           {isMobileOpen ? '✕' : '☰'}
         </button>
       </div>
@@ -144,7 +110,7 @@ export default function DashboardLayout({ children }) {
         bg-zinc-950 border-r border-zinc-800 flex-shrink-0 flex flex-col fixed md:sticky top-0 h-screen transition-all duration-300 z-[150] no-print
       `}>
 
-        {/* Collapse button — mimo overflow kontajnera, aby ho neoreezával */}
+        {/* Collapse button — mimo overflow kontajnera */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-10 bg-red-600 rounded-full w-6 h-6 hidden md:flex items-center justify-center border-2 border-black hover:scale-110 transition-all z-50 shadow-lg shadow-red-600/40"
@@ -152,7 +118,6 @@ export default function DashboardLayout({ children }) {
           <span className="text-[10px] text-white font-bold">{isCollapsed ? '→' : '←'}</span>
         </button>
 
-        {/* Scrollovateľný vnútorný obsah */}
         <div className="flex flex-col h-full overflow-y-auto p-4">
 
           <div className={`mb-10 transition-all ${isCollapsed ? 'text-center' : 'px-2'} ${isMobileOpen ? 'mt-10 md:mt-0' : ''}`}>
@@ -169,31 +134,13 @@ export default function DashboardLayout({ children }) {
 
             <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
             <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
-            <MenuLink
-              href="/kalendar"
-              icon="📅"
-              label="Kalendár / Plán"
-              collapsed={isCollapsed}
-              active={pathname === '/kalendar'}
-              badge={pendingCount}
-            />
-            <MenuLink
-              href="/zakazky"
-              icon="🛠️"
-              label="Zoznam Zákaziek"
-              collapsed={isCollapsed}
-              active={pathname.startsWith('/zakazky')}
-              badge={jobUpdateCount}
-            />
+            <MenuLink href="/kalendar" icon="📅" label="Kalendár / Plán" collapsed={isCollapsed} active={pathname === '/kalendar'} badge={pendingCount} />
+            <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname.startsWith('/zakazky')} badge={jobUpdateCount} />
 
             {notifications.length > 0 && !isCollapsed && (
               <div className="mx-1 space-y-1.5 pb-1">
                 {notifications.slice(0, 5).map((n, i) => (
-                  <Link
-                    key={i}
-                    href={`/zakazky/${n.id}`}
-                    className="block bg-black border border-zinc-800 hover:border-red-600/50 p-2.5 rounded-xl transition-all group"
-                  >
+                  <Link key={i} href={`/zakazky/${n.id}`} className="block bg-black border border-zinc-800 hover:border-red-600/50 p-2.5 rounded-xl transition-all group">
                     <div className="flex items-center justify-between mb-0.5">
                       <span className="text-[9px] font-black uppercase text-white leading-none truncate">{n.customerName}</span>
                       <span className="text-[8px] font-black text-red-500 shrink-0 ml-1">{n.plateNumber}</span>
@@ -205,10 +152,7 @@ export default function DashboardLayout({ children }) {
                     </div>
                   </Link>
                 ))}
-                <button
-                  onClick={() => { setNotifications([]); setJobUpdateCount(0); }}
-                  className="w-full text-[8px] font-black uppercase text-zinc-700 hover:text-zinc-400 transition-colors py-1 tracking-widest"
-                >
+                <button onClick={() => { setNotifications([]); setJobUpdateCount(0); }} className="w-full text-[8px] font-black uppercase text-zinc-700 hover:text-zinc-400 transition-colors py-1 tracking-widest">
                   Vymazať notifikácie ✕
                 </button>
               </div>
@@ -225,96 +169,33 @@ export default function DashboardLayout({ children }) {
               <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
             </div>
 
-            {/* TO-DO ZOZNAM */}
+            {/* TO-DO — otvára modal */}
             <div className="pt-3 mt-3 border-t border-zinc-900">
               <button
-                onClick={() => setTodoOpen(p => !p)}
-                className={`relative w-full flex items-center justify-between p-3 rounded-xl transition-all group ${todoOpen ? 'bg-zinc-900/80' : 'hover:bg-zinc-900'} ${isCollapsed ? 'px-0 justify-center' : ''}`}
+                onClick={() => setTodoModalOpen(true)}
+                className={`relative w-full flex items-center justify-between p-3 rounded-xl transition-all group hover:bg-zinc-900 ${isCollapsed ? 'px-0 justify-center' : ''}`}
               >
                 <div className={`flex items-center gap-4 ${isCollapsed ? 'justify-center' : ''}`}>
                   <span className="text-xl group-hover:scale-110 transition-transform shrink-0">📋</span>
                   {!isCollapsed && <span className="font-bold text-sm text-zinc-400 group-hover:text-white tracking-tight">To-Do zoznam</span>}
                 </div>
-                {!isCollapsed && (
-                  <div className="flex items-center gap-1.5">
-                    {undoneTodos.length > 0 && (
-                      <span className="text-[10px] font-black bg-zinc-700 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{undoneTodos.length}</span>
-                    )}
-                    <span className="text-zinc-600 text-[10px] font-black">{todoOpen ? '▲' : '▼'}</span>
-                  </div>
+                {!isCollapsed && undoneTodos.length > 0 && (
+                  <span className="text-[10px] font-black bg-zinc-700 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{undoneTodos.length}</span>
                 )}
                 {isCollapsed && undoneTodos.length > 0 && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
                 )}
               </button>
-
-              {todoOpen && !isCollapsed && (
-                <div className="mt-1 mx-1 space-y-0.5 max-h-60 overflow-y-auto">
-                  {todos.length === 0 && (
-                    <p className="text-center text-zinc-700 text-[10px] font-black uppercase tracking-widest py-3 italic">Žiadne úlohy</p>
-                  )}
-                  {/* Nedokončené */}
-                  {todos.filter(t => !t.done).map(todo => (
-                    <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-900/50 group transition-all">
-                      <button onClick={() => toggleTodo(todo.id)} className="shrink-0 mt-0.5 leading-none">{priorityIcon(todo.priority)}</button>
-                      <span
-                        className="flex-1 text-xs font-bold text-white leading-tight cursor-pointer select-none"
-                        onClick={() => toggleTodo(todo.id)}
-                      >{todo.text}</span>
-                      <button onClick={() => deleteTodo(todo.id)} className="shrink-0 text-zinc-800 hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100 mt-0.5">✕</button>
-                    </div>
-                  ))}
-                  {/* Dokončené */}
-                  {todos.filter(t => t.done).map(todo => (
-                    <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg opacity-35 group transition-all hover:opacity-50">
-                      <button onClick={() => toggleTodo(todo.id)} className="shrink-0 mt-0.5 leading-none">{priorityIcon(todo.priority)}</button>
-                      <span
-                        className="flex-1 text-xs font-bold text-zinc-600 leading-tight line-through cursor-pointer select-none"
-                        onClick={() => toggleTodo(todo.id)}
-                      >{todo.text}</span>
-                      <button onClick={() => deleteTodo(todo.id)} className="shrink-0 text-zinc-800 hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100 mt-0.5">✕</button>
-                    </div>
-                  ))}
-
-                  {/* Pridať novú úlohu */}
-                  <div className="pt-2 pb-1 space-y-1.5 border-t border-zinc-900 mt-1">
-                    <div className="flex gap-1 pt-1">
-                      {['green', 'orange', 'red'].map(p => (
-                        <button
-                          key={p}
-                          onClick={() => setNewPriority(p)}
-                          className={`flex-1 py-1 rounded-lg text-sm transition-all border ${newPriority === p ? 'border-zinc-600 bg-zinc-800 scale-105' : 'border-zinc-900 bg-zinc-950 opacity-40 hover:opacity-70'}`}
-                        >
-                          {priorityIcon(p)}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1">
-                      <input
-                        value={newTodo}
-                        onChange={e => setNewTodo(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addTodo()}
-                        placeholder="Nová úloha..."
-                        className="flex-1 bg-black border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-zinc-600 font-bold"
-                      />
-                      <button
-                        onClick={addTodo}
-                        className="bg-zinc-800 hover:bg-zinc-700 text-white px-2.5 py-1.5 rounded-lg text-sm font-black transition-all"
-                      >+</button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </nav>
 
-          <div className={`mt-auto pt-4 border-t border-zinc-900 transition-all ${isCollapsed ? 'items-center' : ''}`}>
+          <div className={`mt-auto pt-4 border-t border-zinc-900 ${isCollapsed ? 'items-center' : ''}`}>
             <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
-              <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
+              <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg">M</div>
               {!isCollapsed && (
-                <div className="overflow-hidden font-bold">
+                <div className="overflow-hidden">
                   <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
-                  <div className="flex items-center gap-1 mt-1 font-bold">
+                  <div className="flex items-center gap-1 mt-1">
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
                     <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
                   </div>
@@ -326,13 +207,8 @@ export default function DashboardLayout({ children }) {
         </div>
       </aside>
 
-      {/* POZADIE PRE MOBIL */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[140] md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      {/* POZADIE MOBIL */}
+      {isMobileOpen && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[140] md:hidden" onClick={() => setIsMobileOpen(false)} />}
 
       {/* HLAVNÝ OBSAH */}
       <main className={`flex-grow overflow-y-auto bg-black transition-all duration-300 print:!w-full print:!max-w-none print:!flex-none print:!overflow-visible ${isMobileOpen ? 'blur-sm md:blur-none' : ''}`}>
@@ -340,6 +216,131 @@ export default function DashboardLayout({ children }) {
           {children}
         </div>
       </main>
+
+      {/* TO-DO MODAL */}
+      {todoModalOpen && (
+        <div className="fixed inset-0 z-[300] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setTodoModalOpen(false); setAddingTodo(false); }}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-7 py-5 border-b border-zinc-900 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📋</span>
+                <div>
+                  <h2 className="text-lg font-black uppercase italic tracking-tighter text-white leading-none">To-Do zoznam</h2>
+                  <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest mt-0.5">{undoneTodos.length} nevybavených</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {!addingTodo && (
+                  <button
+                    onClick={() => setAddingTodo(true)}
+                    className="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest transition-all shadow-lg shadow-red-600/20"
+                  >
+                    + Pridať úlohu
+                  </button>
+                )}
+                <button onClick={() => { setTodoModalOpen(false); setAddingTodo(false); }} className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 hover:text-white transition-all text-sm">✕</button>
+              </div>
+            </div>
+
+            {/* Formulár pridania */}
+            {addingTodo && (
+              <div className="px-7 pt-5 pb-1 border-b border-zinc-900 shrink-0">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
+                  <input
+                    autoFocus
+                    value={newTodo}
+                    onChange={e => setNewTodo(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addTodo()}
+                    placeholder="Čo treba vyriešiť alebo vybaviť..."
+                    className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 font-bold"
+                  />
+                  <div className="flex items-center gap-3">
+                    <p className="text-[10px] font-black uppercase text-zinc-600 tracking-widest">Priorita:</p>
+                    <div className="flex gap-2">
+                      {['red', 'yellow', 'green'].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setNewPriority(p)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all border ${newPriority === p ? 'border-zinc-500 bg-zinc-700 text-white scale-105' : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700'}`}
+                        >
+                          {PRIORITY_ICON[p]} {PRIORITY_LABEL[p]}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="ml-auto flex gap-2">
+                      <button onClick={() => { setAddingTodo(false); setNewTodo(''); }} className="px-4 py-1.5 rounded-xl text-xs font-black text-zinc-600 hover:text-white transition-all border border-zinc-800 hover:border-zinc-700">Zrušiť</button>
+                      <button onClick={addTodo} className="px-5 py-1.5 rounded-xl text-xs font-black bg-red-600 hover:bg-red-500 text-white transition-all">Pridať</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tri stĺpce */}
+            <div className="flex-1 overflow-y-auto p-7">
+              <div className="grid grid-cols-3 gap-4">
+                {['red', 'yellow', 'green'].map(priority => {
+                  const columnTodos = todos.filter(t => t.priority === priority && !t.done);
+                  return (
+                    <div key={priority} className={`bg-black border ${PRIORITY_BORDER[priority]} rounded-2xl overflow-hidden`}>
+                      {/* Stĺpec header */}
+                      <div className="px-4 py-3 border-b border-zinc-900 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{PRIORITY_ICON[priority]}</span>
+                          <span className={`text-[11px] font-black uppercase tracking-widest ${PRIORITY_HEADER[priority]}`}>{PRIORITY_LABEL[priority]}</span>
+                        </div>
+                        {columnTodos.length > 0 && (
+                          <span className="text-[10px] font-black bg-zinc-900 text-zinc-500 px-1.5 py-0.5 rounded-md">{columnTodos.length}</span>
+                        )}
+                      </div>
+
+                      {/* Úlohy */}
+                      <div className="p-3 space-y-2 min-h-[120px]">
+                        {columnTodos.length === 0 && (
+                          <p className="text-center text-zinc-800 text-[10px] font-black uppercase tracking-widest pt-6 italic">Prázdne</p>
+                        )}
+                        {columnTodos.map(todo => (
+                          <div key={todo.id} className="bg-zinc-950 border border-zinc-900 hover:border-zinc-700 rounded-xl p-3 group transition-all">
+                            <div className="flex items-start gap-2">
+                              <p className="flex-1 text-sm font-bold text-white leading-snug">{todo.text}</p>
+                              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                                <button onClick={() => toggleTodo(todo.id)} title="Označiť ako vybavené" className="w-6 h-6 rounded-lg bg-green-900/40 hover:bg-green-800/60 flex items-center justify-center text-green-500 text-xs transition-all">✓</button>
+                                <button onClick={() => deleteTodo(todo.id)} title="Vymazať" className="w-6 h-6 rounded-lg bg-zinc-900 hover:bg-red-900/40 flex items-center justify-center text-zinc-600 hover:text-red-500 text-xs transition-all">✕</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Vybavené */}
+              {todos.some(t => t.done) && (
+                <div className="mt-6 border-t border-zinc-900 pt-5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-700 mb-3">✓ Vybavené</p>
+                  <div className="space-y-1.5">
+                    {todos.filter(t => t.done).map(todo => (
+                      <div key={todo.id} className="flex items-center gap-3 px-3 py-2 bg-zinc-950 border border-zinc-900 rounded-xl group opacity-40 hover:opacity-60 transition-all">
+                        <span className="text-sm">{PRIORITY_ICON[todo.priority]}</span>
+                        <p className="flex-1 text-xs font-bold text-zinc-500 line-through">{todo.text}</p>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <button onClick={() => toggleTodo(todo.id)} title="Obnoviť" className="text-[10px] font-black text-zinc-600 hover:text-white transition-all px-2 py-1 rounded-lg hover:bg-zinc-900">↩</button>
+                          <button onClick={() => deleteTodo(todo.id)} className="text-[10px] font-black text-zinc-700 hover:text-red-500 transition-all px-2 py-1 rounded-lg hover:bg-zinc-900">✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         @media print {
@@ -354,24 +355,22 @@ export default function DashboardLayout({ children }) {
 
 function MenuLink({ href, icon, label, collapsed, active, badge }) {
   return (
-    <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 font-bold' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
+    <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
       <div className={`flex items-center gap-4 ${collapsed ? 'justify-center' : ''}`}>
         <span className="text-xl group-hover:scale-110 transition-transform shrink-0">{icon}</span>
         {!collapsed && <span className="font-bold text-sm whitespace-nowrap tracking-tight">{label}</span>}
       </div>
-
       {!collapsed && badge > 0 && (
         <div className="flex items-center gap-1">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
           </span>
-          <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center font-bold">{badge}</span>
+          <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{badge}</span>
         </div>
       )}
-
       {collapsed && badge > 0 && (
-        <span className="absolute top-2 right-2 flex h-2 w-2 font-bold">
+        <span className="absolute top-2 right-2 flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
         </span>
