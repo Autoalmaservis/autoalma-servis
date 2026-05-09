@@ -42,6 +42,7 @@ export default function KalendarPage() {
   const [isKnown, setIsKnown] = useState(false);
   const [carData, setCarData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('calendar');
 
   // --- 1. NAČÍTANIE DÁT ---
   const fetchData = async () => {
@@ -312,6 +313,27 @@ export default function KalendarPage() {
     }
   };
 
+  const openEventFromList = (ev) => {
+    const props = ev.extendedProps;
+    setEditingEventId(ev.id);
+    const isOrder = props.plateNumber && props.plateNumber !== 'BLOK' && props.plateNumber !== '';
+    if (isOrder) { setSelectionMode('order'); loadCarDetails(props.plateNumber); }
+    else { setSelectionMode('block'); setCarData(null); }
+    setIsConfirmed(props.isConfirmed !== false);
+    setTitle(props.pureTitle || ev.title);
+    const s = typeof ev.start === 'string' ? ev.start : ev.start?.toISOString?.() || '';
+    const e = typeof ev.end === 'string' ? ev.end : ev.end?.toISOString?.() || '';
+    if (s.includes('T')) { setSelectedDate(s.split('T')[0]); setStartTime(s.split('T')[1].substring(0, 5)); }
+    if (e.includes('T')) { setEndTime(e.split('T')[1].substring(0, 5)); }
+    setPlate(props.plateNumber || '');
+    setSelectedEmployee(props.employeeId || '');
+    setSelectedClientName(props.customerName || '');
+    setIssueDescription(props.issueDescription || '');
+    setPlannedWork(props.plannedWork || '');
+    setTempCustomerContact({ phone: props.customerPhone || '', email: props.customerEmail || '', customerName: props.customerName || '', userId: props.userId || null });
+    setIsModalOpen(true);
+  };
+
   const deleteReservation = async () => {
     if (!confirm("Naozaj chcete zmazať tento záznam?")) return;
     const { error } = await supabase.from('calendar_events').delete().eq('id', editingEventId);
@@ -341,7 +363,18 @@ export default function KalendarPage() {
           <h1 className="text-3xl font-black uppercase italic text-white tracking-tighter leading-none"> Harmonogram <span className="text-red-600">Dielne</span> </h1>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex gap-3 items-center">
+          {/* PREPÍNAČ ZOBRAZENIA */}
+          <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1">
+            <button onClick={() => setViewMode('calendar')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'calendar' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>
+              📅 Kalendár
+            </button>
+            <button onClick={() => setViewMode('list')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'list' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>
+              ☰ Zoznam
+            </button>
+          </div>
           <button onClick={() => setIsInboxOpen(true)} className={`relative px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${pendingRequests.length > 0 ? 'bg-red-600 animate-pulse text-white shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'bg-zinc-900 text-zinc-500 border border-zinc-800'}`}>
             🔔 Žiadosti {pendingRequests.length > 0 && <span className="bg-white text-red-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">{pendingRequests.length}</span>}
           </button>
@@ -372,32 +405,145 @@ export default function KalendarPage() {
         </div>
       )}
 
-      <div className="flex-grow relative bg-black mb-6 font-bold">
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[timeGridPlugin, interactionPlugin]}
-          initialView="timeGridWeek"
-          headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek' }}
-          locale="sk"
-          events={events}
-          editable={true}
-          selectable={true}
-          select={handleSelect}
-          eventDrop={handleEventChange}
-          eventResize={handleEventChange}
-          eventClick={handleEventClick}
-          eventDidMount={(info) => {
-            if (info.event.extendedProps.isBlocked) {
-              const color = info.event.extendedProps.employeeColor || '#dc2626';
-              info.el.style.setProperty('border', `2px solid ${color}`, 'important');
-            }
-          }}
-          slotMinTime={`${workStart}:00`}
-          slotMaxTime={`${workEnd}:00`}
-          allDaySlot={false}
-          height="100%"
-        />
-      </div>
+      {viewMode === 'calendar' ? (
+        <div className="flex-grow relative bg-black mb-6 font-bold">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek' }}
+            locale="sk"
+            events={events}
+            editable={true}
+            selectable={true}
+            select={handleSelect}
+            eventDrop={handleEventChange}
+            eventResize={handleEventChange}
+            eventClick={handleEventClick}
+            eventDidMount={(info) => {
+              if (info.event.extendedProps.isBlocked) {
+                const color = info.event.extendedProps.employeeColor || '#dc2626';
+                info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+              }
+            }}
+            slotMinTime={`${workStart}:00`}
+            slotMaxTime={`${workEnd}:00`}
+            allDaySlot={false}
+            height="100%"
+          />
+        </div>
+      ) : (
+        /* RIADKOVÝ ZOZNAM */
+        <div className="flex-grow overflow-y-auto mb-6 space-y-6">
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const sorted = [...events]
+              .filter(ev => !ev.extendedProps.isBlocked)
+              .filter(ev => {
+                const d = typeof ev.start === 'string' ? ev.start : ev.start?.toISOString?.() || '';
+                return d >= todayStr;
+              })
+              .sort((a, b) => {
+                const sa = typeof a.start === 'string' ? a.start : a.start?.toISOString?.() || '';
+                const sb = typeof b.start === 'string' ? b.start : b.start?.toISOString?.() || '';
+                return sa.localeCompare(sb);
+              });
+
+            if (sorted.length === 0) return (
+              <div className="flex flex-col items-center justify-center h-64 text-zinc-700 font-black uppercase tracking-widest text-sm italic">
+                Žiadne nadchádzajúce objednávky
+              </div>
+            );
+
+            const grouped = {};
+            sorted.forEach(ev => {
+              const d = typeof ev.start === 'string' ? ev.start.split('T')[0] : ev.start?.toISOString?.().split('T')[0] || '';
+              if (!grouped[d]) grouped[d] = [];
+              grouped[d].push(ev);
+            });
+
+            return Object.entries(grouped).map(([date, dayEvents]) => {
+              const isToday = date === todayStr;
+              const dateObj = new Date(date + 'T12:00:00');
+              const dayLabel = dateObj.toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+
+              return (
+                <div key={date}>
+                  {/* DEŇ HEADER */}
+                  <div className={`flex items-center gap-4 mb-3 px-1`}>
+                    <div className={`flex items-center gap-3 ${isToday ? 'text-red-500' : 'text-zinc-400'}`}>
+                      {isToday && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse shrink-0" />}
+                      <span className="text-[11px] font-black uppercase tracking-[0.3em]">{dayLabel}</span>
+                      {isToday && <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded-lg tracking-widest">DNES</span>}
+                    </div>
+                    <div className="flex-grow h-px bg-zinc-900" />
+                    <span className="text-[9px] font-black text-zinc-700 uppercase tracking-widest">{dayEvents.length} objednávok</span>
+                  </div>
+
+                  {/* RIADKY */}
+                  <div className="space-y-2">
+                    {dayEvents.map(ev => {
+                      const props = ev.extendedProps;
+                      const isPending = props.isConfirmed === false;
+                      const s = typeof ev.start === 'string' ? ev.start : ev.start?.toISOString?.() || '';
+                      const e = typeof ev.end === 'string' ? ev.end : ev.end?.toISOString?.() || '';
+                      const timeFrom = s.includes('T') ? s.split('T')[1].substring(0, 5) : '';
+                      const timeTo = e.includes('T') ? e.split('T')[1].substring(0, 5) : '';
+                      const emp = employees.find(em => em.id === props.employeeId);
+
+                      return (
+                        <button key={ev.id} onClick={() => openEventFromList(ev)}
+                          className={`w-full text-left flex items-center gap-4 px-5 py-4 rounded-2xl border transition-all group ${isPending ? 'bg-amber-600/10 border-amber-600/30 hover:border-amber-500' : 'bg-zinc-950 border-zinc-900 hover:border-red-600/40'}`}>
+
+                          {/* ČAS */}
+                          <div className="shrink-0 text-center w-16">
+                            <p className="text-sm font-black text-white">{timeFrom}</p>
+                            <p className="text-[10px] text-zinc-600 font-bold">{timeTo}</p>
+                          </div>
+
+                          <div className="w-px h-8 bg-zinc-800 shrink-0" />
+
+                          {/* SPZ */}
+                          <span className="shrink-0 bg-white text-black font-black text-xs tracking-widest px-3 py-1.5 rounded-lg uppercase">
+                            {props.plateNumber}
+                          </span>
+
+                          {/* ZÁKAZNÍK + POPIS */}
+                          <div className="flex-grow min-w-0">
+                            <p className="text-white font-black uppercase italic text-sm truncate group-hover:text-red-400 transition-colors">
+                              {props.customerName || props.pureTitle}
+                            </p>
+                            {props.issueDescription && (
+                              <p className="text-zinc-500 text-[10px] font-bold truncate">{props.issueDescription}</p>
+                            )}
+                          </div>
+
+                          {/* MECHANIK */}
+                          {emp && (
+                            <div className="shrink-0 flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: emp.color || '#dc2626' }} />
+                              <span className="text-[10px] font-black uppercase text-zinc-400 hidden md:block">{emp.name}</span>
+                            </div>
+                          )}
+
+                          {/* STATUS */}
+                          {isPending && (
+                            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-400 bg-amber-600/20 border border-amber-600/30 px-2 py-1 rounded-lg animate-pulse">
+                              ⚠️ Čaká
+                            </span>
+                          )}
+
+                          <span className="shrink-0 text-zinc-700 group-hover:text-red-500 transition-colors">→</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex pl-[260px] font-bold uppercase italic">
