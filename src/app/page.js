@@ -547,7 +547,11 @@ export default function HomePage() {
               <span className="text-4xl mb-4 block">🧾</span>
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Fakturačné údaje</p>
               <p className="text-white font-black text-base">Autoalma s.r.o.</p>
-              <div className="mt-3 space-y-1">
+              <div className="mt-2 mb-4">
+                <p className="text-zinc-400 font-bold text-sm">Tilgnerova 712/3</p>
+                <p className="text-zinc-400 font-bold text-sm">841 04 Bratislava</p>
+              </div>
+              <div className="space-y-1 border-t border-zinc-900 pt-4">
                 <p className="text-zinc-500 font-bold text-sm">IČO: 46044876</p>
                 <p className="text-zinc-500 font-bold text-sm">DIČ: 2023194316</p>
                 <p className="text-zinc-500 font-bold text-sm">IČ DPH: SK2023194316</p>
