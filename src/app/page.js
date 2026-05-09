@@ -425,6 +425,28 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+
+          {/* MAPA */}
+          <div className="mt-10 rounded-[2rem] overflow-hidden border border-zinc-900 relative">
+            <iframe
+              src="https://maps.google.com/maps?q=Svornosti+119,+Bratislava&t=&z=16&ie=UTF8&iwloc=&output=embed"
+              width="100%"
+              height="400"
+              style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg)' }}
+              allowFullScreen=""
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              title="AutoAlma Servis – Svornosti 119, Bratislava"
+            />
+            <a
+              href="https://maps.google.com/?q=Svornosti+119,+Bratislava"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute bottom-4 right-4 bg-black/90 border border-zinc-800 hover:border-red-600/50 text-white font-black uppercase text-[10px] tracking-widest px-4 py-2.5 rounded-xl transition-all"
+            >
+              Otvoriť v Maps →
+            </a>
+          </div>
         </div>
       </section>
 
