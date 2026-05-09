@@ -377,18 +377,26 @@ export default function HomePage() {
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Kontakt</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <a
-              href="tel:0940449449"
-              className="bg-black border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer"
-            >
-              <span className="text-4xl mb-4 block">📞</span>
-              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Telefón</p>
-              <p className="text-white font-black text-xl tracking-widest group-hover:text-red-500 transition-colors">
-                0940 449 449
-              </p>
-              <p className="text-zinc-500 font-bold text-sm mt-2">0908 647 227</p>
-            </a>
 
+            {/* TELEFÓNY */}
+            <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] flex flex-col gap-5">
+              <div>
+                <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-4">📞 Telefón</p>
+                <a href="tel:0940449449" className="flex flex-col group mb-4">
+                  <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0940 449 449</span>
+                  <span className="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mt-1">Christian Flickinger</span>
+                  <span className="text-zinc-700 font-bold text-[9px] uppercase tracking-widest">Prijímací technik</span>
+                </a>
+                <div className="h-px bg-zinc-900 mb-4" />
+                <a href="tel:0908647227" className="flex flex-col group">
+                  <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0908 647 227</span>
+                  <span className="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mt-1">Maroš Jurkovič</span>
+                  <span className="text-zinc-700 font-bold text-[9px] uppercase tracking-widest">Diagnostik</span>
+                </a>
+              </div>
+            </div>
+
+            {/* ADRESA */}
             <a
               href="https://maps.google.com/?q=Svornosti+119,+Bratislava"
               target="_blank"
@@ -397,23 +405,31 @@ export default function HomePage() {
             >
               <span className="text-4xl mb-4 block">📍</span>
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Adresa</p>
-              <p className="text-white font-black text-xl group-hover:text-red-500 transition-colors">
-                Svornosti 119
-              </p>
+              <p className="text-white font-black text-xl group-hover:text-red-500 transition-colors">Svornosti 119</p>
               <p className="text-zinc-500 font-bold text-sm mt-2">821 06 Bratislava</p>
+              <p className="text-zinc-600 font-bold text-[10px] uppercase tracking-widest mt-3">Po–Pi 8:00–17:00</p>
             </a>
 
-            <a
-              href="mailto:autoalma@autoalma.sk"
-              className="bg-black border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer"
-            >
-              <span className="text-4xl mb-4 block">✉️</span>
-              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">E-mail</p>
-              <p className="text-white font-black text-base break-all group-hover:text-red-500 transition-colors">
-                autoalma@autoalma.sk
-              </p>
-            </a>
+            {/* E-MAILY */}
+            <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] flex flex-col gap-4">
+              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest">✉️ E-mail</p>
+              <a href="mailto:autoalma@autoalma.sk" className="group">
+                <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">autoalma@autoalma.sk</p>
+                <p className="text-zinc-600 font-bold text-[9px] uppercase tracking-widest mt-1">Servis / Všeobecné</p>
+              </a>
+              <div className="h-px bg-zinc-900" />
+              <a href="mailto:maros.jurkovic@autoalma.sk" className="group">
+                <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">maros.jurkovic@autoalma.sk</p>
+                <p className="text-zinc-600 font-bold text-[9px] uppercase tracking-widest mt-1">Maroš Jurkovič · Diagnostik</p>
+              </a>
+              <div className="h-px bg-zinc-900" />
+              <a href="mailto:christian.flickinger@autoalma.sk" className="group">
+                <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">christian.flickinger@autoalma.sk</p>
+                <p className="text-zinc-600 font-bold text-[9px] uppercase tracking-widest mt-1">Christian Flickinger · Príjem</p>
+              </a>
+            </div>
 
+            {/* FAKTURAČNÉ ÚDAJE */}
             <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] text-center">
               <span className="text-4xl mb-4 block">🧾</span>
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Fakturačné údaje</p>
