@@ -107,7 +107,7 @@ export default function HomePage() {
       {/* NAVIGÁCIA */}
       <nav className={`fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-b border-blue-500/25 transition-all duration-300 ${scrolled ? 'shadow-lg shadow-blue-500/5' : ''}`}>
         {/* MODRÁ LINKA NAVRCHU */}
-        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
+        <div className="nav-stripe" />
 
         <div className={`flex items-center justify-between px-6 md:px-12 transition-all duration-300 ${scrolled ? 'py-2' : 'py-4'}`}>
 
@@ -164,7 +164,7 @@ export default function HomePage() {
           </div>
         </div>
         {/* MODRÁ LINKA DOLE */}
-        <div className="h-[5px] bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
+        <div className="nav-stripe" />
       </nav>
 
       {/* HERO */}

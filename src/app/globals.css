@@ -24,3 +24,24 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes nav-flow {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+.nav-stripe {
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #ef4444 15%,
+    #3b82f6 35%,
+    #ffffff 50%,
+    #3b82f6 65%,
+    #ef4444 85%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: nav-flow 4s linear infinite;
+}
