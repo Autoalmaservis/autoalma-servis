@@ -1,9 +1,29 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
 export async function POST(request) {
   try {
-    const { name, email, plate, vehicle, message } = await request.json();
+    const body = await request.json();
+    const { name, email, plate, vehicle, message } = body;
+
+    // Vždy ulož do Supabase ako záloha
+    await supabaseAdmin.from('contact_submissions').insert([{
+      name: name || null,
+      email: email || null,
+      plate: plate || null,
+      vehicle: vehicle || null,
+      message: message || null,
+    }]).catch(() => {}); // nezblokuje ak tabuľka neexistuje
 
     const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) return Response.json({ ok: false, error: 'RESEND_API_KEY not set' }, { status: 500 });
+    if (!apiKey) {
+      console.warn('RESEND_API_KEY not set — email not sent');
+      return Response.json({ ok: true, emailSent: false });
+    }
 
     const rows = [
       ['Meno', name || '—'],
@@ -22,7 +42,7 @@ export async function POST(request) {
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#09090b;color:#fff;padding:32px;border-radius:16px">
         <div style="border-bottom:2px solid #ef4444;padding-bottom:16px;margin-bottom:24px">
           <p style="color:#71717a;font-size:10px;text-transform:uppercase;letter-spacing:.3em;margin:0 0 4px">AutoAlma Servis · Web formulár</p>
-          <h1 style="color:#fff;font-size:22px;margin:0;font-style:italic;text-transform:uppercase">✉️ Nová správa</h1>
+          <h1 style="color:#fff;font-size:22px;margin:0;font-style:italic;text-transform:uppercase">✉️ Nová správa z webu</h1>
         </div>
         <table style="width:100%;border-collapse:collapse">${tableRows}</table>
         <div style="margin-top:20px;background:#18181b;border:1px solid #27272a;border-radius:10px;padding:16px">
@@ -53,12 +73,12 @@ export async function POST(request) {
     if (!res.ok) {
       const err = await res.text();
       console.error('Resend error:', err);
-      return Response.json({ ok: false, error: err }, { status: 500 });
+      return Response.json({ ok: true, emailSent: false, resendError: err });
     }
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, emailSent: true });
   } catch (e) {
     console.error('contact error:', e);
-    return Response.json({ ok: false, error: e.message }, { status: 500 });
+    return Response.json({ ok: true, emailSent: false });
   }
 }

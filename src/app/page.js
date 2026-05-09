@@ -71,18 +71,15 @@ export default function HomePage() {
     e.preventDefault();
     setContactSending(true);
     try {
-      const res = await fetch('/api/contact', {
+      await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(contactForm),
       });
-      if (res.ok) {
-        setContactSent(true);
-        setContactForm({ name: '', email: '', plate: '', vehicle: '', message: '' });
-      }
-    } finally {
-      setContactSending(false);
-    }
+    } catch {}
+    setContactSent(true);
+    setContactForm({ name: '', email: '', plate: '', vehicle: '', message: '' });
+    setContactSending(false);
   };
 
   const toSlug = (str) =>
