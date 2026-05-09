@@ -779,7 +779,7 @@ export default function GarazPage() {
                                       {catMap[norm.category_id] || ''}
                                     </span>
                                   )}
-                                  <span className="text-xs font-black uppercase italic text-zinc-300 group-hover:text-white transition-colors truncate">
+                                  <span className="text-xs font-black uppercase italic text-white transition-colors truncate">
                                     {norm.service_name}
                                   </span>
                                 </div>
