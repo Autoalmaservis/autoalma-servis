@@ -11,8 +11,32 @@ export default function DashboardLayout({ children }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [jobUpdateCount, setJobUpdateCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [todoOpen, setTodoOpen] = useState(false);
+  const [todos, setTodos] = useState([]);
+  const [newTodo, setNewTodo] = useState('');
+  const [newPriority, setNewPriority] = useState('green');
   const jobStatusRef = useRef({});
   const pathname = usePathname();
+
+  useEffect(() => {
+    const saved = localStorage.getItem('autoalma_todos');
+    if (saved) try { setTodos(JSON.parse(saved)); } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('autoalma_todos', JSON.stringify(todos));
+  }, [todos]);
+
+  const addTodo = () => {
+    if (!newTodo.trim()) return;
+    setTodos(prev => [...prev, { id: Date.now(), text: newTodo.trim(), priority: newPriority, done: false }]);
+    setNewTodo('');
+  };
+
+  const toggleTodo = (id) => setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const deleteTodo = (id) => setTodos(prev => prev.filter(t => t.id !== id));
+  const undoneTodos = todos.filter(t => !t.done);
+  const priorityIcon = (p) => p === 'red' ? '🔴' : p === 'orange' ? '🟠' : '🟢';
 
   const addStatusNotification = (notif) => {
     setNotifications(prev => [notif, ...prev].slice(0, 8));
@@ -52,19 +76,13 @@ export default function DashboardLayout({ children }) {
 
   useEffect(() => {
     fetchPendingCount();
-    pollJobStatuses(); // Inicializácia — naplní ref bez notifikácií
+    pollJobStatuses();
 
     const channel = supabase
       .channel('dashboard-global-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, () => {
-        fetchPendingCount();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, () => {
-        fetchPendingCount();
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, () => {
-        pollJobStatuses();
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, () => { fetchPendingCount(); })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, () => { fetchPendingCount(); })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, () => { pollJobStatuses(); })
       .subscribe();
 
     const pendingInterval = setInterval(fetchPendingCount, 10000);
@@ -108,7 +126,7 @@ export default function DashboardLayout({ children }) {
   return (
     <div className="flex min-h-screen bg-black font-sans">
 
-      {/* --- MOBILNÁ HORNÁ LIŠTA --- */}
+      {/* MOBILNÁ HORNÁ LIŠTA */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950 border-b border-zinc-800 px-4 flex items-center justify-between z-[100] no-print">
         <h1 className="font-black italic text-red-600 uppercase tracking-tighter text-xl text-white">AutoAlma</h1>
         <button
@@ -119,13 +137,14 @@ export default function DashboardLayout({ children }) {
         </button>
       </div>
 
-      {/* --- SIDEBAR --- */}
+      {/* SIDEBAR */}
       <aside className={`
         ${isCollapsed ? 'w-20' : 'w-64'}
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        bg-zinc-950 border-r border-zinc-800 p-4 flex-shrink-0 flex flex-col fixed md:sticky top-0 h-screen transition-all duration-300 z-[150] no-print overflow-y-auto
+        bg-zinc-950 border-r border-zinc-800 flex-shrink-0 flex flex-col fixed md:sticky top-0 h-screen transition-all duration-300 z-[150] no-print
       `}>
 
+        {/* Collapse button — mimo overflow kontajnera, aby ho neoreezával */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-10 bg-red-600 rounded-full w-6 h-6 hidden md:flex items-center justify-center border-2 border-black hover:scale-110 transition-all z-50 shadow-lg shadow-red-600/40"
@@ -133,95 +152,181 @@ export default function DashboardLayout({ children }) {
           <span className="text-[10px] text-white font-bold">{isCollapsed ? '→' : '←'}</span>
         </button>
 
-        <div className={`mb-10 transition-all ${isCollapsed ? 'text-center' : 'px-2'} ${isMobileOpen ? 'mt-10 md:mt-0' : ''}`}>
-          <Link href="/dashboard">
-            <h1 className={`font-black italic text-red-600 uppercase tracking-tighter transition-all ${isCollapsed ? 'text-xl' : 'text-2xl'}`}>
-              A{isCollapsed ? '' : 'utoAlma'}
-            </h1>
-            {!isCollapsed && <p className="text-[8px] text-zinc-600 font-mono tracking-[0.3em] uppercase ml-1 font-bold">Service OS</p>}
-          </Link>
-        </div>
+        {/* Scrollovateľný vnútorný obsah */}
+        <div className="flex flex-col h-full overflow-y-auto p-4">
 
-        <nav className="space-y-2 flex-grow pr-1">
-          {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Hlavné Menu</p>}
-
-          <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
-          <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
-          <MenuLink
-            href="/kalendar"
-            icon="📅"
-            label="Kalendár / Plán"
-            collapsed={isCollapsed}
-            active={pathname === '/kalendar'}
-            badge={pendingCount}
-          />
-          <MenuLink
-            href="/zakazky"
-            icon="🛠️"
-            label="Zoznam Zákaziek"
-            collapsed={isCollapsed}
-            active={pathname.startsWith('/zakazky')}
-            badge={jobUpdateCount}
-          />
-
-          {/* --- NOTIFIKÁCIE STAVOV ZÁKAZIEK --- */}
-          {notifications.length > 0 && !isCollapsed && (
-            <div className="mx-1 space-y-1.5 pb-1">
-              {notifications.slice(0, 5).map((n, i) => (
-                <Link
-                  key={i}
-                  href={`/zakazky/${n.id}`}
-                  className="block bg-black border border-zinc-800 hover:border-red-600/50 p-2.5 rounded-xl transition-all group"
-                >
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[9px] font-black uppercase text-white leading-none truncate">{n.customerName}</span>
-                    <span className="text-[8px] font-black text-red-500 shrink-0 ml-1">{n.plateNumber}</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-[8px] font-black uppercase">
-                    <span className={statusColor(n.fromStatus)}>{n.fromStatus}</span>
-                    <span className="text-zinc-700">→</span>
-                    <span className={statusColor(n.toStatus)}>{n.toStatus}</span>
-                  </div>
-                </Link>
-              ))}
-              <button
-                onClick={() => { setNotifications([]); setJobUpdateCount(0); }}
-                className="w-full text-[8px] font-black uppercase text-zinc-700 hover:text-zinc-400 transition-colors py-1 tracking-widest"
-              >
-                Vymazať notifikácie ✕
-              </button>
-            </div>
-          )}
-
-          <MenuLink href="/CP" icon="📄" label="Cenové ponuky" collapsed={isCollapsed} active={pathname.startsWith('/ponuky')} />
-          <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
-          <MenuLink href="/statistiky" icon="📊" label="Štatistiky" collapsed={isCollapsed} active={pathname === '/statistiky'} />
-
-          <div className="pt-4 mt-4 border-t border-zinc-900">
-            {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
-            <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
-            <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
-            <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
+          <div className={`mb-10 transition-all ${isCollapsed ? 'text-center' : 'px-2'} ${isMobileOpen ? 'mt-10 md:mt-0' : ''}`}>
+            <Link href="/dashboard">
+              <h1 className={`font-black italic text-red-600 uppercase tracking-tighter transition-all ${isCollapsed ? 'text-xl' : 'text-2xl'}`}>
+                A{isCollapsed ? '' : 'utoAlma'}
+              </h1>
+              {!isCollapsed && <p className="text-[8px] text-zinc-600 font-mono tracking-[0.3em] uppercase ml-1 font-bold">Service OS</p>}
+            </Link>
           </div>
-        </nav>
 
-        <div className={`mt-auto pt-4 border-t border-zinc-900 transition-all ${isCollapsed ? 'items-center' : ''}`}>
-          <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
-            {!isCollapsed && (
-              <div className="overflow-hidden font-bold">
-                <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
-                <div className="flex items-center gap-1 mt-1 font-bold">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                  <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
-                </div>
+          <nav className="space-y-2 flex-grow pr-1">
+            {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Hlavné Menu</p>}
+
+            <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
+            <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
+            <MenuLink
+              href="/kalendar"
+              icon="📅"
+              label="Kalendár / Plán"
+              collapsed={isCollapsed}
+              active={pathname === '/kalendar'}
+              badge={pendingCount}
+            />
+            <MenuLink
+              href="/zakazky"
+              icon="🛠️"
+              label="Zoznam Zákaziek"
+              collapsed={isCollapsed}
+              active={pathname.startsWith('/zakazky')}
+              badge={jobUpdateCount}
+            />
+
+            {notifications.length > 0 && !isCollapsed && (
+              <div className="mx-1 space-y-1.5 pb-1">
+                {notifications.slice(0, 5).map((n, i) => (
+                  <Link
+                    key={i}
+                    href={`/zakazky/${n.id}`}
+                    className="block bg-black border border-zinc-800 hover:border-red-600/50 p-2.5 rounded-xl transition-all group"
+                  >
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] font-black uppercase text-white leading-none truncate">{n.customerName}</span>
+                      <span className="text-[8px] font-black text-red-500 shrink-0 ml-1">{n.plateNumber}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[8px] font-black uppercase">
+                      <span className={statusColor(n.fromStatus)}>{n.fromStatus}</span>
+                      <span className="text-zinc-700">→</span>
+                      <span className={statusColor(n.toStatus)}>{n.toStatus}</span>
+                    </div>
+                  </Link>
+                ))}
+                <button
+                  onClick={() => { setNotifications([]); setJobUpdateCount(0); }}
+                  className="w-full text-[8px] font-black uppercase text-zinc-700 hover:text-zinc-400 transition-colors py-1 tracking-widest"
+                >
+                  Vymazať notifikácie ✕
+                </button>
               </div>
             )}
+
+            <MenuLink href="/CP" icon="📄" label="Cenové ponuky" collapsed={isCollapsed} active={pathname.startsWith('/ponuky')} />
+            <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
+            <MenuLink href="/statistiky" icon="📊" label="Štatistiky" collapsed={isCollapsed} active={pathname === '/statistiky'} />
+
+            <div className="pt-4 mt-4 border-t border-zinc-900">
+              {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
+              <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
+              <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
+              <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
+            </div>
+
+            {/* TO-DO ZOZNAM */}
+            <div className="pt-3 mt-3 border-t border-zinc-900">
+              <button
+                onClick={() => setTodoOpen(p => !p)}
+                className={`relative w-full flex items-center justify-between p-3 rounded-xl transition-all group ${todoOpen ? 'bg-zinc-900/80' : 'hover:bg-zinc-900'} ${isCollapsed ? 'px-0 justify-center' : ''}`}
+              >
+                <div className={`flex items-center gap-4 ${isCollapsed ? 'justify-center' : ''}`}>
+                  <span className="text-xl group-hover:scale-110 transition-transform shrink-0">📋</span>
+                  {!isCollapsed && <span className="font-bold text-sm text-zinc-400 group-hover:text-white tracking-tight">To-Do zoznam</span>}
+                </div>
+                {!isCollapsed && (
+                  <div className="flex items-center gap-1.5">
+                    {undoneTodos.length > 0 && (
+                      <span className="text-[10px] font-black bg-zinc-700 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{undoneTodos.length}</span>
+                    )}
+                    <span className="text-zinc-600 text-[10px] font-black">{todoOpen ? '▲' : '▼'}</span>
+                  </div>
+                )}
+                {isCollapsed && undoneTodos.length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+                )}
+              </button>
+
+              {todoOpen && !isCollapsed && (
+                <div className="mt-1 mx-1 space-y-0.5 max-h-60 overflow-y-auto">
+                  {todos.length === 0 && (
+                    <p className="text-center text-zinc-700 text-[10px] font-black uppercase tracking-widest py-3 italic">Žiadne úlohy</p>
+                  )}
+                  {/* Nedokončené */}
+                  {todos.filter(t => !t.done).map(todo => (
+                    <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-900/50 group transition-all">
+                      <button onClick={() => toggleTodo(todo.id)} className="shrink-0 mt-0.5 leading-none">{priorityIcon(todo.priority)}</button>
+                      <span
+                        className="flex-1 text-xs font-bold text-white leading-tight cursor-pointer select-none"
+                        onClick={() => toggleTodo(todo.id)}
+                      >{todo.text}</span>
+                      <button onClick={() => deleteTodo(todo.id)} className="shrink-0 text-zinc-800 hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100 mt-0.5">✕</button>
+                    </div>
+                  ))}
+                  {/* Dokončené */}
+                  {todos.filter(t => t.done).map(todo => (
+                    <div key={todo.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg opacity-35 group transition-all hover:opacity-50">
+                      <button onClick={() => toggleTodo(todo.id)} className="shrink-0 mt-0.5 leading-none">{priorityIcon(todo.priority)}</button>
+                      <span
+                        className="flex-1 text-xs font-bold text-zinc-600 leading-tight line-through cursor-pointer select-none"
+                        onClick={() => toggleTodo(todo.id)}
+                      >{todo.text}</span>
+                      <button onClick={() => deleteTodo(todo.id)} className="shrink-0 text-zinc-800 hover:text-red-500 transition-colors text-xs opacity-0 group-hover:opacity-100 mt-0.5">✕</button>
+                    </div>
+                  ))}
+
+                  {/* Pridať novú úlohu */}
+                  <div className="pt-2 pb-1 space-y-1.5 border-t border-zinc-900 mt-1">
+                    <div className="flex gap-1 pt-1">
+                      {['green', 'orange', 'red'].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setNewPriority(p)}
+                          className={`flex-1 py-1 rounded-lg text-sm transition-all border ${newPriority === p ? 'border-zinc-600 bg-zinc-800 scale-105' : 'border-zinc-900 bg-zinc-950 opacity-40 hover:opacity-70'}`}
+                        >
+                          {priorityIcon(p)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1">
+                      <input
+                        value={newTodo}
+                        onChange={e => setNewTodo(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addTodo()}
+                        placeholder="Nová úloha..."
+                        className="flex-1 bg-black border border-zinc-800 rounded-lg px-2 py-1.5 text-xs text-white placeholder-zinc-700 focus:outline-none focus:border-zinc-600 font-bold"
+                      />
+                      <button
+                        onClick={addTodo}
+                        className="bg-zinc-800 hover:bg-zinc-700 text-white px-2.5 py-1.5 rounded-lg text-sm font-black transition-all"
+                      >+</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </nav>
+
+          <div className={`mt-auto pt-4 border-t border-zinc-900 transition-all ${isCollapsed ? 'items-center' : ''}`}>
+            <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
+              <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg font-bold">M</div>
+              {!isCollapsed && (
+                <div className="overflow-hidden font-bold">
+                  <p className="text-xs font-black uppercase tracking-tight text-white leading-none">Maros</p>
+                  <div className="flex items-center gap-1 mt-1 font-bold">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                    <p className="text-[9px] text-zinc-500 font-bold uppercase">Admin</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
         </div>
       </aside>
 
-      {/* --- POZADIE PRE MOBIL --- */}
+      {/* POZADIE PRE MOBIL */}
       {isMobileOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[140] md:hidden"
@@ -229,7 +334,7 @@ export default function DashboardLayout({ children }) {
         />
       )}
 
-      {/* --- HLAVNÝ OBSAH --- */}
+      {/* HLAVNÝ OBSAH */}
       <main className={`flex-grow overflow-y-auto bg-black transition-all duration-300 print:!w-full print:!max-w-none print:!flex-none print:!overflow-visible ${isMobileOpen ? 'blur-sm md:blur-none' : ''}`}>
         <div className="w-full h-full p-0 mt-16 md:mt-0 print:mt-0">
           {children}
@@ -238,7 +343,6 @@ export default function DashboardLayout({ children }) {
 
       <style jsx global>{`
         @media print {
-          /* Skryje sidebar a flex wrapper tak, aby main zaujal plnú šírku */
           aside { display: none !important; }
           .flex.min-h-screen { display: block !important; }
           main { width: 100% !important; max-width: none !important; overflow: visible !important; }

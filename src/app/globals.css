@@ -31,7 +31,7 @@ body {
 }
 
 .nav-stripe {
-  height: 3px;
+  height: 2px;
   background: linear-gradient(
     90deg,
     transparent 0%,
