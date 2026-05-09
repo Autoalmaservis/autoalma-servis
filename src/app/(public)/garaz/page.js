@@ -723,13 +723,13 @@ export default function GarazPage() {
                     <div className="flex flex-wrap gap-2">
                       <button type="button"
                         onClick={() => setSelectedCategory('')}
-                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === '' ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}>
+                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === '' ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
                         Všetky
                       </button>
                       {categories.map(cat => (
                         <button key={cat.id} type="button"
                           onClick={() => setSelectedCategory(cat.id === selectedCategory ? '' : cat.id)}
-                          className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === cat.id ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}>
+                          className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === cat.id ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
                           {cat.name}
                         </button>
                       ))}
@@ -770,7 +770,7 @@ export default function GarazPage() {
                               >
                                 <div className="flex items-center gap-3 min-w-0">
                                   {!selectedCategory && (
-                                    <span className="text-[8px] font-black uppercase tracking-wider text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg shrink-0">
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-white bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg shrink-0">
                                       {catMap[norm.category_id] || ''}
                                     </span>
                                   )}
@@ -778,7 +778,7 @@ export default function GarazPage() {
                                     {norm.service_name}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-zinc-600 shrink-0 not-italic font-bold">~{norm.duration_minutes} min</span>
+                                <span className="text-[10px] text-white shrink-0 not-italic font-bold">~{norm.duration_minutes} min</span>
                               </button>
                             ))}
                           </div>
@@ -787,15 +787,15 @@ export default function GarazPage() {
 
                     {/* VYBRANÉ ÚKONY (KOŠÍK) */}
                     <div className="space-y-2">
-                      <p className="text-[9px] text-zinc-500 uppercase font-black ml-1">Vybrané úkony:</p>
+                      <p className="text-[9px] text-white uppercase font-black ml-1">Vybrané úkony:</p>
                       {selectedNorms.length === 0 ? (
                         <div className="py-5 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
                       ) : (
                         selectedNorms.map(sn => (
                           <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-3 rounded-xl animate-in fade-in zoom-in duration-200">
-                            <span className="text-xs font-black uppercase text-blue-400 italic truncate mr-3">{sn.service_name}</span>
+                            <span className="text-xs font-black uppercase text-white italic truncate mr-3">{sn.service_name}</span>
                             <div className="flex items-center gap-3 shrink-0">
-                              <span className="text-[10px] font-black text-zinc-500 not-italic">~{sn.duration_minutes} min</span>
+                              <span className="text-[10px] font-black text-white not-italic">~{sn.duration_minutes} min</span>
                               <button type="button" onClick={() => removeNormFromSelection(sn.id)} className="text-red-500 hover:text-white font-bold not-italic">✕</button>
                             </div>
                           </div>
@@ -806,7 +806,7 @@ export default function GarazPage() {
 
                   {/* VLASTNÉ ÚKONY */}
                   <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
-                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest italic ml-1">2. Vlastné úkony / Iné závady</p>
+                    <p className="text-[10px] font-black text-white uppercase tracking-widest italic ml-1">2. Vlastné úkony / Iné závady</p>
 
                     {/* Zoznam pridaných vlastných úkonov */}
                     {customItems.length > 0 && (
@@ -815,7 +815,7 @@ export default function GarazPage() {
                           <div key={item.id} className="flex justify-between items-center bg-zinc-800/60 border border-zinc-700 p-3 rounded-xl">
                             <div>
                               <span className="text-xs font-black uppercase text-white italic">{item.description}</span>
-                              <span className="text-[9px] text-zinc-500 ml-2 not-italic font-bold">
+                              <span className="text-[9px] text-white ml-2 not-italic font-bold">
                                 {item.duration === 'technik' ? '— čas na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`}
                               </span>
                             </div>
@@ -837,7 +837,7 @@ export default function GarazPage() {
 
                     {/* Odhad času pre tento úkon */}
                     <div>
-                      <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-2 ml-1">Odhadovaný čas tohto úkonu</p>
+                      <p className="text-[8px] font-black text-white uppercase tracking-widest mb-2 ml-1">Odhadovaný čas tohto úkonu</p>
                       <div className="flex flex-wrap gap-2">
                         {[
                           { label: 'Na technika', value: 'technik' },
@@ -848,7 +848,7 @@ export default function GarazPage() {
                           { label: '4+ hod', value: 240 },
                         ].map(opt => (
                           <button key={opt.value} type="button" onClick={() => setCurrentItemDuration(opt.value)}
-                            className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${currentItemDuration === opt.value ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'}`}>
+                            className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${currentItemDuration === opt.value ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
                             {opt.label}
                           </button>
                         ))}
@@ -859,7 +859,7 @@ export default function GarazPage() {
                       type="button"
                       onClick={addCustomItem}
                       disabled={!currentCustomIssue.trim()}
-                      className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-white transition-all disabled:opacity-30 not-italic"
+                      className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-white hover:border-red-600 transition-all disabled:opacity-30 not-italic"
                     >
                       + Pridať úkon
                     </button>
@@ -875,10 +875,10 @@ export default function GarazPage() {
 
                       {/* Legenda */}
                       <div className="flex flex-wrap gap-3 mb-4 ml-1">
-                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
-                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Čiastočne</span>
-                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block"/> Takmer plné</span>
-                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Čiastočne</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block"/> Takmer plné</span>
+                        <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
                       </div>
 
                       {/* Navigácia mesiaca */}
@@ -893,7 +893,7 @@ export default function GarazPage() {
                       {/* Hlavičky dní */}
                       <div className="grid grid-cols-7 gap-1 mb-1">
                         {['Po','Ut','St','Št','Pi','So','Ne'].map(d => (
-                          <div key={d} className="text-center text-[8px] text-zinc-700 font-black">{d}</div>
+                          <div key={d} className="text-center text-[8px] text-white font-black">{d}</div>
                         ))}
                       </div>
 
@@ -952,13 +952,13 @@ export default function GarazPage() {
                     {/* VÝBER ČASU + HODINOVÝ PREHĽAD — zobrazí sa po výbere dňa */}
                     {selectedDay && (
                       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
-                        <p className="text-[9px] text-zinc-500 uppercase ml-1 font-black tracking-widest">
+                        <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest">
                           {new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
                         </p>
 
                         {/* HODINOVÝ PREHĽAD DŇA */}
                         <div className="bg-black/40 rounded-2xl border border-zinc-800 p-4 space-y-1.5">
-                          <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
+                          <p className="text-[8px] font-black text-white uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
                           {(() => {
                             const startH = parseInt(workHours.start);
                             const endH = parseInt(workHours.end);
@@ -979,11 +979,11 @@ export default function GarazPage() {
                               const barColor = pct === 0 ? 'bg-green-600/50' : pct < 0.5 ? 'bg-green-600/30' : pct < 1 ? 'bg-amber-500/50' : 'bg-red-600/40';
                               rows.push(
                                 <div key={h} className="flex items-center gap-2">
-                                  <span className="text-[8px] font-black text-zinc-600 w-9 shrink-0 not-italic">{String(h).padStart(2,'0')}:00</span>
+                                  <span className="text-[8px] font-black text-white w-9 shrink-0 not-italic">{String(h).padStart(2,'0')}:00</span>
                                   <div className="flex-grow h-3 bg-zinc-900 rounded-full overflow-hidden">
                                     <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(5, pct * 100)}%` }} />
                                   </div>
-                                  <span className={`text-[8px] font-black w-10 text-right shrink-0 not-italic ${pct === 1 ? 'text-red-500' : 'text-zinc-500'}`}>
+                                  <span className={`text-[8px] font-black w-10 text-right shrink-0 not-italic ${pct === 1 ? 'text-red-500' : 'text-white'}`}>
                                     {pct === 1 ? 'PLNÉ' : `${free}/${total}`}
                                   </span>
                                 </div>
@@ -995,11 +995,11 @@ export default function GarazPage() {
 
                         {/* VÝBER ČASU */}
                         <div>
-                          <p className="text-[9px] text-zinc-500 uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
+                          <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
                           <div className="grid grid-cols-4 gap-2">
                             {timeSlots.map((slot) => (
                               <button key={slot} type="button" onClick={() => setSelectedSlot(slot)}
-                                className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'}`}>
+                                className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
                                 {slot}
                               </button>
                             ))}
@@ -1022,7 +1022,7 @@ export default function GarazPage() {
                           {totalMin}{hasTechnik && <span className="text-2xl text-red-400">+</span>} <span className="text-xl">min</span>
                         </p>
                         {(customMin > 0 || hasTechnik) && (
-                          <div className="mt-3 text-[9px] font-black text-zinc-500 uppercase tracking-widest space-y-0.5 not-italic">
+                          <div className="mt-3 text-[9px] font-black text-white uppercase tracking-widest space-y-0.5 not-italic">
                             {normMin > 0 && <p>Servisné normy: {normMin} min</p>}
                             {customMin > 0 && <p>Vlastné úkony: {customMin} min</p>}
                             {hasTechnik && <p className="text-amber-500">+ čas na technikovi</p>}
