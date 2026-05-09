@@ -42,6 +42,9 @@ export default function HomePage() {
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [lightbox, setLightbox] = useState(null);
   const [cennik, setCennik] = useState([]);
+  const [contactForm, setContactForm] = useState({ name: '', email: '', plate: '', vehicle: '', message: '' });
+  const [contactSending, setContactSending] = useState(false);
+  const [contactSent, setContactSent] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -63,6 +66,24 @@ export default function HomePage() {
       .single()
       .then(({ data }) => { if (data?.value) setCennik(JSON.parse(data.value)); });
   }, []);
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    setContactSending(true);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactForm),
+      });
+      if (res.ok) {
+        setContactSent(true);
+        setContactForm({ name: '', email: '', plate: '', vehicle: '', message: '' });
+      }
+    } finally {
+      setContactSending(false);
+    }
+  };
 
   const toSlug = (str) =>
     str.toLowerCase()
@@ -119,6 +140,7 @@ export default function HomePage() {
                 { href: '#sluzby', label: 'Naše služby' },
                 { href: '#cennik', label: 'Cenník' },
                 { href: '#galeria', label: 'Galéria' },
+                { href: '#napiste-nam', label: 'Napíšte nám' },
               ].map(link => (
                 <a
                   key={link.href}
@@ -366,8 +388,102 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* KONTAKTNÝ FORMULÁR */}
+      <section id="napiste-nam" className="py-24 px-6 border-t border-zinc-900 bg-black">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Rýchly kontakt</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Napíšte nám</h2>
+            <p className="text-zinc-500 font-bold text-sm mt-4">Odpovieme do 24 hodín v pracovné dni.</p>
+          </div>
+
+          {contactSent ? (
+            <div className="bg-zinc-950 border border-green-900/50 rounded-[2rem] p-12 text-center">
+              <div className="text-5xl mb-4">✅</div>
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-2">Správa odoslaná</h3>
+              <p className="text-zinc-500 font-bold text-sm mb-6">Ozveme sa vám čo najskôr.</p>
+              <button
+                onClick={() => setContactSent(false)}
+                className="text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:text-white transition-all border border-zinc-800 hover:border-zinc-600 px-5 py-2 rounded-xl"
+              >
+                Odoslať ďalšiu správu
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleContactSubmit} className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-8 md:p-10 space-y-5">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Meno *</label>
+                  <input
+                    required
+                    value={contactForm.name}
+                    onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))}
+                    placeholder="Ján Novák"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">E-mail *</label>
+                  <input
+                    required
+                    type="email"
+                    value={contactForm.email}
+                    onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder="jan@email.sk"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Vozidlo</label>
+                  <input
+                    value={contactForm.vehicle}
+                    onChange={e => setContactForm(p => ({ ...p, vehicle: e.target.value }))}
+                    placeholder="napr. Škoda Octavia 2.0 TDI"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">ŠPZ</label>
+                  <input
+                    value={contactForm.plate}
+                    onChange={e => setContactForm(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
+                    placeholder="BA123AB"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors tracking-widest"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Správa *</label>
+                <textarea
+                  required
+                  rows={5}
+                  value={contactForm.message}
+                  onChange={e => setContactForm(p => ({ ...p, message: e.target.value }))}
+                  placeholder="Opíšte problém s vozidlom alebo čo potrebujete..."
+                  className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4 pt-2">
+                <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest">* povinné polia</p>
+                <button
+                  type="submit"
+                  disabled={contactSending}
+                  className="bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-xl shadow-red-600/20 hover:scale-105 hover:shadow-red-600/30"
+                >
+                  {contactSending ? 'Odosielam...' : 'Odoslať správu'}
+                </button>
+              </div>
+
+            </form>
+          )}
+        </div>
+      </section>
+
       {/* KONTAKT */}
-      <section className="py-24 px-6 bg-zinc-950 border-t border-zinc-900">
+      <section id="kontakt" className="py-24 px-6 bg-zinc-950 border-t border-zinc-900">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Kde nás nájdete</p>
