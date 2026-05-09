@@ -384,6 +384,23 @@ export default function GarazPage() {
 
       if (error) throw error;
 
+      // Notifikačný email na autoalma@autoalma.sk
+      fetch('/api/notify-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: userProfile?.full_name || 'Zákazník z garáže',
+          plateNumber: orderingVehicle.license_plate,
+          carModel: orderingVehicle.brand_model || '',
+          date: selectedDay,
+          time: selectedSlot,
+          services: finalDescription,
+          phone: userProfile?.phone || null,
+          email: userProfile?.email || user.email,
+          source: 'Klientska garáž',
+        }),
+      }).catch(() => {});
+
       await supabase.from('notifications').insert([{
         user_id: user.id,
         title: '📅 Žiadosť o termín odoslaná',

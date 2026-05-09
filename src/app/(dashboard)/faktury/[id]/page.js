@@ -38,9 +38,9 @@ export default function DetailFakturyPage() {
     if (data) {
       setMyCompany({
         name: data.find(s => s.id === 'company_name')?.value || 'AutoAlma Servis',
-        address: data.find(s => s.id === 'company_address')?.value || '',
-        city: data.find(s => s.id === 'company_city')?.value || '',
-        zip: data.find(s => s.id === 'company_zip')?.value || '',
+        address: data.find(s => s.id === 'company_address')?.value || 'Tilgnerova 712/3',
+        city: data.find(s => s.id === 'company_city')?.value || 'Bratislava',
+        zip: data.find(s => s.id === 'company_zip')?.value || '841 04',
         ico: data.find(s => s.id === 'company_ico')?.value || '',
         dic: data.find(s => s.id === 'company_dic')?.value || '',
         ic_dph: data.find(s => s.id === 'company_ic_dph')?.value || '',

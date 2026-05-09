@@ -189,7 +189,7 @@ export default function DashboardLayout({ children }) {
             </div>
           </nav>
 
-          <div className={`mt-auto pt-4 border-t border-zinc-900 ${isCollapsed ? 'items-center' : ''}`}>
+          <div className={`mt-auto pt-4 border-t border-zinc-900 space-y-2 ${isCollapsed ? 'items-center' : ''}`}>
             <div className={`flex items-center gap-3 p-2 bg-zinc-900/40 rounded-xl border border-zinc-800/50 ${isCollapsed ? 'justify-center' : ''}`}>
               <div className="w-8 h-8 bg-gradient-to-br from-red-600 to-red-900 rounded-lg flex items-center justify-center font-black text-white shrink-0 text-sm shadow-lg">M</div>
               {!isCollapsed && (
@@ -202,6 +202,13 @@ export default function DashboardLayout({ children }) {
                 </div>
               )}
             </div>
+            <button
+              onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
+              className={`w-full flex items-center gap-4 p-3 rounded-xl text-zinc-600 hover:text-white hover:bg-zinc-900 transition-all group ${isCollapsed ? 'px-0 justify-center' : ''}`}
+            >
+              <span className="text-xl group-hover:scale-110 transition-transform shrink-0">🚪</span>
+              {!isCollapsed && <span className="font-bold text-sm tracking-tight">Odhlásiť sa</span>}
+            </button>
           </div>
 
         </div>

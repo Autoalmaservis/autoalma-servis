@@ -82,6 +82,20 @@ export default function VerejnaObjednavkaPage() {
     }]);
 
     if (!error) {
+      fetch('/api/notify-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plateNumber: formData.plate.toUpperCase(),
+          date: formData.date,
+          time: formData.start,
+          services: formData.description,
+          phone: formData.phone,
+          email: formData.email,
+          source: 'Online objednávka',
+        }),
+      }).catch(() => {});
+
       alert("Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.");
       setIsModalOpen(false);
       fetchOccupiedSlots();
