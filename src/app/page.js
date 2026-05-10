@@ -417,7 +417,7 @@ export default function HomePage() {
                     value={contactForm.name}
                     onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))}
                     placeholder="Ján Novák"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
                 <div className="space-y-2">
@@ -428,7 +428,7 @@ export default function HomePage() {
                     value={contactForm.email}
                     onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))}
                     placeholder="jan@email.sk"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
                 <div className="space-y-2">
@@ -439,7 +439,7 @@ export default function HomePage() {
                     value={contactForm.phone}
                     onChange={e => setContactForm(p => ({ ...p, phone: e.target.value }))}
                     placeholder="+421 900 000 000"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
                 <div className="space-y-2">
@@ -448,7 +448,7 @@ export default function HomePage() {
                     value={contactForm.vehicle}
                     onChange={e => setContactForm(p => ({ ...p, vehicle: e.target.value }))}
                     placeholder="napr. Škoda Octavia 2.0 TDI"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
                 <div className="space-y-2">
@@ -457,7 +457,7 @@ export default function HomePage() {
                     value={contactForm.plate}
                     onChange={e => setContactForm(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
                     placeholder="BA123AB"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors tracking-widest"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors tracking-widest"
                   />
                 </div>
                 <div className="space-y-2">
@@ -469,7 +469,7 @@ export default function HomePage() {
                     value={contactForm.year}
                     onChange={e => setContactForm(p => ({ ...p, year: e.target.value }))}
                     placeholder="napr. 2018"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -482,7 +482,7 @@ export default function HomePage() {
                   value={contactForm.message}
                   onChange={e => setContactForm(p => ({ ...p, message: e.target.value }))}
                   placeholder="Opíšte problém s vozidlom alebo čo potrebujete..."
-                  className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors resize-none"
+                  className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors resize-none"
                 />
               </div>
 
