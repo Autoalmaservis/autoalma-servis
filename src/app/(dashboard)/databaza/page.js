@@ -28,6 +28,7 @@ export default function DatabazaPage() {
   const [importLines, setImportLines] = useState([emptyImportLine()]);
   const [importHeader, setImportHeader] = useState({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
   const [importSaving, setImportSaving] = useState(false);
+  const [globalMargin, setGlobalMargin] = useState(30);
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfError, setPdfError] = useState('');
   const pdfInputRef = useRef(null);
@@ -178,7 +179,24 @@ export default function DatabazaPage() {
   const addImportLine = () => setImportLines(l => [...l, emptyImportLine()]);
   const removeImportLine = (i) => setImportLines(l => l.filter((_, idx) => idx !== i));
   const updateImportLine = (i, field, value) =>
-    setImportLines(l => l.map((line, idx) => idx === i ? { ...line, [field]: value } : line));
+    setImportLines(l => l.map((line, idx) => {
+      if (idx !== i) return line;
+      const updated = { ...line, [field]: value };
+      // auto-calc sale_price when purchase_price changes and sale_price is empty
+      if (field === 'purchase_price' && !line.sale_price && value) {
+        updated.sale_price = (parseFloat(value) * (1 + globalMargin / 100)).toFixed(2);
+      }
+      return updated;
+    }));
+
+  const applyMarginToAll = () => {
+    setImportLines(l => l.map(line => ({
+      ...line,
+      sale_price: line.purchase_price
+        ? (parseFloat(line.purchase_price) * (1 + globalMargin / 100)).toFixed(2)
+        : line.sale_price,
+    })));
+  };
 
   const handleImportSelect = (i, existing_id) => {
     const w = warehouseItems.find(x => x.id === existing_id);
@@ -466,7 +484,22 @@ export default function DatabazaPage() {
 
               {/* RIADKY */}
               <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Položky</p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Položky</p>
+                  <div className="flex items-center gap-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl px-4 py-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Marža pre pult cenu</span>
+                    <div className="relative">
+                      <input type="number" min="0" max="500" step="1" value={globalMargin}
+                        onChange={e => setGlobalMargin(parseFloat(e.target.value) || 0)}
+                        className="w-16 bg-black border border-zinc-700 focus:border-red-600 p-2 pr-5 rounded-xl text-white font-black text-xs outline-none text-center transition-all" />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 text-[10px] font-black">%</span>
+                    </div>
+                    <button type="button" onClick={applyMarginToAll}
+                      className="bg-red-600 hover:bg-red-500 text-white font-black px-4 py-2 rounded-xl uppercase text-[9px] tracking-widest transition-all whitespace-nowrap">
+                      Aplikovať na všetky
+                    </button>
+                  </div>
+                </div>
 
                 <div className="hidden md:grid grid-cols-[180px_130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 px-2">
                   {['Existujúci diel', 'Číslo dielu', 'Názov (nový diel)', 'Množ.', 'Nákup bez DPH', 'S DPH', 'Pult bez DPH', 'Jedn.', 'Dodací list', ''].map(h => (
@@ -514,9 +547,8 @@ export default function DatabazaPage() {
                     <div className="relative">
                       <input type="number" min="0" step="0.01" value={line.sale_price}
                         onChange={e => updateImportLine(i, 'sale_price', e.target.value)}
-                        disabled={!!line.existing_id}
                         placeholder="—"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
+                        className="w-full bg-zinc-900 border border-red-600/30 focus:border-red-600 p-2.5 pr-5 rounded-xl text-red-400 font-black text-xs outline-none transition-all" />
                       <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
                     </div>
                     <select value={line.unit} onChange={e => updateImportLine(i, 'unit', e.target.value)}
