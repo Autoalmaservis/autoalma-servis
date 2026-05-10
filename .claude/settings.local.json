@@ -6,6 +6,9 @@
       "Bash(curl -s --max-time 10 \"http://localhost:3000/api/seed-normy\")",
       "Bash(node seed_normy.mjs)",
       "Bash(node --input-type=module)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\maros\\.claude\\projects\\c--Users-maros-Desktop-Autoalma-servis-WEB-prijimaci\\memory"
     ]
   }
 }

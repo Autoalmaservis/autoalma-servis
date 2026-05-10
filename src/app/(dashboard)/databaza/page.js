@@ -1,19 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
 const VAT = 1.23;
 
 export default function DatabazaPage() {
-  const [activeTab, setActiveTab] = useState('materiál');
-
-  // --- MATERIÁL ---
-  const [items, setItems] = useState([]);
-  const [itemsLoading, setItemsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [currentItem, setCurrentItem] = useState({ name: '', unit_price: 0, unit: 'ks', type: 'materiál' });
+  const [activeTab, setActiveTab] = useState('sklad');
 
   // --- PRÁCA (SERVICE NORMS) ---
   const [categories, setCategories] = useState([]);
@@ -36,51 +28,22 @@ export default function DatabazaPage() {
   const [importLines, setImportLines] = useState([emptyImportLine()]);
   const [importHeader, setImportHeader] = useState({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
   const [importSaving, setImportSaving] = useState(false);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const [pdfError, setPdfError] = useState('');
+  const pdfInputRef = useRef(null);
 
   function emptyImportLine() {
     return { existing_id: '', name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks' };
   }
 
   useEffect(() => {
-    fetchCatalog();
     fetchNorms();
+    fetchWarehouse();
   }, []);
 
-  // ---- MATERIÁL FUNKCIE ----
-  const fetchCatalog = async () => {
-    setItemsLoading(true);
-    const { data } = await supabase.from('inventory_catalog').select('*').order('name');
-    if (data) setItems(data);
-    setItemsLoading(false);
-  };
-
-  const handleSaveItem = async (e) => {
-    e.preventDefault();
-    const payload = { name: currentItem.name, unit_price: parseFloat(currentItem.unit_price), unit: currentItem.unit, type: currentItem.type };
-    if (currentItem.id) {
-      await supabase.from('inventory_catalog').update(payload).eq('id', currentItem.id);
-    } else {
-      await supabase.from('inventory_catalog').insert([payload]);
-    }
-    setIsEditModalOpen(false);
-    setIsAddModalOpen(false);
-    fetchCatalog();
-  };
-
-  const deleteItem = async (id) => {
-    if (confirm('Naozaj vymazať túto položku?')) {
-      await supabase.from('inventory_catalog').delete().eq('id', id);
-      fetchCatalog();
-    }
-  };
-
-  const openEdit = (item) => { setCurrentItem(item); setIsEditModalOpen(true); };
-  const openAdd = () => { setCurrentItem({ name: '', unit_price: 0, unit: 'ks', type: 'materiál' }); setIsAddModalOpen(true); };
-
   const nd = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  const filtered = items.filter(i => i.type === 'materiál' && nd(i.name).includes(nd(searchTerm)));
 
-  // ---- PRÁCA / NORMY FUNKCIE ----
+  // ---- PRÁCA / NORMY ----
   const fetchNorms = async () => {
     setNormsLoading(true);
     const { data: catData } = await supabase.from('service_categories').select('*').order('name');
@@ -135,7 +98,7 @@ export default function DatabazaPage() {
     nd(n.service_name).includes(nd(normSearch))
   );
 
-  // ---- SKLAD FUNKCIE ----
+  // ---- SKLAD ----
   const fetchWarehouse = async () => {
     setWarehouseLoading(true);
     const { data } = await supabase.from('warehouse_items').select('*').order('name');
@@ -206,7 +169,7 @@ export default function DatabazaPage() {
   };
 
   const deleteSkladItem = async (id) => {
-    if (confirm('Naozaj vymazať položku zo skladu? Zymažú sa aj všetky pohyby.')) {
+    if (confirm('Naozaj vymazať položku zo skladu? Zmažú sa aj všetky pohyby.')) {
       await supabase.from('warehouse_items').delete().eq('id', id);
       fetchWarehouse();
     }
@@ -239,10 +202,9 @@ export default function DatabazaPage() {
         if (!existing) continue;
         await supabase.from('warehouse_movements').insert([{
           item_id: line.existing_id, movement_type: 'in', quantity: qty,
-          note: `Import: ${importHeader.doc_number || '—'} | ${importHeader.supplier || ''}`.trim().replace(/ \| $/, ''),
+          note: `Import: ${importHeader.doc_number || '—'} | ${importHeader.supplier || ''}`.replace(/ \| $/, ''),
         }]);
-        const newQty = parseFloat(existing.quantity) + qty;
-        const upd = { quantity: newQty };
+        const upd = { quantity: parseFloat(existing.quantity) + qty };
         if (line.purchase_price) upd.purchase_price = parseFloat(line.purchase_price);
         await supabase.from('warehouse_items').update(upd).eq('id', line.existing_id);
       } else if (line.name.trim()) {
@@ -258,7 +220,7 @@ export default function DatabazaPage() {
         if (newItem) {
           await supabase.from('warehouse_movements').insert([{
             item_id: newItem.id, movement_type: 'in', quantity: qty,
-            note: `Import: ${importHeader.doc_number || '—'} | ${importHeader.supplier || ''}`.trim().replace(/ \| $/, ''),
+            note: `Import: ${importHeader.doc_number || '—'} | ${importHeader.supplier || ''}`.replace(/ \| $/, ''),
           }]);
         }
       }
@@ -268,6 +230,56 @@ export default function DatabazaPage() {
     setImportHeader({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
     setWarehouseSubTab('zoznam');
     fetchWarehouse();
+  };
+
+  // ---- PDF IMPORT ----
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setPdfError('Prosím nahraj PDF súbor.');
+      return;
+    }
+    setPdfError('');
+    setPdfParsing(true);
+    try {
+      const formData = new FormData();
+      formData.append('pdf', file);
+      const res = await fetch('/api/parse-supplier-pdf', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Chyba parsovanie');
+      if (json.items && json.items.length > 0) {
+        setImportHeader(h => ({
+          ...h,
+          supplier: json.supplier || h.supplier,
+          doc_number: json.doc_number || h.doc_number,
+          date: json.date || h.date,
+        }));
+        setImportLines(json.items.map(item => {
+          const existing = warehouseItems.find(w =>
+            w.name === item.name.toUpperCase() ||
+            (item.part_number && w.part_number === item.part_number)
+          );
+          return {
+            existing_id: existing?.id || '',
+            name: existing ? existing.name : item.name,
+            part_number: item.part_number || existing?.part_number || '',
+            quantity: item.quantity || 1,
+            purchase_price: item.purchase_price || '',
+            sale_price: existing?.sale_price || '',
+            unit: item.unit || existing?.unit || 'ks',
+          };
+        }));
+        setWarehouseSubTab('import');
+      } else {
+        setPdfError('Z faktúry sa nepodarilo extrahovať žiadne položky.');
+      }
+    } catch (err) {
+      setPdfError('Chyba: ' + err.message);
+    } finally {
+      setPdfParsing(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+    }
   };
 
   const filteredWarehouse = warehouseItems.filter(w =>
@@ -287,13 +299,8 @@ export default function DatabazaPage() {
       <header className="mb-10 border-l-4 border-red-600 pl-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black uppercase italic tracking-tighter">Databáza <span className="text-red-600 text-4xl">Cenník</span></h1>
-          <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] mt-2 font-black italic">Správa náhradných dielov a prác</p>
+          <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] mt-2 font-black italic">Sklad náhradných dielov a normy prác</p>
         </div>
-        {activeTab === 'materiál' && (
-          <button onClick={openAdd} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest">
-            + Pridať diel
-          </button>
-        )}
         {activeTab === 'sklad' && warehouseSubTab === 'zoznam' && (
           <button onClick={openSkladAdd} className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest">
             + Pridať na sklad
@@ -304,56 +311,224 @@ export default function DatabazaPage() {
       {/* ZÁLOŽKY */}
       <div className="flex bg-zinc-900/50 p-1.5 rounded-[1.8rem] border border-zinc-800 mb-8 w-full md:w-auto">
         {[
-          { key: 'materiál', label: '📦 Náhradné diely' },
-          { key: 'práca', label: '🛠️ Práce' },
           { key: 'sklad', label: '🏭 Sklad' },
+          { key: 'práca', label: '🛠️ Práce' },
         ].map(tab => (
           <button key={tab.key}
             onClick={() => handleTabSwitch(tab.key)}
-            className={`flex-1 md:flex-none px-8 py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === tab.key ? 'bg-red-600 text-white italic shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+            className={`flex-1 md:flex-none px-10 py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest transition-all ${activeTab === tab.key ? 'bg-red-600 text-white italic shadow-lg' : 'text-zinc-500 hover:text-white'}`}
           >
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* ===== TAB: MATERIÁL ===== */}
-      {activeTab === 'materiál' && (
-        <>
-          <div className="relative w-full md:w-80 mb-8">
-            <input type="text" placeholder="Hľadať diel..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 p-4 px-6 rounded-2xl text-[10px] uppercase font-black outline-none focus:border-red-600 transition-all italic tracking-widest" />
-            <span className="absolute right-5 top-1/2 -translate-y-1/2 opacity-20">🔍</span>
+      {/* ===== TAB: SKLAD ===== */}
+      {activeTab === 'sklad' && (
+        <div className="space-y-6">
+
+          {/* SUB-TABS */}
+          <div className="flex flex-wrap gap-2 bg-zinc-900/50 p-1 rounded-2xl border border-zinc-800 w-fit">
+            {[
+              { key: 'zoznam', label: '📋 Zoznam skladu' },
+              { key: 'import', label: '📥 Import dodacieho listu' },
+            ].map(st => (
+              <button key={st.key}
+                onClick={() => setWarehouseSubTab(st.key)}
+                className={`px-6 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${warehouseSubTab === st.key ? 'bg-red-600 text-white italic shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+              >
+                {st.label}
+              </button>
+            ))}
           </div>
-          <div className="space-y-3">
-            {itemsLoading ? (
-              <div className="py-20 text-center text-zinc-600 animate-pulse font-black uppercase text-xs tracking-widest">Načítavam...</div>
-            ) : filtered.length > 0 ? filtered.map(item => (
-              <div key={item.id} className="bg-zinc-900/20 border border-zinc-800 p-5 md:px-10 rounded-[2rem] flex flex-col md:flex-row justify-between items-center group hover:border-red-600/50 transition-all gap-4">
-                <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-10 flex-grow w-full">
-                  <div className="min-w-[80px]">
-                    <span className="text-zinc-600 text-[8px] uppercase font-black tracking-widest block mb-1">Jednotka</span>
-                    <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-[10px] uppercase">{item.unit}</span>
-                  </div>
-                  <div className="flex-grow">
-                    <span className="text-zinc-600 text-[8px] uppercase font-black tracking-widest block mb-1">Názov</span>
-                    <h3 className="text-lg font-black uppercase italic tracking-tight text-zinc-200">{item.name}</h3>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-zinc-600 text-[8px] uppercase font-black tracking-widest block mb-1">Cena bez DPH</span>
-                    <p className="text-2xl font-black italic">{item.unit_price.toFixed(2)} €</p>
-                  </div>
+
+          {/* ZOZNAM SKLADU */}
+          {warehouseSubTab === 'zoznam' && (
+            <>
+              <div className="relative w-full md:w-96">
+                <input type="text" placeholder="Hľadať podľa názvu alebo čísla dielu..." value={warehouseSearch} onChange={e => setWarehouseSearch(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 p-4 px-6 rounded-2xl text-[10px] uppercase font-black outline-none focus:border-red-600 transition-all italic tracking-widest" />
+                <span className="absolute right-5 top-1/2 -translate-y-1/2 opacity-20">🔍</span>
+              </div>
+
+              <div className="hidden md:grid grid-cols-[140px_1fr_80px_100px_120px_120px_130px_120px] gap-3 px-6 py-2">
+                {['Číslo dielu', 'Názov', 'Jedn.', 'Na sklade', 'Nákup bez DPH', 'Pult bez DPH', 'Pult s DPH', ''].map(h => (
+                  <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
+                ))}
+              </div>
+
+              {warehouseLoading ? (
+                <div className="py-20 text-center text-zinc-600 animate-pulse font-black uppercase text-xs tracking-widest">Načítavam sklad...</div>
+              ) : filteredWarehouse.length === 0 ? (
+                <div className="py-20 text-center border-2 border-dashed border-zinc-900 rounded-[3rem] opacity-30 uppercase font-black tracking-[0.5em] text-sm italic">Sklad je prázdny</div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredWarehouse.map(w => (
+                    <div key={w.id} className="bg-zinc-950 border border-zinc-900 hover:border-zinc-700 p-4 md:px-6 rounded-2xl flex flex-col md:grid md:grid-cols-[140px_1fr_80px_100px_120px_120px_130px_120px] md:items-center gap-3 group transition-all">
+                      <div>
+                        {w.part_number
+                          ? <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-1 rounded-lg">{w.part_number}</span>
+                          : <span className="text-zinc-700 text-[9px] font-black">—</span>}
+                      </div>
+                      <span className="text-sm font-black uppercase italic text-white truncate">{w.name}</span>
+                      <span className="text-[10px] font-black text-zinc-500 uppercase">{w.unit}</span>
+                      <div>
+                        <span className={`text-sm font-black px-3 py-1 rounded-lg border ${qtyColor(w.quantity)}`}>
+                          {parseFloat(w.quantity).toFixed(w.unit === 'ks' ? 0 : 2)} {w.unit}
+                        </span>
+                      </div>
+                      <span className="text-sm font-black text-zinc-300">{parseFloat(w.purchase_price).toFixed(2)} €</span>
+                      <span className="text-sm font-black text-zinc-300">{parseFloat(w.sale_price).toFixed(2)} €</span>
+                      <span className="text-sm font-black text-white">{(parseFloat(w.sale_price) * VAT).toFixed(2)} €</span>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => openNaskladnit(w)} title="Naskladniť"
+                          className="p-2.5 bg-green-600/20 border border-green-600/30 text-green-400 rounded-xl hover:bg-green-600 hover:text-white transition-all text-xs font-black px-3">
+                          + Sklad
+                        </button>
+                        <button onClick={() => openSkladEdit(w)}
+                          className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
+                        <button onClick={() => deleteSkladItem(w.id)}
+                          className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">🗑️</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => openEdit(item)} className="p-4 bg-zinc-800/50 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
-                  <button onClick={() => deleteItem(item.id)} className="p-4 bg-zinc-800/50 rounded-xl hover:bg-red-600 transition-all text-xs">🗑️</button>
+              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
+                  Celkom položiek: <span className="text-white">{filteredWarehouse.length}</span>
+                </span>
+                <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
+                  Hodnota skladu (nákup bez DPH):&nbsp;
+                  <span className="text-white">{filteredWarehouse.reduce((sum, w) => sum + parseFloat(w.purchase_price) * parseFloat(w.quantity), 0).toFixed(2)} €</span>
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* IMPORT DODACIEHO LISTU */}
+          {warehouseSubTab === 'import' && (
+            <form onSubmit={submitImport} className="space-y-6">
+
+              {/* PDF IMPORT */}
+              <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600 mb-4">Import faktúry / dodacieho listu — PDF</p>
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                  <label className={`flex items-center gap-3 cursor-pointer px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest transition-all border-2 border-dashed ${pdfParsing ? 'border-zinc-700 text-zinc-600 cursor-not-allowed' : 'border-red-600/50 text-red-500 hover:bg-red-600/10'}`}>
+                    {pdfParsing
+                      ? <><span className="animate-spin">⏳</span> Analyzujem PDF...</>
+                      : <><span>📄</span> Nahrať PDF faktúru od dodávateľa</>}
+                    <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden" disabled={pdfParsing} onChange={handlePdfUpload} />
+                  </label>
+                  <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
+                    Claude AI rozpozná položky, čísla dielov a ceny automaticky
+                  </p>
+                </div>
+                {pdfError && (
+                  <p className="mt-3 text-red-500 text-xs font-black uppercase tracking-widest">{pdfError}</p>
+                )}
+              </div>
+
+              {/* HLAVIČKA DOKLADU */}
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-5">Údaje dokladu</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dodávateľ</label>
+                    <input type="text" value={importHeader.supplier} onChange={e => setImportHeader(h => ({ ...h, supplier: e.target.value }))}
+                      placeholder="napr. AutoParts s.r.o."
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Číslo dokladu</label>
+                    <input type="text" value={importHeader.doc_number} onChange={e => setImportHeader(h => ({ ...h, doc_number: e.target.value }))}
+                      placeholder="napr. DL-2024-001"
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dátum</label>
+                    <input type="date" value={importHeader.date} onChange={e => setImportHeader(h => ({ ...h, date: e.target.value }))}
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
                 </div>
               </div>
-            )) : (
-              <div className="py-20 text-center border-2 border-dashed border-zinc-900 rounded-[3rem] opacity-30 uppercase font-black tracking-[0.5em] text-sm italic">Databáza je prázdna</div>
-            )}
-          </div>
-        </>
+
+              {/* RIADKY */}
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Položky</p>
+
+                <div className="hidden md:grid grid-cols-[220px_150px_200px_80px_130px_130px_60px_32px] gap-2 px-2">
+                  {['Existujúci diel', 'Číslo dielu', 'Názov (nový diel)', 'Množ.', 'Nákup bez DPH', 'Pult bez DPH', 'Jedn.', ''].map(h => (
+                    <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
+                  ))}
+                </div>
+
+                {importLines.map((line, i) => (
+                  <div key={i} className="grid grid-cols-1 md:grid-cols-[220px_150px_200px_80px_130px_130px_60px_32px] gap-2 items-center border border-zinc-800/50 rounded-2xl p-3 bg-black/30">
+                    <select value={line.existing_id} onChange={e => handleImportSelect(i, e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all">
+                      <option value="">— Nový diel —</option>
+                      {warehouseItems.map(w => <option key={w.id} value={w.id}>{w.name}{w.part_number ? ` (${w.part_number})` : ''}</option>)}
+                    </select>
+                    <input type="text" placeholder="Číslo dielu" value={line.part_number}
+                      onChange={e => updateImportLine(i, 'part_number', e.target.value)}
+                      disabled={!!line.existing_id}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
+                    <input type="text" placeholder="Názov dielu" value={line.name}
+                      onChange={e => updateImportLine(i, 'name', e.target.value)}
+                      disabled={!!line.existing_id}
+                      required={!line.existing_id}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
+                    <input type="number" min="0.001" step="0.001" value={line.quantity}
+                      onChange={e => updateImportLine(i, 'quantity', e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
+                    <div className="relative">
+                      <input type="number" min="0" step="0.01" value={line.purchase_price}
+                        onChange={e => updateImportLine(i, 'purchase_price', e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-6 rounded-xl text-white font-black text-xs outline-none transition-all" />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-black">€</span>
+                    </div>
+                    <div className="relative">
+                      <input type="number" min="0" step="0.01" value={line.sale_price}
+                        onChange={e => updateImportLine(i, 'sale_price', e.target.value)}
+                        disabled={!!line.existing_id}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-6 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-black">€</span>
+                    </div>
+                    <select value={line.unit} onChange={e => updateImportLine(i, 'unit', e.target.value)}
+                      disabled={!!line.existing_id}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all disabled:opacity-40">
+                      <option value="ks">ks</option>
+                      <option value="l">l</option>
+                      <option value="sada">sada</option>
+                      <option value="m">m</option>
+                      <option value="kg">kg</option>
+                    </select>
+                    <button type="button" onClick={() => removeImportLine(i)}
+                      className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs">✕</button>
+                  </div>
+                ))}
+
+                <button type="button" onClick={addImportLine}
+                  className="w-full border-2 border-dashed border-zinc-800 hover:border-zinc-600 rounded-2xl py-3 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all">
+                  + Pridať riadok
+                </button>
+              </div>
+
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setWarehouseSubTab('zoznam')}
+                  className="flex-1 bg-zinc-900 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">
+                  Zrušiť
+                </button>
+                <button type="submit" disabled={importSaving}
+                  className="flex-[3] bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all shadow-xl disabled:opacity-50">
+                  {importSaving ? 'Naskladňujem...' : '📥 Potvrdiť naskladnenie'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       )}
 
       {/* ===== TAB: PRÁCE ===== */}
@@ -469,223 +644,6 @@ export default function DatabazaPage() {
         </div>
       )}
 
-      {/* ===== TAB: SKLAD ===== */}
-      {activeTab === 'sklad' && (
-        <div className="space-y-6">
-
-          {/* SUB-TABS */}
-          <div className="flex bg-zinc-900/50 p-1 rounded-2xl border border-zinc-800 w-fit">
-            {[{ key: 'zoznam', label: '📋 Zoznam skladu' }, { key: 'import', label: '📥 Import dodacieho listu' }].map(st => (
-              <button key={st.key}
-                onClick={() => setWarehouseSubTab(st.key)}
-                className={`px-6 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${warehouseSubTab === st.key ? 'bg-red-600 text-white italic shadow-lg' : 'text-zinc-500 hover:text-white'}`}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-
-          {/* ZOZNAM SKLADU */}
-          {warehouseSubTab === 'zoznam' && (
-            <>
-              <div className="relative w-full md:w-96">
-                <input type="text" placeholder="Hľadať podľa názvu alebo čísla dielu..." value={warehouseSearch} onChange={e => setWarehouseSearch(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 p-4 px-6 rounded-2xl text-[10px] uppercase font-black outline-none focus:border-red-600 transition-all italic tracking-widest" />
-                <span className="absolute right-5 top-1/2 -translate-y-1/2 opacity-20">🔍</span>
-              </div>
-
-              {/* HLAVIČKA TABUĽKY */}
-              <div className="hidden md:grid grid-cols-[140px_1fr_80px_100px_120px_120px_130px_120px] gap-3 px-6 py-2">
-                {['Číslo dielu', 'Názov', 'Jedn.', 'Na sklade', 'Nákup bez DPH', 'Pult bez DPH', 'Pult s DPH', ''].map(h => (
-                  <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
-                ))}
-              </div>
-
-              {warehouseLoading ? (
-                <div className="py-20 text-center text-zinc-600 animate-pulse font-black uppercase text-xs tracking-widest">Načítavam sklad...</div>
-              ) : filteredWarehouse.length === 0 ? (
-                <div className="py-20 text-center border-2 border-dashed border-zinc-900 rounded-[3rem] opacity-30 uppercase font-black tracking-[0.5em] text-sm italic">Sklad je prázdny</div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredWarehouse.map(w => (
-                    <div key={w.id} className="bg-zinc-950 border border-zinc-900 hover:border-zinc-700 p-4 md:px-6 rounded-2xl flex flex-col md:grid md:grid-cols-[140px_1fr_80px_100px_120px_120px_130px_120px] md:items-center gap-3 group transition-all">
-                      <div>
-                        {w.part_number
-                          ? <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-1 rounded-lg">{w.part_number}</span>
-                          : <span className="text-zinc-700 text-[9px] font-black">—</span>}
-                      </div>
-                      <span className="text-sm font-black uppercase italic text-white truncate">{w.name}</span>
-                      <span className="text-[10px] font-black text-zinc-500 uppercase">{w.unit}</span>
-                      <div>
-                        <span className={`text-sm font-black px-3 py-1 rounded-lg border ${qtyColor(w.quantity)}`}>
-                          {parseFloat(w.quantity).toFixed(w.unit === 'ks' ? 0 : 2)} {w.unit}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-zinc-600 block font-black uppercase md:hidden">Nákup</span>
-                        <span className="text-sm font-black text-zinc-300">{parseFloat(w.purchase_price).toFixed(2)} €</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-zinc-600 block font-black uppercase md:hidden">Pult</span>
-                        <span className="text-sm font-black text-zinc-300">{parseFloat(w.sale_price).toFixed(2)} €</span>
-                      </div>
-                      <div>
-                        <span className="text-[9px] text-zinc-600 block font-black uppercase md:hidden">Pult s DPH</span>
-                        <span className="text-sm font-black text-white">{(parseFloat(w.sale_price) * VAT).toFixed(2)} €</span>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <button onClick={() => openNaskladnit(w)} title="Naskladniť"
-                          className="p-2.5 bg-green-600/20 border border-green-600/30 text-green-400 rounded-xl hover:bg-green-600 hover:text-white transition-all text-xs font-black uppercase tracking-wide whitespace-nowrap px-3">
-                          + Sklad
-                        </button>
-                        <button onClick={() => openSkladEdit(w)}
-                          className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
-                        <button onClick={() => deleteSkladItem(w.id)}
-                          className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">🗑️</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                  Celkom položiek: <span className="text-white">{filteredWarehouse.length}</span>
-                </span>
-                <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                  Hodnota skladu (nákup bez DPH):&nbsp;
-                  <span className="text-white">{filteredWarehouse.reduce((sum, w) => sum + parseFloat(w.purchase_price) * parseFloat(w.quantity), 0).toFixed(2)} €</span>
-                </span>
-              </div>
-            </>
-          )}
-
-          {/* IMPORT DODACIEHO LISTU */}
-          {warehouseSubTab === 'import' && (
-            <form onSubmit={submitImport} className="space-y-6">
-              {/* HLAVIČKA DOKLADU */}
-              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600 mb-5">Údaje dokladu</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dodávateľ</label>
-                    <input type="text" value={importHeader.supplier} onChange={e => setImportHeader(h => ({ ...h, supplier: e.target.value }))}
-                      placeholder="napr. AutoParts s.r.o."
-                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Číslo dokladu</label>
-                    <input type="text" value={importHeader.doc_number} onChange={e => setImportHeader(h => ({ ...h, doc_number: e.target.value }))}
-                      placeholder="napr. DL-2024-001"
-                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
-                  </div>
-                  <div>
-                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dátum</label>
-                    <input type="date" value={importHeader.date} onChange={e => setImportHeader(h => ({ ...h, date: e.target.value }))}
-                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
-                  </div>
-                </div>
-              </div>
-
-              {/* RIADKY DOKLADU */}
-              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600">Položky dodacieho listu</p>
-
-                {/* HEADER ROW */}
-                <div className="hidden md:grid grid-cols-[220px_150px_200px_80px_130px_130px_60px_32px] gap-2 px-2">
-                  {['Existujúci diel', 'Číslo dielu', 'Názov (nový diel)', 'Množ.', 'Nákup bez DPH', 'Pult bez DPH', 'Jedn.', ''].map(h => (
-                    <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
-                  ))}
-                </div>
-
-                {importLines.map((line, i) => (
-                  <div key={i} className="grid grid-cols-1 md:grid-cols-[220px_150px_200px_80px_130px_130px_60px_32px] gap-2 items-center border border-zinc-800/50 rounded-2xl p-3 bg-black/30">
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Existujúci diel</label>
-                      <select value={line.existing_id} onChange={e => handleImportSelect(i, e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all">
-                        <option value="">— Nový diel —</option>
-                        {warehouseItems.map(w => <option key={w.id} value={w.id}>{w.name}{w.part_number ? ` (${w.part_number})` : ''}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Číslo dielu</label>
-                      <input type="text" placeholder="Číslo dielu" value={line.part_number}
-                        onChange={e => updateImportLine(i, 'part_number', e.target.value)}
-                        disabled={!!line.existing_id}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
-                    </div>
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Názov</label>
-                      <input type="text" placeholder="Názov dielu" value={line.name}
-                        onChange={e => updateImportLine(i, 'name', e.target.value)}
-                        disabled={!!line.existing_id}
-                        required={!line.existing_id}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
-                    </div>
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Množstvo</label>
-                      <input type="number" min="0.001" step="0.001" value={line.quantity}
-                        onChange={e => updateImportLine(i, 'quantity', e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
-                    </div>
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Nákup bez DPH</label>
-                      <div className="relative">
-                        <input type="number" min="0" step="0.01" value={line.purchase_price}
-                          onChange={e => updateImportLine(i, 'purchase_price', e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-6 rounded-xl text-white font-black text-xs outline-none transition-all" />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-black">€</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Pult bez DPH</label>
-                      <div className="relative">
-                        <input type="number" min="0" step="0.01" value={line.sale_price}
-                          onChange={e => updateImportLine(i, 'sale_price', e.target.value)}
-                          disabled={!!line.existing_id}
-                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-6 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-black">€</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[8px] font-black uppercase text-zinc-600 md:hidden block mb-1">Jednotka</label>
-                      <select value={line.unit} onChange={e => updateImportLine(i, 'unit', e.target.value)}
-                        disabled={!!line.existing_id}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all disabled:opacity-40">
-                        <option value="ks">ks</option>
-                        <option value="l">l</option>
-                        <option value="sada">sada</option>
-                        <option value="m">m</option>
-                        <option value="kg">kg</option>
-                      </select>
-                    </div>
-                    <button type="button" onClick={() => removeImportLine(i)}
-                      className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs">✕</button>
-                  </div>
-                ))}
-
-                <button type="button" onClick={addImportLine}
-                  className="w-full border-2 border-dashed border-zinc-800 hover:border-zinc-600 rounded-2xl py-3 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all">
-                  + Pridať riadok
-                </button>
-              </div>
-
-              <div className="flex gap-4">
-                <button type="button" onClick={() => setWarehouseSubTab('zoznam')}
-                  className="flex-1 bg-zinc-900 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">
-                  Zrušiť
-                </button>
-                <button type="submit" disabled={importSaving}
-                  className="flex-[3] bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all shadow-xl disabled:opacity-50">
-                  {importSaving ? 'Naskladňujem...' : '📥 Potvrdiť naskladnenie'}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
-
       {/* MODAL EDIT NORMY */}
       {editNorm && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
@@ -721,57 +679,11 @@ export default function DatabazaPage() {
         </div>
       )}
 
-      {/* MODAL MATERIÁL */}
-      {(isEditModalOpen || isAddModalOpen) && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
-          <div className="bg-zinc-950 border border-zinc-800 p-8 md:p-12 rounded-[3rem] max-w-lg w-full shadow-2xl">
-            <h2 className="text-2xl font-black uppercase italic mb-8 tracking-tighter text-center">
-              {isEditModalOpen ? 'Upraviť' : 'Pridať'} <span className="text-red-600">diel</span>
-            </h2>
-            <form onSubmit={handleSaveItem} className="space-y-6">
-              <div>
-                <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Názov dielu</label>
-                <input required type="text" value={currentItem.name}
-                  onChange={e => setCurrentItem({ ...currentItem, name: e.target.value.toUpperCase() })}
-                  className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-red-600 italic mt-2" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Cena (€ bez DPH)</label>
-                  <input required type="number" step="0.01" value={currentItem.unit_price}
-                    onChange={e => setCurrentItem({ ...currentItem, unit_price: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-red-600 mt-2" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest">Jednotka</label>
-                  <select value={currentItem.unit} onChange={e => setCurrentItem({ ...currentItem, unit: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-red-600 mt-2 cursor-pointer">
-                    <option value="ks">ks</option>
-                    <option value="hod">hod</option>
-                    <option value="l">l</option>
-                    <option value="sada">sada</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => { setIsEditModalOpen(false); setIsAddModalOpen(false); }}
-                  className="flex-1 bg-zinc-800 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">Zrušiť</button>
-                <button type="submit"
-                  className="flex-[2] bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all shadow-xl">
-                  {isEditModalOpen ? 'Uložiť zmeny' : 'Vytvoriť'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* MODALY SKLAD */}
       {skladModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
           <div className="bg-zinc-950 border border-zinc-800 p-8 md:p-12 rounded-[3rem] max-w-lg w-full shadow-2xl">
 
-            {/* ADD / EDIT */}
             {(skladModal.mode === 'add' || skladModal.mode === 'edit') && (
               <>
                 <h2 className="text-2xl font-black uppercase italic mb-8 tracking-tighter text-center">
@@ -811,7 +723,6 @@ export default function DatabazaPage() {
                       </div>
                     </div>
                   </div>
-                  {/* DPH preview */}
                   {skladModal.item.sale_price > 0 && (
                     <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl px-5 py-3 flex justify-between items-center">
                       <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Pult s DPH (+23%)</span>
@@ -852,7 +763,6 @@ export default function DatabazaPage() {
               </>
             )}
 
-            {/* NASKLADNIŤ */}
             {skladModal.mode === 'naskladnit' && (
               <>
                 <h2 className="text-2xl font-black uppercase italic mb-2 tracking-tighter text-center">Naskladniť</h2>
