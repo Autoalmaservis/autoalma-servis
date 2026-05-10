@@ -537,10 +537,10 @@ export default function HomePage() {
               className="bg-black border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer"
             >
               <span className="text-4xl mb-4 block">📍</span>
-              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Adresa</p>
+              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Kde nás nájdete</p>
               <p className="text-white font-black text-xl group-hover:text-red-500 transition-colors">Svornosti 119</p>
               <p className="text-zinc-300 font-bold text-sm mt-2">821 06 Bratislava</p>
-              <p className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-3">Po–Pi 8:00–17:00</p>
+              <p className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-3">Po–Pi 8:00–16:00</p>
             </a>
 
             {/* E-MAILY */}
