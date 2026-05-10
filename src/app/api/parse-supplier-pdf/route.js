@@ -16,7 +16,7 @@ export async function POST(request) {
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      max_tokens: 8096,
       messages: [
         {
           role: 'user',
@@ -73,7 +73,26 @@ Dôležité pravidlá:
 
     const raw = message.content[0]?.text?.trim() || '';
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
-    const parsed = JSON.parse(cleaned);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // Response got cut off — find the last complete item and close the JSON
+      const lastComma = cleaned.lastIndexOf('},');
+      const lastClose = cleaned.lastIndexOf('}');
+      const cutAt = lastComma > 0 ? lastComma + 1 : lastClose > 0 ? lastClose + 1 : -1;
+      if (cutAt > 0) {
+        const repaired = cleaned.slice(0, cutAt).replace(/,\s*$/, '') + ']}';
+        try {
+          parsed = JSON.parse(repaired);
+        } catch {
+          return Response.json({ error: 'Faktúra má príliš veľa položiek. Skús nahrať po stránkach.' }, { status: 422 });
+        }
+      } else {
+        return Response.json({ error: 'Nepodarilo sa rozpoznať štruktúru faktúry.' }, { status: 422 });
+      }
+    }
 
     return Response.json(parsed);
   } catch (e) {
