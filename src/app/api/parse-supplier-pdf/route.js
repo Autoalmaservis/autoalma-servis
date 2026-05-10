@@ -16,7 +16,7 @@ export async function POST(request) {
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages: [
         {
           role: 'user',
@@ -27,29 +27,44 @@ export async function POST(request) {
             },
             {
               type: 'text',
-              text: `Toto je faktúra alebo dodací list od dodávateľa autodielu. Extrahuj z nej tieto údaje a vráť VÝHRADNE čistý JSON (žiadny markdown, žiadne vysvetlenia):
+              text: `Toto je faktúra od dodávateľa autodielov (typicky DD AUTO alebo podobný veľkoobchod).
+
+Faktúra má tieto stĺpce:
+- "Číslo tovaru" = katalógové / OEM číslo dielu (napr. TRW DF4253, MAN HU5003Z)
+- "Názov" = názov položky
+- "Množstvo" = počet kusov
+- "Mj" = jednotka (ks, l, kg, sada...)
+- "MO bez dph" = maloobchodná cena bez DPH (IGNORUJ)
+- "w bonus % zľava" = zľava v percentách (IGNORUJ)
+- "bez dph po zľave" = NÁKUPNÁ CENA BEZ DPH po uplatnení zľavy — TOTO je purchase_price
+- "s dph" = nákupná cena s DPH (purchase_price × 1.23) — TOTO je purchase_price_with_vat
+- "dodací list" = číslo dodacieho listu (6-cyferné číslo napr. 6112621924)
+
+Vráť VÝHRADNE čistý JSON bez markdown blokov:
 
 {
   "supplier": "názov dodávateľa",
-  "doc_number": "číslo faktúry alebo dodacieho listu",
+  "doc_number": "číslo faktúry",
   "date": "dátum vo formáte YYYY-MM-DD",
   "items": [
     {
-      "name": "názov dielu alebo položky",
-      "part_number": "katalógové alebo OEM číslo dielu ak existuje, inak null",
+      "part_number": "číslo tovaru presne ako v faktúre napr. TRW DF4253",
+      "name": "názov dielu (max 60 znakov, výstižný)",
       "quantity": číslo,
-      "unit": "ks alebo l alebo kg alebo m alebo sada",
-      "purchase_price": cena bez DPH za jednotku ako číslo
+      "unit": "ks",
+      "purchase_price": číslo bez DPH po zľave (stĺpec bez dph po zľave),
+      "purchase_price_with_vat": číslo s DPH (stĺpec s dph),
+      "dodaci_list": "číslo dodacieho listu ako string"
     }
   ]
 }
 
-Pravidlá:
-- purchase_price musí byť cena BEZ DPH za 1 jednotku (nie celková cena riadku)
-- Ak vidíš iba cenu s DPH, vydeľ ju 1.23 a zaokrúhli na 2 desatinné miesta
-- Vynechaj položky ktoré nie sú fyzické diely (dopravné, poplatky, zľavy)
-- name musí byť krátky výstižný názov dielu (max 60 znakov)
-- Ak nejaká hodnota chýba, použi null`,
+Dôležité pravidlá:
+- purchase_price = stĺpec "bez dph po zľave" (nie MO cena!)
+- Zahrň VŠETKY riadky s fyzickými dielmi vrátane tých s nízkou cenou
+- Vynechaj len riadky súčtov (začínajú "súčet za dodací list")
+- Číslo dielu zahrň presne aj s prefixom výrobcu (TRW, MAN, MAH, FIL...)
+- Ak je faktúra na viacerých stranách, spracuj všetky strany`,
             },
           ],
         },
@@ -57,7 +72,6 @@ Pravidlá:
     });
 
     const raw = message.content[0]?.text?.trim() || '';
-    // Strip markdown code fences if Claude adds them
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
     const parsed = JSON.parse(cleaned);
 

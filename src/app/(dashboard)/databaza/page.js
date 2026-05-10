@@ -33,7 +33,7 @@ export default function DatabazaPage() {
   const pdfInputRef = useRef(null);
 
   function emptyImportLine() {
-    return { existing_id: '', name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks' };
+    return { existing_id: '', name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks', dodaci_list: '' };
   }
 
   useEffect(() => {
@@ -200,9 +200,13 @@ export default function DatabazaPage() {
       if (line.existing_id) {
         const existing = warehouseItems.find(w => w.id === line.existing_id);
         if (!existing) continue;
+        const note1 = [
+          `Fakt: ${importHeader.doc_number || '—'}`,
+          line.dodaci_list ? `DL: ${line.dodaci_list}` : null,
+          importHeader.supplier || null,
+        ].filter(Boolean).join(' | ');
         await supabase.from('warehouse_movements').insert([{
-          item_id: line.existing_id, movement_type: 'in', quantity: qty,
-          note: `Import: ${importHeader.doc_number || '—'} | ${importHeader.supplier || ''}`.replace(/ \| $/, ''),
+          item_id: line.existing_id, movement_type: 'in', quantity: qty, note: note1,
         }]);
         const upd = { quantity: parseFloat(existing.quantity) + qty };
         if (line.purchase_price) upd.purchase_price = parseFloat(line.purchase_price);
@@ -218,9 +222,13 @@ export default function DatabazaPage() {
         };
         const { data: newItem } = await supabase.from('warehouse_items').insert([newPayload]).select().single();
         if (newItem) {
+          const note2 = [
+            `Fakt: ${importHeader.doc_number || '—'}`,
+            line.dodaci_list ? `DL: ${line.dodaci_list}` : null,
+            importHeader.supplier || null,
+          ].filter(Boolean).join(' | ');
           await supabase.from('warehouse_movements').insert([{
-            item_id: newItem.id, movement_type: 'in', quantity: qty,
-            note: `Import: ${importHeader.doc_number || '—'} | ${importHeader.supplier || ''}`.replace(/ \| $/, ''),
+            item_id: newItem.id, movement_type: 'in', quantity: qty, note: note2,
           }]);
         }
       }
@@ -257,17 +265,19 @@ export default function DatabazaPage() {
         }));
         setImportLines(json.items.map(item => {
           const existing = warehouseItems.find(w =>
-            w.name === item.name.toUpperCase() ||
-            (item.part_number && w.part_number === item.part_number)
+            (item.part_number && w.part_number === item.part_number) ||
+            w.name === (item.name || '').toUpperCase()
           );
           return {
             existing_id: existing?.id || '',
-            name: existing ? existing.name : item.name,
+            name: existing ? existing.name : (item.name || ''),
             part_number: item.part_number || existing?.part_number || '',
             quantity: item.quantity || 1,
             purchase_price: item.purchase_price || '',
+            purchase_price_with_vat: item.purchase_price_with_vat || '',
             sale_price: existing?.sale_price || '',
             unit: item.unit || existing?.unit || 'ks',
+            dodaci_list: item.dodaci_list || '',
           };
         }));
         setWarehouseSubTab('import');
@@ -458,14 +468,14 @@ export default function DatabazaPage() {
               <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-4">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Položky</p>
 
-                <div className="hidden md:grid grid-cols-[220px_150px_200px_80px_130px_130px_60px_32px] gap-2 px-2">
-                  {['Existujúci diel', 'Číslo dielu', 'Názov (nový diel)', 'Množ.', 'Nákup bez DPH', 'Pult bez DPH', 'Jedn.', ''].map(h => (
+                <div className="hidden md:grid grid-cols-[180px_130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 px-2">
+                  {['Existujúci diel', 'Číslo dielu', 'Názov (nový diel)', 'Množ.', 'Nákup bez DPH', 'S DPH', 'Pult bez DPH', 'Jedn.', 'Dodací list', ''].map(h => (
                     <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
                   ))}
                 </div>
 
                 {importLines.map((line, i) => (
-                  <div key={i} className="grid grid-cols-1 md:grid-cols-[220px_150px_200px_80px_130px_130px_60px_32px] gap-2 items-center border border-zinc-800/50 rounded-2xl p-3 bg-black/30">
+                  <div key={i} className="grid grid-cols-1 md:grid-cols-[180px_130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 items-center border border-zinc-800/50 rounded-2xl p-3 bg-black/30">
                     <select value={line.existing_id} onChange={e => handleImportSelect(i, e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all">
                       <option value="">— Nový diel —</option>
@@ -483,18 +493,31 @@ export default function DatabazaPage() {
                     <input type="number" min="0.001" step="0.001" value={line.quantity}
                       onChange={e => updateImportLine(i, 'quantity', e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
+                    {/* Nákup bez DPH */}
                     <div className="relative">
                       <input type="number" min="0" step="0.01" value={line.purchase_price}
                         onChange={e => updateImportLine(i, 'purchase_price', e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-6 rounded-xl text-white font-black text-xs outline-none transition-all" />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-black">€</span>
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-5 rounded-xl text-white font-black text-xs outline-none transition-all" />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
                     </div>
+                    {/* S DPH - readonly náhľad */}
+                    <div className="bg-zinc-900/40 border border-zinc-800/50 p-2.5 rounded-xl text-center">
+                      <span className="text-zinc-400 font-black text-xs">
+                        {line.purchase_price_with_vat
+                          ? `${parseFloat(line.purchase_price_with_vat).toFixed(2)} €`
+                          : line.purchase_price
+                            ? `${(parseFloat(line.purchase_price) * 1.23).toFixed(2)} €`
+                            : '—'}
+                      </span>
+                    </div>
+                    {/* Pult bez DPH */}
                     <div className="relative">
                       <input type="number" min="0" step="0.01" value={line.sale_price}
                         onChange={e => updateImportLine(i, 'sale_price', e.target.value)}
                         disabled={!!line.existing_id}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-6 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-black">€</span>
+                        placeholder="—"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
+                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
                     </div>
                     <select value={line.unit} onChange={e => updateImportLine(i, 'unit', e.target.value)}
                       disabled={!!line.existing_id}
@@ -505,6 +528,10 @@ export default function DatabazaPage() {
                       <option value="m">m</option>
                       <option value="kg">kg</option>
                     </select>
+                    {/* Dodací list */}
+                    <input type="text" placeholder="DL číslo" value={line.dodaci_list || ''}
+                      onChange={e => updateImportLine(i, 'dodaci_list', e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-500 p-2.5 rounded-xl text-yellow-400 font-black text-xs outline-none transition-all" />
                     <button type="button" onClick={() => removeImportLine(i)}
                       className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs">✕</button>
                   </div>
