@@ -15,6 +15,7 @@ export default function DetailZakazkyPage() {
   
   // --- NOVÉ STAVY PRE KATALÓG, SADZBY A CENOVÉ PONUKY ZACHOVANÉ ---
   const [catalog, setCatalog] = useState([]);
+  const [warehouseItems, setWarehouseItems] = useState([]);
   const [rateCategories, setRateCategories] = useState([]);
   const [activeOffer, setActiveOffer] = useState(null);
   const [pastOffers, setPastOffers] = useState([]); // HISTÓRIA PONÚK ZACHOVANÁ
@@ -74,10 +75,11 @@ export default function DetailZakazkyPage() {
     const detailData = await fetchDetail(); 
     
     await Promise.all([
-      fetchItems(), 
-      fetchTasks(), 
-      fetchEmployees(), 
+      fetchItems(),
+      fetchTasks(),
+      fetchEmployees(),
       fetchCatalog(),
+      fetchWarehouseItems(),
       fetchSettings(),
       fetchCurrentOffer(),
       fetchPhotos()
@@ -224,6 +226,11 @@ export default function DetailZakazkyPage() {
   const fetchCatalog = async () => {
     const { data } = await supabase.from('inventory_catalog').select('*').order('name', { ascending: true });
     if (data) setCatalog(data);
+  };
+
+  const fetchWarehouseItems = async () => {
+    const { data } = await supabase.from('warehouse_items').select('id, name, part_number, sale_price, unit, quantity').order('name');
+    if (data) setWarehouseItems(data);
   };
 
   const fetchPhotos = async () => {
@@ -880,16 +887,29 @@ export default function DetailZakazkyPage() {
                       value={newItem.name}
                       onChange={(e) => {
                         const val = e.target.value;
-                        const match = catalog.find(c => c.name === val.toUpperCase());
-                        if (match) {
-                          setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit, type: match.type === 'práca' ? 'Práca' : 'Materiál' });
+                        const upperVal = val.toUpperCase();
+                        const wMatch = warehouseItems.find(w => w.name === upperVal);
+                        if (wMatch) {
+                          setNewItem({ ...newItem, name: val, unit_price: parseFloat(wMatch.sale_price) || 0, unit: wMatch.unit || 'ks', type: 'Materiál' });
                         } else {
-                          setNewItem({ ...newItem, name: val });
+                          const match = catalog.find(c => c.name === upperVal);
+                          if (match) {
+                            setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit, type: match.type === 'práca' ? 'Práca' : 'Materiál' });
+                          } else {
+                            setNewItem({ ...newItem, name: val });
+                          }
                         }
                       }}
                     />
                     <datalist id="catalog-list">
-                      {catalog.map((c, i) => (<option key={i} value={c.name}>{c.unit_price} €</option>))}
+                      {warehouseItems.map((w) => (
+                        <option key={`w-${w.id}`} value={w.name}>
+                          {w.quantity > 0 ? `skladom: ${parseFloat(w.quantity).toFixed(0)} ${w.unit}` : 'VYPREDANÉ'} | {parseFloat(w.sale_price).toFixed(2)} €{w.part_number ? ` | ${w.part_number}` : ''}
+                        </option>
+                      ))}
+                      {catalog.filter(c => !warehouseItems.some(w => w.name === c.name)).map((c, i) => (
+                        <option key={`c-${i}`} value={c.name}>{c.unit_price} €</option>
+                      ))}
                     </datalist>
                   </td>
                   <td className="p-3">
