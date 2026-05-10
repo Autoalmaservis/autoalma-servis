@@ -507,6 +507,28 @@ export default function DetailZakazkyPage() {
     if (!error) router.push('/zakazky');
   };
 
+  const decreaseWarehouseStock = async (itemName, qty) => {
+    try {
+      const { data: wItem } = await supabase
+        .from('warehouse_items')
+        .select('id, quantity')
+        .ilike('name', itemName.trim())
+        .maybeSingle();
+      if (!wItem) return;
+      const newQty = Math.max(0, parseFloat(wItem.quantity) - qty);
+      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', wItem.id);
+      await supabase.from('warehouse_movements').insert([{
+        item_id: wItem.id,
+        movement_type: 'out',
+        quantity: qty,
+        job_id: id,
+        note: `Zákazka ${zakazka?.plate_number || ''}`,
+      }]);
+    } catch (err) {
+      console.error('warehouse stock error:', err.message);
+    }
+  };
+
   const addItem = async (e) => {
     e.preventDefault();
     if (!newItem.name) return;
@@ -525,6 +547,7 @@ export default function DetailZakazkyPage() {
     const { rateType: _rt, ...itemForDb } = itemToSave;
     const { error } = await supabase.from('job_items').insert([{ ...itemForDb, job_id: id }]);
     if (!error) {
+      if (!isPraca) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
       setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType });
       fetchItems();
     }
