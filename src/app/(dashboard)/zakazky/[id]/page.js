@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 import SmsPanel from '../../prijem/SmsPanel'; // PRIDANÝ IMPORT ZACHOVANÝ
@@ -16,6 +16,10 @@ export default function DetailZakazkyPage() {
   // --- NOVÉ STAVY PRE KATALÓG, SADZBY A CENOVÉ PONUKY ZACHOVANÉ ---
   const [catalog, setCatalog] = useState([]);
   const [warehouseItems, setWarehouseItems] = useState([]);
+  const [showItemDropdown, setShowItemDropdown] = useState(false);
+  const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
+  const [warehouseModalSearch, setWarehouseModalSearch] = useState('');
+  const dropdownRef = useRef(null);
   const [rateCategories, setRateCategories] = useState([]);
   const [activeOffer, setActiveOffer] = useState(null);
   const [pastOffers, setPastOffers] = useState([]); // HISTÓRIA PONÚK ZACHOVANÁ
@@ -58,6 +62,18 @@ export default function DetailZakazkyPage() {
       return () => { supabase.removeChannel(subscription); };
     }
   }, [id]);
+
+  const nd = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowItemDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const ensureAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -514,6 +530,17 @@ export default function DetailZakazkyPage() {
     if (!error) router.push('/zakazky');
   };
 
+  const selectWarehouseItem = (w) => {
+    setNewItem(prev => ({ ...prev, name: w.name, unit_price: parseFloat(w.sale_price) || 0, unit: w.unit || 'ks', type: 'Materiál' }));
+    setShowItemDropdown(false);
+    setWarehouseModalOpen(false);
+  };
+
+  const selectCatalogItem = (c) => {
+    setNewItem(prev => ({ ...prev, name: c.name, unit_price: c.unit_price, unit: c.unit, type: c.type === 'práca' ? 'Práca' : 'Materiál' }));
+    setShowItemDropdown(false);
+  };
+
   const decreaseWarehouseStock = async (itemName, qty) => {
     try {
       const { data: wItem } = await supabase
@@ -878,39 +905,85 @@ export default function DetailZakazkyPage() {
                     )}
                   </div>
                   </td>
-                  <td className="p-3 relative">
-                    <input
-                      list="catalog-list"
-                      type="text"
-                      placeholder="Názov položky..."
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600 text-xs font-black uppercase italic"
-                      value={newItem.name}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const upperVal = val.toUpperCase();
-                        const wMatch = warehouseItems.find(w => w.name === upperVal);
-                        if (wMatch) {
-                          setNewItem({ ...newItem, name: val, unit_price: parseFloat(wMatch.sale_price) || 0, unit: wMatch.unit || 'ks', type: 'Materiál' });
-                        } else {
-                          const match = catalog.find(c => c.name === upperVal);
-                          if (match) {
-                            setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit, type: match.type === 'práca' ? 'Práca' : 'Materiál' });
-                          } else {
-                            setNewItem({ ...newItem, name: val });
-                          }
-                        }
-                      }}
-                    />
-                    <datalist id="catalog-list">
-                      {warehouseItems.map((w) => (
-                        <option key={`w-${w.id}`} value={w.name}>
-                          {w.quantity > 0 ? `skladom: ${parseFloat(w.quantity).toFixed(0)} ${w.unit}` : 'VYPREDANÉ'} | {parseFloat(w.sale_price).toFixed(2)} €{w.part_number ? ` | ${w.part_number}` : ''}
-                        </option>
-                      ))}
-                      {catalog.filter(c => !warehouseItems.some(w => w.name === c.name)).map((c, i) => (
-                        <option key={`c-${i}`} value={c.name}>{c.unit_price} €</option>
-                      ))}
-                    </datalist>
+                  <td className="p-3 relative" ref={dropdownRef}>
+                    <div className="flex gap-1.5">
+                      <div className="relative flex-grow">
+                        <input
+                          type="text"
+                          placeholder="Názov položky..."
+                          className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600 text-xs font-black uppercase italic"
+                          value={newItem.name}
+                          autoComplete="off"
+                          onFocus={() => setShowItemDropdown(true)}
+                          onChange={(e) => {
+                            setNewItem({ ...newItem, name: e.target.value });
+                            setShowItemDropdown(true);
+                          }}
+                        />
+                        {/* Custom dropdown */}
+                        {showItemDropdown && newItem.type === 'Materiál' && (
+                          <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
+                            {(() => {
+                              const q = nd(newItem.name);
+                              const wFiltered = warehouseItems.filter(w =>
+                                nd(w.name).includes(q) || (w.part_number && nd(w.part_number).includes(q))
+                              ).slice(0, 8);
+                              const cFiltered = catalog.filter(c =>
+                                !warehouseItems.some(w => w.name === c.name) &&
+                                nd(c.name).includes(q)
+                              ).slice(0, 5);
+                              return (
+                                <>
+                                  {wFiltered.length > 0 && (
+                                    <>
+                                      <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-zinc-600 bg-black/60 sticky top-0">🏭 Sklad</div>
+                                      {wFiltered.map(w => (
+                                        <button key={w.id} type="button" onMouseDown={() => selectWarehouseItem(w)}
+                                          className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40 last:border-0">
+                                          <div className="min-w-0">
+                                            <span className="text-white font-black text-xs uppercase italic block truncate">{w.name}</span>
+                                            {w.part_number && <span className="text-yellow-400 text-[9px] font-black">{w.part_number}</span>}
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg border ${w.quantity > 0 ? 'text-green-400 border-green-600/30 bg-green-500/10' : 'text-red-400 border-red-600/30 bg-red-500/10'}`}>
+                                              {parseFloat(w.quantity).toFixed(0)} {w.unit}
+                                            </span>
+                                            <span className="text-white font-black text-xs">{parseFloat(w.sale_price).toFixed(2)} €</span>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </>
+                                  )}
+                                  {cFiltered.length > 0 && (
+                                    <>
+                                      <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-zinc-600 bg-black/60 sticky top-0">📦 Katalóg</div>
+                                      {cFiltered.map((c, i) => (
+                                        <button key={i} type="button" onMouseDown={() => selectCatalogItem(c)}
+                                          className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40 last:border-0">
+                                          <span className="text-zinc-300 font-black text-xs uppercase italic truncate">{c.name}</span>
+                                          <span className="text-zinc-400 font-black text-xs shrink-0">{parseFloat(c.unit_price).toFixed(2)} €</span>
+                                        </button>
+                                      ))}
+                                    </>
+                                  )}
+                                  {wFiltered.length === 0 && cFiltered.length === 0 && newItem.name && (
+                                    <div className="px-4 py-4 text-zinc-600 font-black text-xs uppercase italic text-center">Žiadne výsledky — zadaj manuálne</div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                      {/* Browse warehouse button */}
+                      {newItem.type === 'Materiál' && (
+                        <button type="button" onClick={() => { setWarehouseModalSearch(''); setWarehouseModalOpen(true); }}
+                          title="Prehľadávať sklad"
+                          className="shrink-0 px-3 bg-zinc-800 border border-zinc-700 hover:bg-red-600 hover:border-red-600 text-zinc-400 hover:text-white rounded-xl transition-all text-sm">
+                          🏭
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3">
                     <input type="number" min="0.5" step="0.5" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 1})} />
@@ -1148,6 +1221,70 @@ export default function DetailZakazkyPage() {
         </div>
 
       </div>
+
+      {/* WAREHOUSE BROWSE MODAL */}
+      {warehouseModalOpen && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[300] flex items-center justify-center p-6 no-print">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-[3rem] max-w-2xl w-full shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter">Vybrať diel <span className="text-red-600">zo skladu</span></h2>
+                <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mt-1">{warehouseItems.length} položiek na sklade</p>
+              </div>
+              <button onClick={() => setWarehouseModalOpen(false)} className="text-zinc-600 hover:text-white transition-colors font-black text-xl w-10 h-10 flex items-center justify-center rounded-xl hover:bg-zinc-800">✕</button>
+            </div>
+            <div className="p-4 border-b border-zinc-800">
+              <div className="relative">
+                <input type="text" placeholder="Hľadať diel alebo číslo dielu..." value={warehouseModalSearch}
+                  onChange={e => setWarehouseModalSearch(e.target.value)}
+                  autoFocus
+                  className="w-full bg-zinc-900 border border-zinc-800 p-3 px-5 rounded-xl text-white font-black text-xs outline-none focus:border-red-600 uppercase italic tracking-widest transition-all" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-20 text-sm">🔍</span>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {warehouseItems
+                .filter(w => {
+                  const q = nd(warehouseModalSearch);
+                  return nd(w.name).includes(q) || (w.part_number && nd(w.part_number).includes(q));
+                })
+                .map(w => (
+                  <button key={w.id} type="button" onClick={() => selectWarehouseItem(w)}
+                    className="w-full text-left px-6 py-4 hover:bg-zinc-900 transition-all flex items-center justify-between gap-4 border-b border-zinc-800/40 last:border-0 group">
+                    <div className="min-w-0 flex-grow">
+                      <span className="text-white font-black text-sm uppercase italic block truncate group-hover:text-red-400 transition-colors">{w.name}</span>
+                      {w.part_number && (
+                        <span className="text-yellow-400 text-[9px] font-black bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded mt-1 inline-block">{w.part_number}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className="text-zinc-500 text-[8px] font-black uppercase block">jednotka</span>
+                        <span className="text-zinc-400 font-black text-xs">{w.unit}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-zinc-500 text-[8px] font-black uppercase block">na sklade</span>
+                        <span className={`font-black text-sm px-2 py-0.5 rounded-lg border ${parseFloat(w.quantity) > 0 ? 'text-green-400 border-green-600/30 bg-green-500/10' : 'text-red-400 border-red-600/30 bg-red-500/10'}`}>
+                          {parseFloat(w.quantity).toFixed(0)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-zinc-500 text-[8px] font-black uppercase block">cena bez DPH</span>
+                        <span className="text-white font-black text-sm">{parseFloat(w.sale_price).toFixed(2)} €</span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              {warehouseItems.filter(w => {
+                const q = nd(warehouseModalSearch);
+                return nd(w.name).includes(q) || (w.part_number && nd(w.part_number).includes(q));
+              }).length === 0 && (
+                <div className="py-16 text-center text-zinc-600 font-black uppercase text-xs tracking-widest italic">Žiadne výsledky</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isInvoiceModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print font-black">
