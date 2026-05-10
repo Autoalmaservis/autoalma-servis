@@ -149,7 +149,7 @@ export default function MechanikPage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
             </span>
-            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] italic">Prihlásený mechanik</p>
+            <p className="text-zinc-300 text-[10px] font-black uppercase tracking-[0.4em] italic">Prihlásený mechanik</p>
           </div>
           <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter leading-none text-white mb-3">
             {employee?.name || user?.email?.split('@')[0]}
@@ -173,7 +173,7 @@ export default function MechanikPage() {
           { key: 'volno',     label: '🏖️ Voľno' },
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`flex-1 min-w-[130px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === t.key ? 'bg-red-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>
+            className={`flex-1 min-w-[130px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === t.key ? 'bg-red-600 text-white shadow-lg' : 'text-zinc-300 hover:text-white'}`}>
             {t.label}
           </button>
         ))}
@@ -182,7 +182,7 @@ export default function MechanikPage() {
       {/* ===== TAB: AKTUÁLNE / DOKONČENÉ ===== */}
       {(activeTab === 'pending' || activeTab === 'completed') && (
         <>
-          <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 mb-6 italic ml-2">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-300 mb-6 italic ml-2">
             {activeTab === 'pending' ? 'Vozidlá v poradovníku' : 'História tvojich opráv'}
           </h2>
           <div className="grid gap-6">
@@ -196,8 +196,8 @@ export default function MechanikPage() {
                     </div>
                     <h3 className="text-2xl font-black uppercase italic mt-4 tracking-tighter">{job.car_brand_model}</h3>
                     <div className="flex flex-col gap-1 mt-1">
-                      <p className="text-zinc-500 text-[10px] uppercase font-bold">{job.customer_name}</p>
-                      <p className="text-zinc-600 text-[9px] uppercase font-black tracking-widest italic">
+                      <p className="text-zinc-300 text-[10px] uppercase font-bold">{job.customer_name}</p>
+                      <p className="text-zinc-400 text-[9px] uppercase font-black tracking-widest italic">
                         🕒 {new Date(job.updated_at || job.created_at).toLocaleString('sk-SK', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
@@ -221,7 +221,7 @@ export default function MechanikPage() {
       {/* ===== TAB: MÔJ KALENDÁR ===== */}
       {activeTab === 'kalendar' && (
         <div className="space-y-6">
-          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 italic ml-2">Prehľad tvojich pridelených prác a voľna</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-300 italic ml-2">Prehľad tvojich pridelených prác a voľna</p>
 
           <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6">
             {/* Navigácia mesiaca */}
@@ -237,15 +237,15 @@ export default function MechanikPage() {
 
             {/* Legenda */}
             <div className="flex flex-wrap gap-4 mb-5">
-              <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Mám prácu</span>
-              <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Voľno / Dovolenka</span>
-              <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-500"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block" /> Práca + Voľno</span>
+              <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-300"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Mám prácu</span>
+              <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-300"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" /> Voľno / Dovolenka</span>
+              <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-zinc-300"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block" /> Práca + Voľno</span>
             </div>
 
             {/* Dni týždňa */}
             <div className="grid grid-cols-7 gap-1 mb-1">
               {['Po','Ut','St','Št','Pi','So','Ne'].map(d => (
-                <div key={d} className="text-center text-[8px] text-zinc-600 font-black">{d}</div>
+                <div key={d} className="text-center text-[8px] text-zinc-400 font-black">{d}</div>
               ))}
             </div>
 
@@ -270,7 +270,7 @@ export default function MechanikPage() {
                   const isSel     = selDay === ds;
 
                   let cls = 'border border-transparent text-zinc-800 cursor-default';
-                  if (!isPast) cls = 'bg-zinc-900/60 border border-zinc-800 text-zinc-500 cursor-pointer hover:opacity-80';
+                  if (!isPast) cls = 'bg-zinc-900/60 border border-zinc-800 text-zinc-300 cursor-pointer hover:opacity-80';
                   if (isToday)              cls = 'bg-zinc-800 border border-zinc-600 text-white cursor-pointer';
                   if (hasEvent && !isPast)  cls = 'bg-red-600/20 border border-red-600/40 text-red-300 cursor-pointer hover:bg-red-600/30';
                   if (isBlokt && !isPast)   cls = 'bg-blue-600/20 border border-blue-600/40 text-blue-300 cursor-pointer hover:bg-blue-600/30';
@@ -297,7 +297,7 @@ export default function MechanikPage() {
           {/* DETAIL VYBRANÉHO DŇA */}
           {selDay && (
             <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-300 mb-4">
                 {new Date(selDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
               </p>
 
@@ -316,7 +316,7 @@ export default function MechanikPage() {
                   <div className="flex justify-between items-start gap-4">
                     <div>
                       <p className="text-white font-black uppercase text-sm italic leading-tight">{ev.title}</p>
-                      <p className="text-zinc-500 text-[9px] uppercase mt-1 font-bold">
+                      <p className="text-zinc-300 text-[9px] uppercase mt-1 font-bold">
                         🕒 {new Date(ev.start_datetime).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}
                         {ev.end_datetime && ` – ${new Date(ev.end_datetime).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}`}
                       </p>
@@ -329,7 +329,7 @@ export default function MechanikPage() {
               ))}
 
               {selDayEvents.length === 0 && selDayBloks.length === 0 && (
-                <p className="text-center text-zinc-700 text-xs italic py-6">Žiadne záznamy pre tento deň</p>
+                <p className="text-center text-zinc-400 text-xs italic py-6">Žiadne záznamy pre tento deň</p>
               )}
             </div>
           )}
@@ -337,7 +337,7 @@ export default function MechanikPage() {
           {/* ZOZNAM NADCHÁDZAJÚCICH PRÁC */}
           {calEvents.length > 0 && !selDay && (
             <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 italic ml-2">Nadchádzajúce pridelené práce</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-300 italic ml-2">Nadchádzajúce pridelené práce</p>
               {calEvents.slice(0, 10).map(ev => (
                 <div key={ev.id} className="bg-zinc-950 border border-zinc-900 p-4 rounded-2xl flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4 min-w-0">
@@ -345,7 +345,7 @@ export default function MechanikPage() {
                       <p className="text-red-400 font-black text-[10px] uppercase">
                         {new Date(ev.start_datetime).toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit' })}
                       </p>
-                      <p className="text-zinc-500 text-[9px] font-bold">
+                      <p className="text-zinc-300 text-[9px] font-bold">
                         {new Date(ev.start_datetime).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
@@ -371,15 +371,15 @@ export default function MechanikPage() {
             <form onSubmit={createBlok} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dátum od</label>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-300 block mb-2">Dátum od</label>
                   <input required type="date" value={blockStart}
                     onChange={e => { setBlockStart(e.target.value); if (!blockEnd) setBlockEnd(e.target.value); }}
                     min={new Date().toISOString().split('T')[0]}
                     className="w-full bg-black border border-zinc-800 focus:border-red-600 p-4 rounded-2xl text-white font-black outline-none transition-all" />
                 </div>
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">
-                    Dátum do <span className="text-zinc-700 font-bold normal-case">(pre viac dní)</span>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-300 block mb-2">
+                    Dátum do <span className="text-zinc-400 font-bold normal-case">(pre viac dní)</span>
                   </label>
                   <input type="date" value={blockEnd} onChange={e => setBlockEnd(e.target.value)}
                     min={blockStart || new Date().toISOString().split('T')[0]}
@@ -388,11 +388,11 @@ export default function MechanikPage() {
               </div>
               <div>
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">
-                  Dôvod <span className="text-zinc-700 font-bold normal-case">(voliteľné)</span>
+                  Dôvod <span className="text-zinc-400 font-bold normal-case">(voliteľné)</span>
                 </label>
                 <input type="text" value={blockNote} onChange={e => setBlockNote(e.target.value)}
                   placeholder="napr. Dovolenka, Lekár, Voľno..."
-                  className="w-full bg-black border border-zinc-800 focus:border-red-600 p-4 rounded-2xl text-white font-black outline-none transition-all placeholder:text-zinc-700 placeholder:font-bold" />
+                  className="w-full bg-black border border-zinc-800 focus:border-red-600 p-4 rounded-2xl text-white font-black outline-none transition-all placeholder:text-zinc-500 placeholder:font-bold" />
               </div>
 
               {/* Náhľad počtu dní */}
@@ -420,8 +420,8 @@ export default function MechanikPage() {
 
           {/* ZOZNAM NAPLÁNOVANÉHO VOĽNA */}
           <div className="space-y-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 italic ml-2">
-              Naplánované voľno <span className="text-zinc-700">({bloks.length} dní)</span>
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-300 italic ml-2">
+              Naplánované voľno <span className="text-zinc-400">({bloks.length} dní)</span>
             </p>
             {bloks.length === 0 ? (
               <div className="py-14 text-center border-2 border-dashed border-zinc-900 rounded-[2rem] opacity-30">
@@ -435,11 +435,11 @@ export default function MechanikPage() {
                       <p className="text-blue-400 font-black text-[10px] uppercase">
                         {new Date(b.start_datetime).toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit' })}
                       </p>
-                      <p className="text-zinc-600 text-[8px] font-bold uppercase">
+                      <p className="text-zinc-400 text-[8px] font-bold uppercase">
                         {new Date(b.start_datetime).toLocaleDateString('sk-SK', { weekday: 'short' }).toUpperCase()}
                       </p>
                     </div>
-                    <span className="text-zinc-400 font-black uppercase text-xs">{b.issue_description || 'Voľno / Dovolenka'}</span>
+                    <span className="text-white font-black uppercase text-xs">{b.issue_description || 'Voľno / Dovolenka'}</span>
                   </div>
                   <button onClick={() => deleteBlok(b.id)}
                     className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 hover:border-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">
