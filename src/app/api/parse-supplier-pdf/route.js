@@ -34,7 +34,7 @@ Faktúra má tieto stĺpce:
 - "Názov" = názov položky
 - "Množstvo" = počet kusov
 - "Mj" = jednotka (ks, l, kg, sada...)
-- "MO bez dph" = maloobchodná cena bez DPH (IGNORUJ)
+- "MO bez dph" = maloobchodná / pultová cena bez DPH — TOTO je sale_price (cena pre zákazníka)
 - "w bonus % zľava" = zľava v percentách (IGNORUJ)
 - "bez dph po zľave" = NÁKUPNÁ CENA BEZ DPH po uplatnení zľavy — TOTO je purchase_price
 - "s dph" = nákupná cena s DPH (purchase_price × 1.23) — TOTO je purchase_price_with_vat
@@ -54,6 +54,7 @@ Vráť VÝHRADNE čistý JSON bez markdown blokov:
       "unit": "ks",
       "purchase_price": číslo bez DPH po zľave (stĺpec bez dph po zľave),
       "purchase_price_with_vat": číslo s DPH (stĺpec s dph),
+      "sale_price": číslo maloobchodnej ceny bez DPH (stĺpec MO bez dph),
       "dodaci_list": "číslo dodacieho listu ako string"
     }
   ]

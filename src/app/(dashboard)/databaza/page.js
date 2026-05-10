@@ -293,7 +293,7 @@ export default function DatabazaPage() {
             quantity: item.quantity || 1,
             purchase_price: item.purchase_price || '',
             purchase_price_with_vat: item.purchase_price_with_vat || '',
-            sale_price: existing?.sale_price || '',
+            sale_price: item.sale_price || existing?.sale_price || '',
             unit: item.unit || existing?.unit || 'ks',
             dodaci_list: item.dodaci_list || '',
           };
