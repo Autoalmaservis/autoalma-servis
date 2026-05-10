@@ -14,7 +14,7 @@ function createTransport() {
 
 export async function POST(request) {
   try {
-    const { name, email, plate, vehicle, message } = await request.json();
+    const { name, email, phone, plate, vehicle, year, message } = await request.json();
 
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
       console.warn('SMTP not configured');
@@ -23,9 +23,11 @@ export async function POST(request) {
 
     const rows = [
       ['Meno', name || '—'],
+      ['Telefón', phone || '—'],
       ['E-mail', email || '—'],
       plate ? ['ŠPZ', plate.toUpperCase()] : null,
       vehicle ? ['Vozidlo', vehicle] : null,
+      year ? ['Rok výroby', year] : null,
     ].filter(Boolean);
 
     const tableRows = rows.map(([label, value]) => `

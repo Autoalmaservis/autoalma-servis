@@ -42,7 +42,7 @@ export default function HomePage() {
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [lightbox, setLightbox] = useState(null);
   const [cennik, setCennik] = useState([]);
-  const [contactForm, setContactForm] = useState({ name: '', email: '', plate: '', vehicle: '', message: '' });
+  const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', plate: '', vehicle: '', year: '', message: '' });
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
   const router = useRouter();
@@ -78,7 +78,7 @@ export default function HomePage() {
       });
     } catch {}
     setContactSent(true);
-    setContactForm({ name: '', email: '', plate: '', vehicle: '', message: '' });
+    setContactForm({ name: '', email: '', phone: '', plate: '', vehicle: '', year: '', message: '' });
     setContactSending(false);
   };
 
@@ -195,7 +195,7 @@ export default function HomePage() {
           Auto<span className="text-red-600">Alma</span>
         </h1>
 
-        <p className="text-zinc-400 text-sm md:text-base font-bold max-w-lg mb-2 leading-relaxed">
+        <p className="text-white text-sm md:text-base font-bold max-w-lg mb-2 leading-relaxed">
           Máme možno prvý autoservis,
         </p>
         <p className="text-white text-base md:text-lg font-black italic max-w-lg mb-10">
@@ -220,7 +220,7 @@ export default function HomePage() {
                 <span className="text-4xl md:text-5xl shrink-0 mt-0.5">{b.icon}</span>
                 <div>
                   <p className="text-white text-sm md:text-base font-black uppercase italic tracking-tight leading-tight mb-2 group-hover:text-red-500 transition-colors">{b.title}</p>
-                  <p className="text-zinc-500 text-xs md:text-sm font-bold leading-relaxed">{b.desc}</p>
+                  <p className="text-zinc-300 text-xs md:text-sm font-bold leading-relaxed">{b.desc}</p>
                 </div>
               </div>
             ))}
@@ -233,7 +233,7 @@ export default function HomePage() {
         >
           Aktivovať Moju Garáž — zadarmo
         </Link>
-        <p className="text-zinc-700 text-[9px] font-black uppercase tracking-widest mt-4">
+        <p className="text-zinc-400 text-[9px] font-black uppercase tracking-widest mt-4">
           Vytvorí vám ju servis po prvej návšteve
         </p>
       </section>
@@ -244,7 +244,7 @@ export default function HomePage() {
           {slogans.map((s, i) => (
             <div key={i}>
               <p className="text-white font-black uppercase italic text-lg tracking-tight">{s.main}</p>
-              <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-1">{s.sub}</p>
+              <p className="text-zinc-300 text-xs font-bold uppercase tracking-widest mt-1">{s.sub}</p>
             </div>
           ))}
         </div>
@@ -276,7 +276,7 @@ export default function HomePage() {
                         className="w-full text-left flex items-center gap-3 group/item py-1 px-2 -mx-2 rounded-lg hover:bg-white/5 transition-all"
                       >
                         <span className="w-1.5 h-1.5 bg-blue-500/50 group-hover/item:bg-red-500 rounded-full shrink-0 transition-colors" />
-                        <span className="text-zinc-500 group-hover/item:text-white text-sm font-bold transition-colors">
+                        <span className="text-zinc-300 group-hover/item:text-white text-sm font-bold transition-colors">
                           {item}
                         </span>
                         <span className="ml-auto text-zinc-800 group-hover/item:text-blue-400 text-xs transition-colors opacity-0 group-hover/item:opacity-100">→</span>
@@ -355,7 +355,7 @@ export default function HomePage() {
             <div className="text-center mb-16">
               <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Orientačné ceny</p>
               <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Cenník</h2>
-              <p className="text-zinc-500 text-sm font-bold mt-4 max-w-lg mx-auto">Ceny sú orientačné a závisia od konkrétneho vozidla. Presná cena vždy po diagnostike.</p>
+              <p className="text-zinc-300 text-sm font-bold mt-4 max-w-lg mx-auto">Ceny sú orientačné a závisia od konkrétneho vozidla. Presná cena vždy po diagnostike.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {cennik.map((cat, ci) => (
@@ -368,8 +368,8 @@ export default function HomePage() {
                     {(cat.items || []).map((item, ii) => (
                       <div key={ii} className="px-8 py-4 flex items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors">
                         <div>
-                          <p className="text-zinc-300 text-sm font-bold">{item.name}</p>
-                          {item.note && <p className="text-zinc-600 text-[11px] font-bold mt-0.5">{item.note}</p>}
+                          <p className="text-white text-sm font-bold">{item.name}</p>
+                          {item.note && <p className="text-zinc-400 text-[11px] font-bold mt-0.5">{item.note}</p>}
                         </div>
                         <span className="text-red-500 font-black text-sm shrink-0">{item.price}</span>
                       </div>
@@ -378,7 +378,7 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            <p className="text-center text-zinc-700 text-[10px] font-black uppercase tracking-widest mt-10">
+            <p className="text-center text-zinc-400 text-[10px] font-black uppercase tracking-widest mt-10">
               Hodinová sadzba · Práce účtované podľa skutočného času · Bez skrytých poplatkov
             </p>
           </div>
@@ -391,14 +391,14 @@ export default function HomePage() {
           <div className="text-center mb-14">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Rýchly kontakt</p>
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Napíšte nám</h2>
-            <p className="text-zinc-500 font-bold text-sm mt-4">Odpovieme do 24 hodín v pracovné dni.</p>
+            <p className="text-zinc-300 font-bold text-sm mt-4">Odpovieme do 24 hodín v pracovné dni.</p>
           </div>
 
           {contactSent ? (
             <div className="bg-zinc-950 border border-green-900/50 rounded-[2rem] p-12 text-center">
               <div className="text-5xl mb-4">✅</div>
               <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-2">Správa odoslaná</h3>
-              <p className="text-zinc-500 font-bold text-sm mb-6">Ozveme sa vám čo najskôr.</p>
+              <p className="text-zinc-300 font-bold text-sm mb-6">Ozveme sa vám čo najskôr.</p>
               <button
                 onClick={() => setContactSent(false)}
                 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:text-white transition-all border border-zinc-800 hover:border-zinc-600 px-5 py-2 rounded-xl"
@@ -411,7 +411,7 @@ export default function HomePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Meno *</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Meno *</label>
                   <input
                     required
                     value={contactForm.name}
@@ -421,7 +421,7 @@ export default function HomePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">E-mail *</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">E-mail *</label>
                   <input
                     required
                     type="email"
@@ -432,7 +432,18 @@ export default function HomePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Vozidlo</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Telefón *</label>
+                  <input
+                    required
+                    type="tel"
+                    value={contactForm.phone}
+                    onChange={e => setContactForm(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="+421 900 000 000"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Vozidlo</label>
                   <input
                     value={contactForm.vehicle}
                     onChange={e => setContactForm(p => ({ ...p, vehicle: e.target.value }))}
@@ -441,12 +452,24 @@ export default function HomePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">ŠPZ</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">ŠPZ</label>
                   <input
                     value={contactForm.plate}
                     onChange={e => setContactForm(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
                     placeholder="BA123AB"
                     className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors tracking-widest"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Rok výroby</label>
+                  <input
+                    type="number"
+                    min="1980"
+                    max="2026"
+                    value={contactForm.year}
+                    onChange={e => setContactForm(p => ({ ...p, year: e.target.value }))}
+                    placeholder="napr. 2018"
+                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-700 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -464,7 +487,7 @@ export default function HomePage() {
               </div>
 
               <div className="flex items-center justify-between gap-4 pt-2">
-                <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest">* povinné polia</p>
+                <p className="text-zinc-400 text-[10px] font-black uppercase tracking-widest">* povinné polia</p>
                 <button
                   type="submit"
                   disabled={contactSending}
@@ -494,14 +517,14 @@ export default function HomePage() {
                 <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-4">📞 Telefón</p>
                 <a href="tel:0940449449" className="flex flex-col group mb-4">
                   <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0940 449 449</span>
-                  <span className="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mt-1">Christian Flickinger</span>
-                  <span className="text-zinc-700 font-bold text-[9px] uppercase tracking-widest">Prijímací technik</span>
+                  <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Christian Flickinger</span>
+                  <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Prijímací technik</span>
                 </a>
                 <div className="h-px bg-zinc-900 mb-4" />
                 <a href="tel:0908647227" className="flex flex-col group">
                   <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0908 647 227</span>
-                  <span className="text-zinc-500 font-bold text-[10px] uppercase tracking-widest mt-1">Maroš Jurkovič</span>
-                  <span className="text-zinc-700 font-bold text-[9px] uppercase tracking-widest">Diagnostik</span>
+                  <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Maroš Jurkovič</span>
+                  <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Diagnostik</span>
                 </a>
               </div>
             </div>
@@ -516,8 +539,8 @@ export default function HomePage() {
               <span className="text-4xl mb-4 block">📍</span>
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Adresa</p>
               <p className="text-white font-black text-xl group-hover:text-red-500 transition-colors">Svornosti 119</p>
-              <p className="text-zinc-500 font-bold text-sm mt-2">821 06 Bratislava</p>
-              <p className="text-zinc-600 font-bold text-[10px] uppercase tracking-widest mt-3">Po–Pi 8:00–17:00</p>
+              <p className="text-zinc-300 font-bold text-sm mt-2">821 06 Bratislava</p>
+              <p className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-3">Po–Pi 8:00–17:00</p>
             </a>
 
             {/* E-MAILY */}
@@ -525,17 +548,17 @@ export default function HomePage() {
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest">✉️ E-mail</p>
               <a href="mailto:autoalma@autoalma.sk" className="group">
                 <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">autoalma@autoalma.sk</p>
-                <p className="text-zinc-600 font-bold text-[9px] uppercase tracking-widest mt-1">Servis / Všeobecné</p>
+                <p className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest mt-1">Servis / Všeobecné</p>
               </a>
               <div className="h-px bg-zinc-900" />
               <a href="mailto:maros.jurkovic@autoalma.sk" className="group">
                 <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">maros.jurkovic@autoalma.sk</p>
-                <p className="text-zinc-600 font-bold text-[9px] uppercase tracking-widest mt-1">Maroš Jurkovič · Diagnostik</p>
+                <p className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest mt-1">Maroš Jurkovič · Diagnostik</p>
               </a>
               <div className="h-px bg-zinc-900" />
               <a href="mailto:christian.flickinger@autoalma.sk" className="group">
                 <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">christian.flickinger@autoalma.sk</p>
-                <p className="text-zinc-600 font-bold text-[9px] uppercase tracking-widest mt-1">Christian Flickinger · Príjem</p>
+                <p className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest mt-1">Christian Flickinger · Príjem</p>
               </a>
             </div>
 
@@ -545,13 +568,13 @@ export default function HomePage() {
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Fakturačné údaje</p>
               <p className="text-white font-black text-base">Autoalma s.r.o.</p>
               <div className="mt-2 mb-4">
-                <p className="text-zinc-400 font-bold text-sm">Tilgnerova 712/3</p>
-                <p className="text-zinc-400 font-bold text-sm">841 04 Bratislava</p>
+                <p className="text-zinc-300 font-bold text-sm">Tilgnerova 712/3</p>
+                <p className="text-zinc-300 font-bold text-sm">841 04 Bratislava</p>
               </div>
               <div className="space-y-1 border-t border-zinc-900 pt-4">
-                <p className="text-zinc-500 font-bold text-sm">IČO: 46044876</p>
-                <p className="text-zinc-500 font-bold text-sm">DIČ: 2023194316</p>
-                <p className="text-zinc-500 font-bold text-sm">IČ DPH: SK2023194316</p>
+                <p className="text-zinc-300 font-bold text-sm">IČO: 46044876</p>
+                <p className="text-zinc-300 font-bold text-sm">DIČ: 2023194316</p>
+                <p className="text-zinc-300 font-bold text-sm">IČ DPH: SK2023194316</p>
               </div>
             </div>
           </div>
