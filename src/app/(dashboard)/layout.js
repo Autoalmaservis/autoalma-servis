@@ -87,6 +87,8 @@ export default function DashboardLayout({ children }) {
 
   useEffect(() => {
     if (pathname.startsWith('/zakazky')) { setJobUpdateCount(0); setNotifications([]); }
+    const match = pathname.match(/\/zakazky\/([^/]+)/);
+    if (match) setFindingJobs(prev => prev.filter(j => j.id !== match[1]));
     setIsMobileOpen(false);
   }, [pathname]);
 

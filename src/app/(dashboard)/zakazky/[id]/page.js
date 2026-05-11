@@ -1807,16 +1807,18 @@ export default function DetailZakazkyPage() {
               {(() => {
                 const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
                 const q = nd(customerSearch);
-                const filtered = !q
-                  ? customersList
-                  : customersList.filter(c =>
-                      nd(c.name).includes(q) ||
-                      nd(c.company_name).includes(q) ||
-                      nd(c.city).includes(q) ||
-                      (c.phone || '').replace(/\s/g, '').includes(q.replace(/\s/g, '')) ||
-                      (c.email || '').toLowerCase().includes(q) ||
-                      (c.ico || '').includes(q)
-                    );
+                if (!q) return (
+                  <p className="text-center text-zinc-600 text-[10px] uppercase tracking-widest py-8">Začni písať pre vyhľadávanie...</p>
+                );
+
+                const filtered = customersList.filter(c =>
+                  nd(c.name).includes(q) ||
+                  nd(c.company_name).includes(q) ||
+                  nd(c.city).includes(q) ||
+                  (c.phone || '').replace(/\s/g, '').includes(q.replace(/\s/g, '')) ||
+                  (c.email || '').toLowerCase().includes(q) ||
+                  (c.ico || '').includes(q)
+                );
 
                 if (!filtered.length) return (
                   <p className="text-center text-zinc-600 text-[10px] uppercase tracking-widest py-8">Žiadny zákazník nenájdený</p>
