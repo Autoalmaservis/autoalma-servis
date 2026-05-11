@@ -213,14 +213,16 @@ export default function GarazPage() {
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
-        .ilike('car_details->>plate', plate) 
+        .ilike('car_details->>plate', plate)
+        .eq('is_official', true)
         .order('created_at', { ascending: false });
-      
+
       if (error || (data && data.length === 0)) {
          const { data: fallbackData } = await supabase
           .from('invoices')
           .select('*')
           .eq('plate_number', plate)
+          .eq('is_official', true)
           .order('created_at', { ascending: false });
           setVehicleInvoices(fallbackData || []);
       } else {
@@ -790,46 +792,26 @@ export default function GarazPage() {
                <div className="py-20 text-center animate-pulse text-zinc-500 uppercase tracking-widest text-xs font-bold italic">Sťahujem dáta faktúr...</div>
             ) : vehicleInvoices.length === 0 ? (
                <div className="py-20 text-center text-zinc-600 uppercase text-xs italic border-2 border-dashed border-zinc-800 rounded-[2rem]">Zatiaľ neboli k tomuto vozidlu vystavené žiadne faktúry.</div>
-            ) : (() => {
-               const officialInvoices = vehicleInvoices.filter(inv => !String(inv.invoice_number).startsWith('A'));
-               const deferredInvoices = vehicleInvoices.filter(inv => String(inv.invoice_number).startsWith('A'));
-               const InvoiceRow = ({ inv }) => (
-                 <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all font-bold italic">
-                    <div>
-                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo dokladu</p>
-                      <p className="text-lg font-black uppercase tracking-tight font-bold italic">{inv.invoice_number}</p>
-                      <p className="text-[10px] text-zinc-600 mt-1 font-bold italic">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
-                    </div>
-                    <div className="text-right flex items-center gap-6 font-bold italic">
-                      <div>
-                        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Suma s DPH</p>
-                        <p className="text-2xl font-black text-white italic font-bold">{inv.total_amount?.toFixed(2)} €</p>
-                      </div>
-                      <button onClick={() => router.push(`/garaz/faktura/${inv.id}`)} className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg font-bold italic">👁️</button>
-                    </div>
-                 </div>
-               );
-               return (
-                 <div className="space-y-8 font-bold uppercase">
-                   {officialInvoices.length > 0 && (
+            ) : (
+               <div className="space-y-3">
+                 {vehicleInvoices.map(inv => (
+                   <div key={inv.id} className="bg-black/40 border border-zinc-800 p-6 rounded-[2rem] flex justify-between items-center group hover:border-red-600/30 transition-all font-bold italic">
                      <div>
-                       <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.25em] mb-3 ml-1">Faktúry</p>
-                       <div className="space-y-3">
-                         {officialInvoices.map(inv => <InvoiceRow key={inv.id} inv={inv} />)}
-                       </div>
+                       <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1">Číslo faktúry</p>
+                       <p className="text-lg font-black uppercase tracking-tight font-bold italic">{inv.invoice_number}</p>
+                       <p className="text-[10px] text-zinc-600 mt-1 font-bold italic">{new Date(inv.created_at).toLocaleDateString('sk-SK')}</p>
                      </div>
-                   )}
-                   {deferredInvoices.length > 0 && (
-                     <div>
-                       <p className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.25em] mb-3 ml-1">Odložené faktúry</p>
-                       <div className="space-y-3">
-                         {deferredInvoices.map(inv => <InvoiceRow key={inv.id} inv={inv} />)}
+                     <div className="text-right flex items-center gap-6 font-bold italic">
+                       <div>
+                         <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-1 font-bold italic">Suma s DPH</p>
+                         <p className="text-2xl font-black text-white italic font-bold">{inv.total_amount?.toFixed(2)} €</p>
                        </div>
+                       <button onClick={() => router.push(`/garaz/faktura/${inv.id}`)} className="bg-white text-black p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-lg font-bold italic">👁️</button>
                      </div>
-                   )}
-                 </div>
-               );
-            })()}
+                   </div>
+                 ))}
+               </div>
+            )}
           </div>
         </div>
       )}

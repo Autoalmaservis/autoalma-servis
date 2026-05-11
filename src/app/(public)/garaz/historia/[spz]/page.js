@@ -77,6 +77,7 @@ export default function HistoriaVozidlaPage() {
       .from('invoices')
       .select('*')
       .eq('job_id', jobId)
+      .eq('is_official', true)
       .maybeSingle();
 
     if (!iError && invoice) {

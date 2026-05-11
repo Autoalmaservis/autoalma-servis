@@ -915,7 +915,7 @@ export default function DetailZakazkyPage() {
         <div className="flex justify-between items-start border-b-2 border-red-600 pb-8 mb-8 font-bold">
           <div>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter leading-none">AutoAlma <span className="text-red-600">Servis</span></h1>
-            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-3 italic uppercase">Slovenská ulica 12, Košice | www.autoalma.sk</p>
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-3 italic uppercase">{[myCompany.address, myCompany.zip, myCompany.city].filter(Boolean).join(', ') || 'ul. Svornosti 119, 821 06 Bratislava'}{myCompany.web ? ` | ${myCompany.web}` : ''}</p>
           </div>
           <div className="text-right">
             <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border inline-block mb-3 ${zakazka.status === 'Dokončené' ? 'border-green-600 text-green-500' : 'border-amber-600 text-amber-500'}`}>{zakazka.status}</span>
@@ -939,6 +939,9 @@ export default function DetailZakazkyPage() {
           </div>
           
           <div className="text-right">
+            <div className="flex items-center justify-end mb-3">
+              <button onClick={() => { setShowChangeCustomer(true); fetchCustomersList(); }} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest">✏️ Zmeniť odberateľa</button>
+            </div>
             <h4 className="text-blue-500 uppercase text-[10px] mb-3 font-black tracking-widest italic">Odberateľ</h4>
             <p className="text-lg font-black italic">{zakazka.company_name || zakazka.customer_name}</p>
             {/* DOPLNENÁ ADRESA ODBERATEĽA */}
@@ -1032,10 +1035,7 @@ export default function DetailZakazkyPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-bold">
           <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">Partner a Technika</h2>
-                <button onClick={() => { setShowChangeCustomer(true); fetchCustomersList(); }} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest">✏️ Zmeniť odberateľa</button>
-              </div>
+              <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">Partner a Technika</h2>
               <div className="bg-black/30 p-8 rounded-3xl border border-zinc-800 space-y-4">
                 <div>
                   <p className="text-2xl font-black uppercase italic tracking-tighter leading-none">{zakazka.customer_name}</p>
@@ -1804,12 +1804,25 @@ export default function DetailZakazkyPage() {
             />
 
             <div className="overflow-y-auto space-y-2 flex-1 pr-1">
-              {customersList
-                .filter(c => {
-                  const q = customerSearch.toLowerCase();
-                  return !q || (c.name || '').toLowerCase().includes(q) || (c.company_name || '').toLowerCase().includes(q) || (c.phone || '').includes(q);
-                })
-                .map(cust => (
+              {(() => {
+                const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                const q = nd(customerSearch);
+                const filtered = !q
+                  ? customersList
+                  : customersList.filter(c =>
+                      nd(c.name).includes(q) ||
+                      nd(c.company_name).includes(q) ||
+                      nd(c.city).includes(q) ||
+                      (c.phone || '').replace(/\s/g, '').includes(q.replace(/\s/g, '')) ||
+                      (c.email || '').toLowerCase().includes(q) ||
+                      (c.ico || '').includes(q)
+                    );
+
+                if (!filtered.length) return (
+                  <p className="text-center text-zinc-600 text-[10px] uppercase tracking-widest py-8">Žiadny zákazník nenájdený</p>
+                );
+
+                return filtered.map(cust => (
                   <button
                     key={cust.id}
                     onClick={() => handleChangeCustomer(cust)}
@@ -1819,18 +1832,15 @@ export default function DetailZakazkyPage() {
                     <div className="min-w-0">
                       <p className="font-black uppercase text-sm group-hover:text-white truncate">{cust.name}</p>
                       {cust.company_name && <p className="text-[10px] text-zinc-400 group-hover:text-blue-200 uppercase tracking-widest">{cust.company_name}</p>}
-                      <p className="text-[9px] text-zinc-600 group-hover:text-blue-300 mt-0.5">{cust.phone} {cust.email && `· ${cust.email}`}</p>
+                      <p className="text-[9px] text-zinc-600 group-hover:text-blue-300 mt-0.5">
+                        {cust.phone}{cust.email ? ` · ${cust.email}` : ''}{cust.city ? ` · ${cust.city}` : ''}
+                      </p>
+                      {cust.ico && <p className="text-[9px] text-zinc-700 group-hover:text-blue-400 mt-0.5">IČO: {cust.ico}</p>}
                     </div>
                     <span className="text-zinc-600 group-hover:text-white ml-3 shrink-0 text-lg">→</span>
                   </button>
-                ))
-              }
-              {customersList.filter(c => {
-                const q = customerSearch.toLowerCase();
-                return !q || (c.name || '').toLowerCase().includes(q) || (c.company_name || '').toLowerCase().includes(q) || (c.phone || '').includes(q);
-              }).length === 0 && (
-                <p className="text-center text-zinc-600 text-[10px] uppercase tracking-widest py-8">Žiadny zákazník nenájdený</p>
-              )}
+                ));
+              })()}
             </div>
           </div>
         </div>

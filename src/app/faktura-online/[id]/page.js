@@ -7,10 +7,30 @@ export default function FakturaOnlinePage() {
   const { id } = useParams();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [myCompany, setMyCompany] = useState({ name: '', address: '', city: '', zip: '', ico: '', dic: '', web: '' });
 
   useEffect(() => {
     if (id) fetchInvoice();
+    fetchCompany();
   }, [id]);
+
+  const fetchCompany = async () => {
+    const keys = ['company_name', 'company_address', 'company_city', 'company_zip', 'company_ico', 'company_dic', 'company_web'];
+    const { data } = await supabase.from('business_settings').select('id, value').in('id', keys);
+    if (data) {
+      const m = {};
+      data.forEach(r => { m[r.id] = r.value; });
+      setMyCompany({
+        name: m.company_name || 'AutoAlma Servis s.r.o.',
+        address: m.company_address || '',
+        city: m.company_city || '',
+        zip: m.company_zip || '',
+        ico: m.company_ico || '',
+        dic: m.company_dic || '',
+        web: m.company_web || '',
+      });
+    }
+  };
 
   const fetchInvoice = async () => {
     const { data, error } = await supabase
@@ -50,11 +70,11 @@ export default function FakturaOnlinePage() {
         {/* Hlavička */}
         <div className="flex justify-between items-start border-b-2 border-zinc-100 pb-10 mb-10">
           <div>
-            <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">AutoAlma <span className="text-blue-600">Servis</span></h1>
+            <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">{myCompany.name || 'AutoAlma Servis s.r.o.'}</h1>
             <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest leading-relaxed">
-              Slovenská ulica 12, Košice<br/>
-              IČO: 12345678 | DIČ: 2021222324<br/>
-              www.autoalma.sk
+              {[myCompany.address, myCompany.zip, myCompany.city].filter(Boolean).join(', ') || 'ul. Svornosti 119, 821 06 Bratislava'}<br/>
+              {myCompany.ico && <>IČO: {myCompany.ico}{myCompany.dic ? ` | DIČ: ${myCompany.dic}` : ''}<br/></>}
+              {myCompany.web || 'www.autoalma.sk'}
             </p>
           </div>
           <div className="text-right">
