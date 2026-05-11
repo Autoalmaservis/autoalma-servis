@@ -804,8 +804,8 @@ export default function DetailZakazkyPage() {
       const { data: invData, error: invError } = await supabase.from('invoices').insert([invoicePayload]).select().single();
       if (invError) throw invError;
 
-      // Ak hotovosť a oficiálna faktúra → zapísať do kasy
-      if (isOfficial && paymentMethod === 'cash') {
+      // Ak hotovosť → zapísať do kasy (bez ohľadu na typ dokladu)
+      if (paymentMethod === 'cash') {
         const today = teraz.toISOString().split('T')[0];
         await supabase.from('kasa_entries').insert([{
           date: today,
