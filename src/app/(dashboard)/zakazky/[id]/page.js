@@ -36,6 +36,10 @@ export default function DetailZakazkyPage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [mechanicSplits, setMechanicSplits] = useState([]);
+  const [savingSplits, setSavingSplits] = useState(false);
+  const [showAddMechanic, setShowAddMechanic] = useState(false);
+  const [newMechanicId, setNewMechanicId] = useState('');
   const [discountType, setDiscountType] = useState('pct');
   const [discountValue, setDiscountValue] = useState('');
   const [editingComplaints, setEditingComplaints] = useState(false);
@@ -192,6 +196,15 @@ export default function DetailZakazkyPage() {
         const enrichedData = { ...data, customer_id: finalCustomerId };
         setZakazka(enrichedData);
         await supabase.from('job_tickets').update({ has_unread_finding: false }).eq('id', id);
+        // Inicializuj splits z DB alebo z assigned_worker_id
+        if (data.mechanic_splits && data.mechanic_splits.length > 0) {
+          setMechanicSplits(data.mechanic_splits);
+        } else if (data.assigned_worker_id) {
+          const { data: itemsData } = await supabase.from('job_items').select('quantity, type').eq('job_id', id).eq('type', 'Práca');
+          const totalHrs = (itemsData || []).reduce((a, i) => a + Number(i.quantity), 0);
+          const emp = (await supabase.from('employees').select('id, name').eq('id', data.assigned_worker_id).maybeSingle()).data;
+          if (emp) setMechanicSplits([{ employee_id: emp.id, name: emp.name, hours: totalHrs }]);
+        }
         return enrichedData;
       }
     } catch (err) { console.error("Chyba detailu:", err.message); }
@@ -804,6 +817,37 @@ export default function DetailZakazkyPage() {
     if (!newTaskText.trim()) return;
     const { error } = await supabase.from('job_tasks').insert([{ job_id: id, task_description: newTaskText, is_completed: false }]);
     if (!error) { setNewTaskText(''); fetchTasks(); }
+  };
+
+  const saveMechanicSplits = async (splits) => {
+    setSavingSplits(true);
+    await supabase.from('job_tickets').update({ mechanic_splits: splits }).eq('id', id);
+    setSavingSplits(false);
+  };
+
+  const handleAddMechanic = () => {
+    if (!newMechanicId) return;
+    const emp = employees.find(e => e.id === newMechanicId);
+    if (!emp || mechanicSplits.find(s => s.employee_id === newMechanicId)) return;
+    const updated = [...mechanicSplits, { employee_id: emp.id, name: emp.name, hours: 0 }];
+    setMechanicSplits(updated);
+    saveMechanicSplits(updated);
+    setNewMechanicId('');
+    setShowAddMechanic(false);
+  };
+
+  const handleRemoveMechanic = (employeeId) => {
+    const updated = mechanicSplits.filter(s => s.employee_id !== employeeId);
+    setMechanicSplits(updated);
+    saveMechanicSplits(updated);
+  };
+
+  const handleSplitHoursChange = (employeeId, val) => {
+    setMechanicSplits(prev => prev.map(s => s.employee_id === employeeId ? { ...s, hours: val } : s));
+  };
+
+  const handleSplitHoursBlur = () => {
+    saveMechanicSplits(mechanicSplits);
   };
 
   const saveComplaints = async () => {
@@ -1420,7 +1464,73 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        <div className="mt-12 no-print font-bold space-y-4">
+        {/* HODINY MECHANIKOV */}
+        <div className="mt-12 no-print font-bold">
+          {(() => {
+            const totalWorkHours = items.filter(i => i.type === 'Práca').reduce((a, i) => a + Number(i.quantity), 0);
+            const splitTotal = mechanicSplits.reduce((a, s) => a + Number(s.hours), 0);
+            const remaining = Math.max(0, totalWorkHours - splitTotal);
+            return (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-6 mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-yellow-400 font-black uppercase text-[10px] tracking-widest italic">Hodiny mechanikov</h2>
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                    Spolu z práce: <span className="text-white">{totalWorkHours.toFixed(2)} hod</span>
+                    {remaining > 0.001 && <span className="text-orange-400 ml-2">· nerozdelených: {remaining.toFixed(2)} hod</span>}
+                  </span>
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  {mechanicSplits.map(s => (
+                    <div key={s.employee_id} className="flex items-center gap-3 bg-black/30 px-4 py-3 rounded-2xl border border-zinc-800">
+                      <span className="flex-1 text-sm font-black uppercase italic tracking-tight">{s.name}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.25"
+                        value={s.hours}
+                        onChange={e => handleSplitHoursChange(s.employee_id, e.target.value)}
+                        onBlur={handleSplitHoursBlur}
+                        className="w-20 bg-zinc-800 border border-zinc-700 focus:border-yellow-500 px-3 py-1.5 rounded-xl text-white text-[12px] font-black outline-none text-right"
+                      />
+                      <span className="text-zinc-500 text-[10px] font-black uppercase">hod</span>
+                      {mechanicSplits.length > 1 && (
+                        <button onClick={() => handleRemoveMechanic(s.employee_id)} className="text-zinc-700 hover:text-red-500 transition-colors text-lg px-1">✕</button>
+                      )}
+                    </div>
+                  ))}
+                  {mechanicSplits.length === 0 && (
+                    <p className="text-zinc-600 text-[10px] uppercase tracking-widest text-center py-2">Žiadny mechanik priradený</p>
+                  )}
+                </div>
+
+                {showAddMechanic ? (
+                  <div className="flex gap-2 items-center">
+                    <select
+                      value={newMechanicId}
+                      onChange={e => setNewMechanicId(e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-700 focus:border-yellow-500 px-3 py-2 rounded-xl text-white text-[11px] font-black outline-none"
+                    >
+                      <option value="">Vybrať mechanika...</option>
+                      {employees.filter(e => !mechanicSplits.find(s => s.employee_id === e.id)).map(e => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                    <button onClick={handleAddMechanic} className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Pridať</button>
+                    <button onClick={() => { setShowAddMechanic(false); setNewMechanicId(''); }} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Zrušiť</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowAddMechanic(true)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-yellow-400 border border-zinc-800 hover:border-yellow-600 px-4 py-2 rounded-xl transition-all tracking-widest">
+                    + Pridať ďalšieho mechanika
+                  </button>
+                )}
+                {savingSplits && <p className="text-[9px] text-zinc-600 uppercase tracking-widest mt-2">Ukladám...</p>}
+              </div>
+            );
+          })()}
+        </div>
+
+        <div className="no-print font-bold space-y-4">
             {zakazka.status !== 'Dokončené' && zakazka.status !== 'Archivované' && (
                 <button
                     onClick={() => updateJobStatus('Dokončené')}
