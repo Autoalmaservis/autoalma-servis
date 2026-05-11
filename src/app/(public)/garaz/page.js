@@ -64,6 +64,8 @@ export default function GarazPage() {
     mileage: ''
   });
 
+  const [vehicleForms, setVehicleForms] = useState([]);
+
   // --- STAVY PRE EDITÁCIU PROFILU (ZACHOVANÉ) ---
   const [reviewOpen, setReviewOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -140,6 +142,15 @@ export default function GarazPage() {
           
           if (vehError) throw vehError;
           setVehicles(vehicleData || []);
+
+          if (vehicleData?.length) {
+            const plates = vehicleData.map(v => v.license_plate).filter(Boolean);
+            const { data: jobRows } = await supabase.from('job_tickets').select('id, plate_number').in('plate_number', plates);
+            if (jobRows?.length) {
+              const { data: forms } = await supabase.from('job_forms').select('*, job_tickets(plate_number)').in('job_id', jobRows.map(j => j.id)).order('created_at', { ascending: false });
+              setVehicleForms(forms || []);
+            }
+          }
         }
       } catch (err) {
         console.error("Chyba pri načítaní:", err);
@@ -461,6 +472,36 @@ export default function GarazPage() {
     }
   };
 
+  const printSavedForm = (f) => {
+    const d = f.filled_data || {};
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${f.template_name}</title>
+    <style>body{font-family:Arial,sans-serif;margin:20px;color:#000;font-size:10pt}
+    h1{font-size:14pt;font-weight:900;text-transform:uppercase;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px}
+    th,td{border:1px solid #999;padding:5px 8px;text-align:left;font-size:9pt}
+    th{background:#f0f0f0;font-weight:700;width:30%}
+    h2{font-size:10pt;font-weight:900;text-transform:uppercase;background:#000;color:#fff;padding:4px 8px;margin:12px 0 4px}
+    @media print{body{margin:10mm}}</style></head><body>
+    <h1>${f.template_name}</h1>
+    <h2>Odovzdávajúci</h2>
+    <table><tr><th>Meno / Firma</th><td>${d.customer_name||''}</td></tr>
+    <tr><th>Adresa</th><td>${d.customer_address||''}</td></tr>
+    <tr><th>Tel. číslo</th><td>${d.customer_phone||''}</td><th>IČO</th><td>${d.customer_ico||''}</td></tr></table>
+    <h2>Vozidlo</h2>
+    <table><tr><th>Značka</th><td>${d.brand||''}</td><th>Model</th><td>${d.model||''}</td></tr>
+    <tr><th>EČV</th><td>${d.plate||''}</td><th>Rok výroby</th><td>${d.year||''}</td></tr>
+    <tr><th>Palivo</th><td>${d.fuel||''}</td><th>KM</th><td>${d.mileage||''}</td></tr>
+    <tr><th>KW</th><td>${d.engine_power||''}</td><th>Objem motora</th><td>${d.engine_volume||''}</td></tr>
+    ${d.note?`<tr><th>Poznámka</th><td colspan="3">${d.note}</td></tr>`:''}</table>
+    ${(d.measurements||[]).length?`<h2>Merania a hodnoty</h2><table>${(d.measurements).map(m=>`<tr><th>${m.label||''}</th><td>${m.value||''}</td></tr>`).join('')}</table>`:''}
+    <h2>Dátumy</h2>
+    <table><tr><th>Prevzaté dňa</th><td>${d.date_received||''}</td><th>Odovzdané dňa</th><td>${d.date_returned||''}</td></tr></table>
+    <script>window.onload=()=>{window.print();}<\/script></body></html>`);
+    w.document.close();
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/');
@@ -560,6 +601,30 @@ export default function GarazPage() {
                   🔧 Objednať sa na servis
                 </button>
               </div>
+
+              {(() => {
+                const plateForms = vehicleForms.filter(f => f.job_tickets?.plate_number === vehicle.license_plate);
+                if (!plateForms.length) return null;
+                return (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-1">Protokoly a dokumenty</p>
+                    {plateForms.map(f => (
+                      <div key={f.id} className="flex items-center justify-between bg-black/40 border border-zinc-800 px-5 py-3 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                          <span>📋</span>
+                          <div>
+                            <p className="font-black uppercase text-xs text-white">{f.template_name}</p>
+                            <p className="text-[9px] text-zinc-600 uppercase">{new Date(f.created_at).toLocaleDateString('sk-SK')}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => printSavedForm(f)} className="text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-all px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500">
+                          🖨️ Vytlačiť
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           ))}
 

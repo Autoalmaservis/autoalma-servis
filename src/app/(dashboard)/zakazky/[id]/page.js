@@ -35,6 +35,7 @@ export default function DetailZakazkyPage() {
   const [savedForms, setSavedForms] = useState([]);
   const [showFormSelector, setShowFormSelector] = useState(false);
   const [showFormFill, setShowFormFill] = useState(false);
+  const [formViewOnly, setFormViewOnly] = useState(false);
   const [activeFormTemplate, setActiveFormTemplate] = useState(null);
   const [formFillData, setFormFillData] = useState({
     customer_name: '', customer_address: '', customer_phone: '', customer_ico: '',
@@ -283,15 +284,27 @@ export default function DetailZakazkyPage() {
     if (data) setSavedForms(data);
   };
 
-  const openFormFill = (template) => {
+  const openFormFill = async (template) => {
     const z = zakazka || {};
     const brandParts = (z.car_brand_model || '').split(' ');
+
+    let custAddress = z.address || z.customer_address || '';
+    let custIco = z.ico || '';
+    if (z.customer_id) {
+      const { data: cust } = await supabase.from('customers').select('address, city, zip, ico, company_name').eq('id', z.customer_id).maybeSingle();
+      if (cust) {
+        custAddress = [cust.address, cust.zip, cust.city].filter(Boolean).join(', ') || custAddress;
+        custIco = cust.ico || custIco;
+      }
+    }
+
     setActiveFormTemplate(template);
+    setFormViewOnly(false);
     setFormFillData({
-      customer_name: z.customer_name || '',
-      customer_address: '',
+      customer_name: z.company_name || z.customer_name || '',
+      customer_address: custAddress,
       customer_phone: z.customer_phone || '',
-      customer_ico: '',
+      customer_ico: custIco,
       brand: brandParts[0] || '',
       model: brandParts.slice(1).join(' ') || '',
       plate: z.plate_number || '',
@@ -301,7 +314,7 @@ export default function DetailZakazkyPage() {
       engine_volume: z.engine_volume || '',
       engine_power: z.engine_power || '',
       note: '',
-      date_received: new Date().toISOString().split('T')[0],
+      date_received: new Date(z.created_at || Date.now()).toISOString().split('T')[0],
       date_returned: '',
       measurements: [
         { label: 'Priechodnosť PRED', value: '' },
@@ -1483,11 +1496,14 @@ export default function DetailZakazkyPage() {
                 <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Formulár</p>
                 <h3 className="text-xl font-black uppercase italic tracking-tighter">{activeFormTemplate.name}</h3>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 items-center">
+                {formViewOnly && <span className="text-[9px] font-black uppercase text-zinc-600 tracking-widest border border-zinc-800 px-3 py-1.5 rounded-lg">Archív — len na čítanie</span>}
                 <button onClick={handlePrintForm} className="bg-zinc-800 hover:bg-white hover:text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">🖨️ Vytlačiť</button>
-                <button onClick={handleSaveForm} disabled={savingForm} className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40">
-                  {savingForm ? 'Ukladám...' : '💾 Uložiť do zákazky'}
-                </button>
+                {!formViewOnly && (
+                  <button onClick={handleSaveForm} disabled={savingForm} className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40">
+                    {savingForm ? 'Ukladám...' : '💾 Uložiť do zákazky'}
+                  </button>
+                )}
                 <button onClick={() => setShowFormFill(false)} className="bg-zinc-800 hover:bg-white hover:text-black p-3 rounded-full transition-all">✕</button>
               </div>
             </div>
@@ -1500,7 +1516,10 @@ export default function DetailZakazkyPage() {
                   {[['Meno / Názov spol.', 'customer_name'], ['Adresa', 'customer_address'], ['Tel. číslo', 'customer_phone'], ['IČO', 'customer_ico']].map(([label, key]) => (
                     <div key={key}>
                       <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">{label}</label>
-                      <input value={formFillData[key]} onChange={e => setFormFillData(p => ({...p, [key]: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                      {formViewOnly
+                        ? <p className="p-3 text-white text-sm font-bold">{formFillData[key] || '—'}</p>
+                        : <input value={formFillData[key]} onChange={e => setFormFillData(p => ({...p, [key]: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                      }
                     </div>
                   ))}
                 </div>
@@ -1513,13 +1532,19 @@ export default function DetailZakazkyPage() {
                   {[['Značka', 'brand'], ['Model', 'model'], ['EČV', 'plate'], ['Stav KM', 'mileage'], ['Rok výroby', 'year'], ['Palivo', 'fuel'], ['KW', 'engine_power'], ['Objem motora', 'engine_volume']].map(([label, key]) => (
                     <div key={key}>
                       <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">{label}</label>
-                      <input value={formFillData[key]} onChange={e => setFormFillData(p => ({...p, [key]: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                      {formViewOnly
+                        ? <p className="p-3 text-white text-sm font-bold">{formFillData[key] || '—'}</p>
+                        : <input value={formFillData[key]} onChange={e => setFormFillData(p => ({...p, [key]: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                      }
                     </div>
                   ))}
                 </div>
                 <div>
                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Poznámka</label>
-                  <textarea value={formFillData.note} onChange={e => setFormFillData(p => ({...p, note: e.target.value}))} rows={2} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold resize-none" />
+                  {formViewOnly
+                    ? <p className="p-3 text-white text-sm font-bold">{formFillData.note || '—'}</p>
+                    : <textarea value={formFillData.note} onChange={e => setFormFillData(p => ({...p, note: e.target.value}))} rows={2} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold resize-none" />
+                  }
                 </div>
               </section>
 
@@ -1527,14 +1552,23 @@ export default function DetailZakazkyPage() {
               <section className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-red-400">Merania a hodnoty</h4>
-                  <button type="button" onClick={() => setFormFillData(p => ({...p, measurements: [...p.measurements, { label: '', value: '' }]}))} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white transition-all">+ Pridať riadok</button>
+                  {!formViewOnly && <button type="button" onClick={() => setFormFillData(p => ({...p, measurements: [...p.measurements, { label: '', value: '' }]}))} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white transition-all">+ Pridať riadok</button>}
                 </div>
                 <div className="space-y-3">
-                  {formFillData.measurements.map((m, i) => (
+                  {(formFillData.measurements || []).map((m, i) => (
                     <div key={i} className="flex gap-3 items-center">
-                      <input placeholder="Názov merania" value={m.label} onChange={e => { const ms = [...formFillData.measurements]; ms[i] = {...ms[i], label: e.target.value}; setFormFillData(p => ({...p, measurements: ms})); }} className="flex-[2] bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-red-500 font-bold" />
-                      <input placeholder="Hodnota" value={m.value} onChange={e => { const ms = [...formFillData.measurements]; ms[i] = {...ms[i], value: e.target.value}; setFormFillData(p => ({...p, measurements: ms})); }} className="flex-1 bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-red-500 font-bold" />
-                      <button onClick={() => setFormFillData(p => ({...p, measurements: p.measurements.filter((_, j) => j !== i)}))} className="text-zinc-700 hover:text-red-500 transition-all font-black text-lg">×</button>
+                      {formViewOnly ? (
+                        <>
+                          <p className="flex-[2] p-3 text-white text-sm font-bold">{m.label || '—'}</p>
+                          <p className="flex-1 p-3 text-red-400 text-sm font-black">{m.value || '—'}</p>
+                        </>
+                      ) : (
+                        <>
+                          <input placeholder="Názov merania" value={m.label} onChange={e => { const ms = [...formFillData.measurements]; ms[i] = {...ms[i], label: e.target.value}; setFormFillData(p => ({...p, measurements: ms})); }} className="flex-[2] bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-red-500 font-bold" />
+                          <input placeholder="Hodnota" value={m.value} onChange={e => { const ms = [...formFillData.measurements]; ms[i] = {...ms[i], value: e.target.value}; setFormFillData(p => ({...p, measurements: ms})); }} className="flex-1 bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-red-500 font-bold" />
+                          <button onClick={() => setFormFillData(p => ({...p, measurements: p.measurements.filter((_, j) => j !== i)}))} className="text-zinc-700 hover:text-red-500 transition-all font-black text-lg">×</button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1546,11 +1580,17 @@ export default function DetailZakazkyPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Prevzaté dňa</label>
-                    <input type="date" value={formFillData.date_received} onChange={e => setFormFillData(p => ({...p, date_received: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                    {formViewOnly
+                      ? <p className="p-3 text-white text-sm font-bold">{formFillData.date_received ? new Date(formFillData.date_received).toLocaleDateString('sk-SK') : '—'}</p>
+                      : <input type="date" value={formFillData.date_received} onChange={e => setFormFillData(p => ({...p, date_received: e.target.value}))} style={{colorScheme:'dark'}} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                    }
                   </div>
                   <div>
                     <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Odovzdané dňa</label>
-                    <input type="date" value={formFillData.date_returned} onChange={e => setFormFillData(p => ({...p, date_returned: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                    {formViewOnly
+                      ? <p className="p-3 text-white text-sm font-bold">{formFillData.date_returned ? new Date(formFillData.date_returned).toLocaleDateString('sk-SK') : '—'}</p>
+                      : <input type="date" value={formFillData.date_returned} onChange={e => setFormFillData(p => ({...p, date_returned: e.target.value}))} style={{colorScheme:'dark'}} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                    }
                   </div>
                 </div>
               </section>
@@ -1583,9 +1623,10 @@ export default function DetailZakazkyPage() {
               <button onClick={() => {
                 setActiveFormTemplate({ id: f.template_id, name: f.template_name, pdf_url: null });
                 setFormFillData(f.filled_data);
+                setFormViewOnly(true);
                 setShowFormFill(true);
               }} className="text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-all px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500">
-                Otvoriť / Tlačiť
+                🖨️ Otvoriť / Tlačiť
               </button>
             </div>
           ))}
