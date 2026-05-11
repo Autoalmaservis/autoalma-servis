@@ -18,7 +18,6 @@ function fDate(d) {
   return d.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' });
 }
 
-// Vždy lokálny dátum — bez UTC posunu
 function toDateStr(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -32,10 +31,18 @@ export default function KasaPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalDay, setModalDay] = useState(null);
-  const [form, setForm] = useState({ type: 'vydaj', amount: '', description: '', spz: '' });
+  const [form, setForm] = useState({ type: 'vydaj', amount: '', description: '', spz: '', isVyplata: false, employee_id: '' });
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({ amount: '', description: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [employees, setEmployees] = useState([]);
+
+  useEffect(() => {
+    supabase.from('employees').select('id, name, color').eq('active', true)
+      .then(({ data }) => { if (data) setEmployees(data); });
+  }, []);
 
   useEffect(() => { fetchEntries(); }, [weekStart]);
 
@@ -54,37 +61,59 @@ export default function KasaPage() {
   };
 
   const days = Array.from({ length: 5 }, (_, i) => new Date(weekStart.getTime() + i * 86400000));
-
   const dayEntries = (day) => entries.filter(e => e.date === toDateStr(day));
-
   const totalPrijem = entries.filter(e => e.type === 'prijem').reduce((s, e) => s + Number(e.amount), 0);
   const totalVydaj  = entries.filter(e => e.type === 'vydaj').reduce((s, e) => s + Number(e.amount), 0);
   const zostatok    = totalPrijem - totalVydaj;
 
   const openModal = (day) => {
     setModalDay(day);
-    setForm({ type: 'vydaj', amount: '', description: '', spz: '' });
+    setForm({ type: 'vydaj', amount: '', description: '', spz: '', isVyplata: false, employee_id: '' });
     setShowModal(true);
   };
 
   const handleSave = async () => {
     if (!form.amount || !modalDay) return;
+    if (form.isVyplata && !form.employee_id) return;
     setSaving(true);
+    const emp = form.isVyplata ? employees.find(e => e.id === form.employee_id) : null;
+    const description = form.isVyplata
+      ? `Výplata — ${emp?.name || ''}${form.description ? ': ' + form.description : ''}`
+      : (form.description || null);
     await supabase.from('kasa_entries').insert([{
       date: toDateStr(modalDay),
       type: form.type,
       amount: parseFloat(form.amount),
-      description: form.description || null,
+      description,
       spz: form.spz || null,
+      employee_id: form.isVyplata ? (form.employee_id || null) : null,
     }]);
     setSaving(false);
     setShowModal(false);
     fetchEntries();
   };
 
+  const openEdit = (entry, e) => {
+    e.stopPropagation();
+    setEditId(entry.id);
+    setEditForm({ amount: String(entry.amount), description: entry.description || '' });
+  };
+
+  const handleEditSave = async () => {
+    if (!editForm.amount || !editId) return;
+    setEditSaving(true);
+    await supabase.from('kasa_entries').update({
+      amount: parseFloat(editForm.amount),
+      description: editForm.description || null,
+    }).eq('id', editId);
+    setEditSaving(false);
+    setEditId(null);
+    fetchEntries();
+  };
+
   const handleDelete = async (id) => {
     await supabase.from('kasa_entries').delete().eq('id', id);
-    setDeleteId(null);
+    setEditId(null);
     fetchEntries();
   };
 
@@ -101,7 +130,6 @@ export default function KasaPage() {
       spz: null,
     }]);
     setTransferring(false);
-    // Prejdi na ďalší týždeň
     setWeekStart(nextMonday);
   };
 
@@ -109,7 +137,7 @@ export default function KasaPage() {
   const isCurrentWeek = toDateStr(weekStart) === toDateStr(getMonday(new Date()));
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 md:p-10 font-sans font-bold">
+    <div className="min-h-screen bg-black text-white p-6 md:p-10 font-sans font-bold" onClick={() => setEditId(null)}>
       <div className="max-w-7xl mx-auto">
 
         {/* Header */}
@@ -161,44 +189,76 @@ export default function KasaPage() {
 
                 return (
                   <div key={idx} className={`rounded-[1.5rem] border flex flex-col ${isToday ? 'border-red-600/50 bg-red-600/5' : 'border-zinc-800 bg-zinc-900'}`}>
-                    {/* Hlavička dňa */}
                     <div className={`px-3 py-3 text-center border-b ${isToday ? 'border-red-600/30' : 'border-zinc-800'}`}>
                       <p className={`text-[10px] font-black uppercase tracking-widest ${isToday ? 'text-red-400' : 'text-zinc-500'}`}>{DAY_SHORT[idx]}</p>
                       <p className="text-sm font-black">{fDate(day)}</p>
                     </div>
 
-                    {/* Tlačidlo + Záznam HORE */}
                     <div className="px-2 pt-2">
                       <button
-                        onClick={() => openModal(day)}
+                        onClick={(e) => { e.stopPropagation(); openModal(day); }}
                         className="w-full bg-zinc-800 hover:bg-red-600 text-zinc-400 hover:text-white py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
                       >+ Záznam</button>
                     </div>
 
-                    {/* Záznamy */}
                     <div className="flex-1 p-2 space-y-1.5 min-h-[140px]">
-                      {de.map(entry => (
-                        <div
-                          key={entry.id}
-                          onClick={() => setDeleteId(deleteId === entry.id ? null : entry.id)}
-                          className={`rounded-xl p-2 text-[10px] font-black cursor-pointer transition-all ${entry.type === 'prijem' ? 'bg-green-600/10 border border-green-600/20 hover:border-green-500/50' : 'bg-red-600/10 border border-red-600/20 hover:border-red-500/50'}`}
-                        >
-                          {entry.spz && <p className="text-zinc-200 uppercase tracking-wider text-[11px]">{entry.spz}</p>}
-                          {entry.description && <p className="text-zinc-400 truncate">{entry.description}</p>}
-                          <p className={`font-black text-[13px] mt-0.5 ${entry.type === 'prijem' ? 'text-green-400' : 'text-red-400'}`}>
-                            {entry.type === 'prijem' ? '+' : '−'}{Number(entry.amount).toFixed(2)} €
-                          </p>
-                          {deleteId === entry.id && (
-                            <button
-                              onClick={e => { e.stopPropagation(); handleDelete(entry.id); }}
-                              className="mt-1 w-full bg-red-600 hover:bg-red-500 text-white text-[9px] py-1 rounded-lg uppercase tracking-widest transition-all"
-                            >Vymazať</button>
-                          )}
-                        </div>
-                      ))}
+                      {de.map(entry => {
+                        const isVyplata = !!entry.employee_id;
+                        return (
+                          <div key={entry.id}
+                            onClick={(e) => { e.stopPropagation(); openEdit(entry, e); }}
+                            className={`rounded-xl p-2 text-[10px] font-black cursor-pointer transition-all ${
+                              isVyplata
+                                ? 'bg-amber-600/10 border border-amber-600/20 hover:border-amber-500/50'
+                                : entry.type === 'prijem'
+                                  ? 'bg-green-600/10 border border-green-600/20 hover:border-green-500/50'
+                                  : 'bg-red-600/10 border border-red-600/20 hover:border-red-500/50'
+                            }`}
+                          >
+                            {editId === entry.id ? (
+                              <div onClick={e => e.stopPropagation()} className="space-y-1">
+                                <input
+                                  type="number" step="any" min="0"
+                                  value={editForm.amount}
+                                  onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
+                                  onFocus={e => e.target.select()}
+                                  className="w-full bg-black border border-zinc-600 text-white p-1.5 rounded-lg text-[11px] font-black outline-none"
+                                  autoFocus
+                                />
+                                <input
+                                  type="text"
+                                  value={editForm.description}
+                                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                                  placeholder="Popis..."
+                                  className="w-full bg-black border border-zinc-600 text-white p-1.5 rounded-lg text-[10px] font-bold outline-none"
+                                />
+                                <div className="flex gap-1 mt-1">
+                                  <button onClick={handleEditSave} disabled={editSaving}
+                                    className="flex-1 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-[8px] py-1 rounded-lg uppercase tracking-widest transition-all">
+                                    {editSaving ? '...' : 'Uložiť'}
+                                  </button>
+                                  <button onClick={() => handleDelete(entry.id)}
+                                    className="flex-1 bg-red-700 hover:bg-red-600 text-white text-[8px] py-1 rounded-lg uppercase tracking-widest transition-all">
+                                    Zmazať
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {entry.spz && <p className="text-zinc-200 uppercase tracking-wider text-[11px]">{entry.spz}</p>}
+                                {entry.description && <p className={`truncate ${isVyplata ? 'text-amber-300' : 'text-zinc-400'}`}>{entry.description}</p>}
+                                <p className={`font-black text-[13px] mt-0.5 ${
+                                  isVyplata ? 'text-amber-400' : entry.type === 'prijem' ? 'text-green-400' : 'text-red-400'
+                                }`}>
+                                  {entry.type === 'prijem' ? '+' : '−'}{Number(entry.amount).toFixed(2)} €
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
 
-                    {/* Deň súčet */}
                     {(dayPrijem > 0 || dayVydaj > 0) && (
                       <div className="p-2 border-t border-zinc-800">
                         <div className="text-[9px] font-black uppercase space-y-0.5 px-1">
@@ -215,7 +275,6 @@ export default function KasaPage() {
               })}
             </div>
 
-            {/* Prevod do ďalšieho týždňa */}
             <button
               onClick={handleTransferToNextWeek}
               disabled={transferring || zostatok <= 0}
@@ -231,17 +290,58 @@ export default function KasaPage() {
 
       {/* Modal: pridať záznam */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 font-bold">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3rem] w-full max-w-md shadow-2xl">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 font-bold" onClick={() => setShowModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3rem] w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter mb-1">Nový záznam</h3>
             <p className="text-zinc-500 text-[10px] uppercase tracking-widest mb-6">
               {modalDay ? `${DAY_NAMES[days.findIndex(d => toDateStr(d) === toDateStr(modalDay))]}, ${fDate(modalDay)}` : ''}
             </p>
 
-            <div className="flex gap-2 mb-5">
-              <button onClick={() => setForm(f => ({ ...f, type: 'vydaj' }))} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${form.type === 'vydaj' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>− Výdaj</button>
-              <button onClick={() => setForm(f => ({ ...f, type: 'prijem' }))} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${form.type === 'prijem' ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>+ Príjem</button>
+            {/* Typ: Výdaj / Príjem */}
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => setForm(f => ({ ...f, type: 'vydaj', isVyplata: false }))}
+                className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${form.type === 'vydaj' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                − Výdaj
+              </button>
+              <button onClick={() => setForm(f => ({ ...f, type: 'prijem', isVyplata: false }))}
+                className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${form.type === 'prijem' ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                + Príjem
+              </button>
             </div>
+
+            {/* Sub-typ: Výplata (len pri vydaj) */}
+            {form.type === 'vydaj' && employees.length > 0 && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setForm(f => ({ ...f, isVyplata: !f.isVyplata, employee_id: '' }))}
+                  className={`w-full py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                    form.isVyplata
+                      ? 'bg-amber-600/20 border-amber-500/50 text-amber-400'
+                      : 'bg-black border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                  }`}
+                >
+                  💰 Výplata mechanika
+                </button>
+                {form.isVyplata && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {employees.map(emp => (
+                      <button key={emp.id}
+                        onClick={() => setForm(f => ({ ...f, employee_id: emp.id }))}
+                        className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-2 justify-center ${
+                          form.employee_id === emp.id
+                            ? 'border-amber-500 text-white'
+                            : 'bg-black border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'
+                        }`}
+                        style={form.employee_id === emp.id ? { background: emp.color || '#d97706' } : {}}
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: emp.color || '#666' }} />
+                        {emp.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-3 mb-6">
               <input
@@ -255,23 +355,32 @@ export default function KasaPage() {
               />
               <input
                 type="text"
-                placeholder="Popis (napr. Benzín, Drobný nákup...)"
+                placeholder={form.isVyplata ? 'Poznámka (nepovinné)' : 'Popis (napr. Benzín, Drobný nákup...)'}
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 className="w-full bg-black border border-zinc-700 focus:border-red-500 p-4 rounded-2xl text-white text-sm font-bold outline-none"
               />
-              <input
-                type="text"
-                placeholder="ŠPZ (nepovinné)"
-                value={form.spz}
-                onChange={e => setForm(f => ({ ...f, spz: e.target.value.toUpperCase() }))}
-                className="w-full bg-black border border-zinc-700 focus:border-red-500 p-4 rounded-2xl text-white text-sm font-bold outline-none uppercase tracking-widest"
-              />
+              {!form.isVyplata && (
+                <input
+                  type="text"
+                  placeholder="ŠPZ (nepovinné)"
+                  value={form.spz}
+                  onChange={e => setForm(f => ({ ...f, spz: e.target.value.toUpperCase() }))}
+                  className="w-full bg-black border border-zinc-700 focus:border-red-500 p-4 rounded-2xl text-white text-sm font-bold outline-none uppercase tracking-widest"
+                />
+              )}
             </div>
 
             <div className="flex gap-3">
-              <button onClick={() => setShowModal(false)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Zrušiť</button>
-              <button onClick={handleSave} disabled={saving || !form.amount} className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">
+              <button onClick={() => setShowModal(false)}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">
+                Zrušiť
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.amount || (form.isVyplata && !form.employee_id)}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+              >
                 {saving ? 'Ukladám...' : 'Uložiť'}
               </button>
             </div>

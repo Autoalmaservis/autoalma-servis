@@ -91,12 +91,17 @@ export default function StatistikyPage() {
     setLoading(true);
     const { from, to } = getDateRange(period, customFrom, customTo);
 
+    const fromDate = from.slice(0, 10);
+    const toDate   = to.slice(0, 10);
+
     const [
       { data: invoices },
       { data: jobs },
+      { data: payouts },
     ] = await Promise.all([
       supabase.from('invoices').select('total_amount, is_official, created_at').gte('created_at', from).lte('created_at', to),
       supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, job_items(quantity, unit_price, type)').gte('created_at', from).lte('created_at', to),
+      supabase.from('kasa_entries').select('employee_id, amount').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate),
     ]);
 
     // Faktúry
@@ -118,7 +123,7 @@ export default function StatistikyPage() {
     // Hodiny PER MECHANIK — mechanic_splits má prednosť, inak assigned_worker_id
     const empMap = {};
     (employees).forEach(e => {
-      empMap[e.id] = { id: e.id, name: e.name, color: e.color, hours: 0, jobCount: 0, jobRevenue: 0 };
+      empMap[e.id] = { id: e.id, name: e.name, color: e.color, hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
     });
 
     (jobs || []).forEach(job => {
@@ -145,7 +150,16 @@ export default function StatistikyPage() {
       }
     });
 
-    const mechanicStats = Object.values(empMap).filter(m => m.hours > 0 || m.jobCount > 0).sort((a, b) => b.hours - a.hours);
+    // Výplaty z kasy
+    (payouts || []).forEach(p => {
+      if (!empMap[p.employee_id]) {
+        const emp = employees.find(e => e.id === p.employee_id);
+        empMap[p.employee_id] = { id: p.employee_id, name: emp?.name || 'Neznámy', color: emp?.color || '#666', hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
+      }
+      empMap[p.employee_id].payout += Number(p.amount);
+    });
+
+    const mechanicStats = Object.values(empMap).filter(m => m.hours > 0 || m.jobCount > 0 || m.payout > 0).sort((a, b) => b.hours - a.hours);
     const maxHours = Math.max(...mechanicStats.map(m => m.hours), 1);
     const totalHours = mechanicStats.reduce((s, m) => s + m.hours, 0);
 
@@ -315,7 +329,7 @@ export default function StatistikyPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="bg-black rounded-2xl p-4 text-center">
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">Zákazky</p>
                   <p className="text-2xl font-black text-white">{selMechData.jobCount}</p>
@@ -327,6 +341,10 @@ export default function StatistikyPage() {
                 <div className="bg-black rounded-2xl p-4 text-center">
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">∅ na zákazku</p>
                   <p className="text-xl font-black text-white">{selMechData.jobCount > 0 ? fmtH(selMechData.hours / selMechData.jobCount) : '—'}</p>
+                </div>
+                <div className="bg-amber-600/10 border border-amber-600/20 rounded-2xl p-4 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1">Vyplatené</p>
+                  <p className="text-xl font-black text-amber-400">{selMechData.payout > 0 ? fmt(selMechData.payout) : '—'}</p>
                 </div>
               </div>
 
@@ -427,6 +445,7 @@ export default function StatistikyPage() {
                         <div className="flex items-center gap-4">
                           <span className="text-[10px] font-black text-zinc-600">{m.jobCount} zákaziek</span>
                           <span className="text-[10px] font-black text-zinc-500">{fmt(m.jobRevenue)}</span>
+                          {m.payout > 0 && <span className="text-[10px] font-black text-amber-500">💰 {fmt(m.payout)}</span>}
                           <span className="text-base font-black text-amber-400">{fmtH(m.hours)}</span>
                         </div>
                       </div>
