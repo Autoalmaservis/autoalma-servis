@@ -179,7 +179,10 @@ export default function DetailZakazkyPage() {
 
         const enrichedData = { ...data, customer_id: finalCustomerId };
         setZakazka(enrichedData);
-        return enrichedData; // Vrátime dáta pre loadAllData
+        if (data.has_unread_finding) {
+          supabase.from('job_tickets').update({ has_unread_finding: false }).eq('id', id);
+        }
+        return enrichedData;
       }
     } catch (err) { console.error("Chyba detailu:", err.message); }
   };

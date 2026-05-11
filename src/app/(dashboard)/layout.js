@@ -16,6 +16,7 @@ export default function DashboardLayout({ children }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [jobUpdateCount, setJobUpdateCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [findingJobs, setFindingJobs] = useState([]);
   const [todoModalOpen, setTodoModalOpen] = useState(false);
   const [addingTodo, setAddingTodo] = useState(false);
   const [todos, setTodos] = useState([]);
@@ -52,18 +53,23 @@ export default function DashboardLayout({ children }) {
   };
 
   const pollJobStatuses = async () => {
-    const { data } = await supabase.from('job_tickets').select('id, customer_name, plate_number, status').neq('status', 'Archivované');
+    const { data } = await supabase.from('job_tickets').select('id, customer_name, plate_number, status, has_unread_finding').neq('status', 'Archivované');
     if (!data) return;
     const prev = jobStatusRef.current;
     const next = {};
+    const findings = [];
     data.forEach(job => {
       next[job.id] = job.status;
       const oldStatus = prev[job.id];
       if (oldStatus !== undefined && oldStatus !== job.status) {
         addStatusNotification({ id: job.id, customerName: job.customer_name, plateNumber: job.plate_number, fromStatus: oldStatus, toStatus: job.status });
       }
+      if (job.has_unread_finding) {
+        findings.push({ id: job.id, customerName: job.customer_name, plateNumber: job.plate_number });
+      }
     });
     jobStatusRef.current = next;
+    setFindingJobs(findings);
   };
 
   useEffect(() => {
@@ -135,7 +141,34 @@ export default function DashboardLayout({ children }) {
             <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
             <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
             <MenuLink href="/kalendar" icon="📅" label="Kalendár / Plán" collapsed={isCollapsed} active={pathname === '/kalendar'} badge={pendingCount} />
-            <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname.startsWith('/zakazky')} badge={jobUpdateCount} />
+            <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname.startsWith('/zakazky')} badge={jobUpdateCount} findingAlert={findingJobs.length > 0} />
+
+            {findingJobs.length > 0 && !isCollapsed && (
+              <div className="mx-1 space-y-1 pb-1">
+                {findingJobs.map(f => (
+                  <Link key={f.id} href={`/zakazky/${f.id}`} className="flex items-center gap-2.5 bg-yellow-950/60 border border-yellow-700/60 hover:border-yellow-500 p-2.5 rounded-xl transition-all group">
+                    <span className="relative flex h-2.5 w-2.5 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500"></span>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase text-yellow-300 truncate leading-none">{f.customerName}</p>
+                      <p className="text-[8px] font-black text-yellow-600 uppercase tracking-widest mt-0.5">{f.plateNumber} · Nové zistenie</p>
+                    </div>
+                    <span className="ml-auto text-yellow-500 text-xs shrink-0">→</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {findingJobs.length > 0 && isCollapsed && (
+              <div className="flex justify-center">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                </span>
+              </div>
+            )}
 
             {notifications.length > 0 && !isCollapsed && (
               <div className="mx-1 space-y-1.5 pb-1">
@@ -360,13 +393,19 @@ export default function DashboardLayout({ children }) {
   );
 }
 
-function MenuLink({ href, icon, label, collapsed, active, badge }) {
+function MenuLink({ href, icon, label, collapsed, active, badge, findingAlert }) {
   return (
     <Link href={href} className={`flex items-center justify-between p-3 rounded-xl transition-all group relative ${active ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'} ${collapsed ? 'px-0 justify-center' : ''}`}>
       <div className={`flex items-center gap-4 ${collapsed ? 'justify-center' : ''}`}>
         <span className="text-xl group-hover:scale-110 transition-transform shrink-0">{icon}</span>
         {!collapsed && <span className="font-bold text-sm whitespace-nowrap tracking-tight">{label}</span>}
       </div>
+      {!collapsed && findingAlert && !badge && (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+        </span>
+      )}
       {!collapsed && badge > 0 && (
         <div className="flex items-center gap-1">
           <span className="relative flex h-2 w-2">
@@ -376,10 +415,10 @@ function MenuLink({ href, icon, label, collapsed, active, badge }) {
           <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{badge}</span>
         </div>
       )}
-      {collapsed && badge > 0 && (
-        <span className="absolute top-2 right-2 flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+      {collapsed && (badge > 0 || findingAlert) && (
+        <span className={`absolute top-2 right-2 flex h-2 w-2`}>
+          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${findingAlert && !badge ? 'bg-yellow-400' : 'bg-red-400'}`}></span>
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${findingAlert && !badge ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
         </span>
       )}
     </Link>

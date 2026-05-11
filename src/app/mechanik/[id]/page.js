@@ -148,6 +148,8 @@ export default function PracovnyList() {
         is_completed: false,
       }]);
 
+      await supabase.from('job_tickets').update({ has_unread_finding: true }).eq('id', id);
+
       const plate = job?.plate_number || '';
       const customer = job?.customer_name || '';
       const smsMsg = `AutoAlma Servis: Mechanik nahlásil nové zistenie na zákazke ${plate} (${customer}): "${findingText.trim()}" — zákazka pokračuje.`;
