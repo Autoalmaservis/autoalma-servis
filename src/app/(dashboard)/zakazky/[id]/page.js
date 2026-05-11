@@ -344,8 +344,16 @@ export default function DetailZakazkyPage() {
 
   const fetchCustomersList = async () => {
     setLoadingCustomers(true);
-    const { data } = await supabase.from('customers').select('id, name, phone, email, company_name, ico, dic, ic_dph, address, city, zip, client_type').order('name', { ascending: true });
-    setCustomersList(data || []);
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('id, full_name, company_name, email, phone, ico, dic, ic_dph, address, city, zip')
+      .or('role.eq.zakaznik,role.eq.klient')
+      .order('full_name', { ascending: true });
+    const mapped = (data || []).map(p => ({
+      ...p,
+      name: p.company_name || p.full_name || p.email || 'Neznámy',
+    }));
+    setCustomersList(mapped);
     setLoadingCustomers(false);
   };
 
