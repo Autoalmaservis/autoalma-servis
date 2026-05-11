@@ -44,6 +44,7 @@ export default function NastaveniaPage() {
   const [newColor, setNewColor] = useState('#dc2626');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newHourlyRate, setNewHourlyRate] = useState('');
   
   // --- NOVÉ STAVY PRE SMS ŠABLÓNY ---
   const [smsTemplates, setSmsTemplates] = useState([]);
@@ -52,7 +53,7 @@ export default function NastaveniaPage() {
 
   // Stavy pre MODÁLNE OKNO (Editácia zamestnanca)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', password: '' });
+  const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', password: '', hourly_rate: '' });
 
   // Stavy pre pracovnú dobu
   const [workStart, setWorkStart] = useState('07:00');
@@ -271,19 +272,20 @@ export default function NastaveniaPage() {
       if (authError) throw new Error("Chyba Auth: " + authError.message);
 
       const { error: dbError } = await supabase.from('employees').insert([
-        { 
-          id: authData.user.id, 
-          name: newName, 
-          role: newRole, 
-          color: newColor, 
-          email: emailToSave, 
+        {
+          id: authData.user.id,
+          name: newName,
+          role: newRole,
+          color: newColor,
+          email: emailToSave,
           password: newPassword,
-          active: true 
+          active: true,
+          hourly_rate: parseFloat(newHourlyRate) || 0,
         }
       ]);
       if (dbError) throw dbError;
 
-      setNewName(''); setNewEmail(''); setNewPassword(''); setNewColor('#dc2626');
+      setNewName(''); setNewEmail(''); setNewPassword(''); setNewColor('#dc2626'); setNewHourlyRate('');
       alert("Mechanik vytvorený!");
       fetchData();
     } catch (err) {
@@ -294,13 +296,14 @@ export default function NastaveniaPage() {
   };
 
   const openEditModal = (emp) => {
-    setEditForm({ 
-        id: emp.id, 
-        name: emp.name, 
-        role: emp.role, 
-        color: emp.color, 
-        email: emp.email || '', 
-        password: emp.password || '' 
+    setEditForm({
+        id: emp.id,
+        name: emp.name,
+        role: emp.role,
+        color: emp.color,
+        email: emp.email || '',
+        password: emp.password || '',
+        hourly_rate: emp.hourly_rate != null ? String(emp.hourly_rate) : '',
     });
     setIsEditModalOpen(true);
   };
@@ -309,12 +312,13 @@ export default function NastaveniaPage() {
     e.preventDefault();
     const { error } = await supabase
       .from('employees')
-      .update({ 
-        name: editForm.name, 
-        role: editForm.role, 
+      .update({
+        name: editForm.name,
+        role: editForm.role,
         color: editForm.color,
         email: editForm.email.toLowerCase().trim(),
-        password: editForm.password
+        password: editForm.password,
+        hourly_rate: parseFloat(editForm.hourly_rate) || 0,
       })
       .eq('id', editForm.id);
     
@@ -754,6 +758,20 @@ export default function NastaveniaPage() {
                 </select>
                 <input required type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="E-mail (prihlasovací)" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" />
                 <input required type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Heslo" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" />
+                <div className="md:col-span-2">
+                  <label className="block text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2 ml-1">Hodinová sadzba mechanika</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number" min="0" step="any"
+                      value={newHourlyRate}
+                      onChange={(e) => setNewHourlyRate(e.target.value)}
+                      onFocus={e => e.target.select()}
+                      placeholder="0"
+                      className="w-36 bg-black border border-amber-600/30 focus:border-amber-500 p-4 rounded-xl text-white text-right font-black outline-none transition-all"
+                    />
+                    <span className="text-zinc-500 text-xs font-black uppercase tracking-widest">€ / hodina</span>
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Farba v kalendári</label>
@@ -780,6 +798,7 @@ export default function NastaveniaPage() {
                         <p className="font-black uppercase text-sm tracking-tight text-white italic">{emp.name}</p>
                         <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{emp.role} • {emp.email}</p>
                         <p className="text-[9px] font-mono text-zinc-600 mt-0.5 tracking-widest">🔑 {emp.password || '—'}</p>
+                        {emp.hourly_rate > 0 && <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-0.5">💰 {emp.hourly_rate} €/hod</p>}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -815,6 +834,20 @@ export default function NastaveniaPage() {
                 <option value="klampiar">Klampiar</option>
                 <option value="lakernik">Lakerník</option>
               </select>
+              <div className="flex items-center gap-3">
+                <div className="flex-grow">
+                  <label className="block text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2 ml-1">Hodinová sadzba (€/hod)</label>
+                  <input
+                    type="number" min="0" step="any"
+                    value={editForm.hourly_rate}
+                    onChange={(e) => setEditForm({...editForm, hourly_rate: e.target.value})}
+                    onFocus={e => e.target.select()}
+                    placeholder="0"
+                    className="w-full bg-zinc-900 border border-amber-600/30 focus:border-amber-500 p-4 rounded-2xl text-white font-black outline-none text-right"
+                  />
+                </div>
+                <span className="text-zinc-500 text-xs font-black uppercase tracking-widest mt-6">€/hod</span>
+              </div>
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1">Farba v kalendári</label>
                 <ColorPicker value={editForm.color} onChange={(color) => setEditForm({...editForm, color})} />

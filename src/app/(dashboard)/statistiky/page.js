@@ -83,7 +83,7 @@ export default function StatistikyPage() {
 
   // Načítame zamestnancov raz
   useEffect(() => {
-    supabase.from('employees').select('id, name, color').eq('active', true)
+    supabase.from('employees').select('id, name, color, hourly_rate').eq('active', true)
       .then(({ data }) => { if (data) setEmployees(data); });
   }, []);
 
@@ -123,7 +123,7 @@ export default function StatistikyPage() {
     // Hodiny PER MECHANIK — mechanic_splits má prednosť, inak assigned_worker_id
     const empMap = {};
     (employees).forEach(e => {
-      empMap[e.id] = { id: e.id, name: e.name, color: e.color, hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
+      empMap[e.id] = { id: e.id, name: e.name, color: e.color, hourlyRate: Number(e.hourly_rate) || 0, hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
     });
 
     (jobs || []).forEach(job => {
@@ -329,7 +329,7 @@ export default function StatistikyPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <div className="bg-black rounded-2xl p-4 text-center">
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">Zákazky</p>
                   <p className="text-2xl font-black text-white">{selMechData.jobCount}</p>
@@ -342,6 +342,13 @@ export default function StatistikyPage() {
                   <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">∅ na zákazku</p>
                   <p className="text-xl font-black text-white">{selMechData.jobCount > 0 ? fmtH(selMechData.hours / selMechData.jobCount) : '—'}</p>
                 </div>
+                {selMechData.hourlyRate > 0 && (
+                  <div className="bg-green-600/10 border border-green-600/20 rounded-2xl p-4 text-center">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-green-600 mb-1">Malo dostať</p>
+                    <p className="text-xl font-black text-green-400">{fmt(selMechData.hours * selMechData.hourlyRate)}</p>
+                    <p className="text-[8px] text-zinc-600 font-black mt-0.5">{selMechData.hourlyRate} €/hod</p>
+                  </div>
+                )}
                 <div className="bg-amber-600/10 border border-amber-600/20 rounded-2xl p-4 text-center">
                   <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1">Vyplatené</p>
                   <p className="text-xl font-black text-amber-400">{selMechData.payout > 0 ? fmt(selMechData.payout) : '—'}</p>
@@ -445,6 +452,7 @@ export default function StatistikyPage() {
                         <div className="flex items-center gap-4">
                           <span className="text-[10px] font-black text-zinc-600">{m.jobCount} zákaziek</span>
                           <span className="text-[10px] font-black text-zinc-500">{fmt(m.jobRevenue)}</span>
+                          {m.hourlyRate > 0 && <span className="text-[10px] font-black text-green-400">∑ {fmt(m.hours * m.hourlyRate)}</span>}
                           {m.payout > 0 && <span className="text-[10px] font-black text-amber-500">💰 {fmt(m.payout)}</span>}
                           <span className="text-base font-black text-amber-400">{fmtH(m.hours)}</span>
                         </div>
