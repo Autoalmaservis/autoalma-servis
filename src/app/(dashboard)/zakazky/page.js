@@ -57,10 +57,24 @@ export default function ZakazkyZoznamPage() {
     try {
       const { data, error } = await supabase
         .from('job_tickets')
-        .select('*, job_items(name, quantity, unit_price, type), job_tasks(description, is_completed), price_offers(status)')
+        .select('*, job_items(name, quantity, unit_price, type), price_offers(status)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
+      // Načítame job_tasks oddelene — ak tabuľka nemá RLS alebo neexistuje, nespadne hlavný zoznam
+      let tasksMap = {};
+      try {
+        const { data: tasksData } = await supabase
+          .from('job_tasks')
+          .select('job_id, description, is_completed');
+        if (tasksData) {
+          tasksData.forEach(t => {
+            if (!tasksMap[t.job_id]) tasksMap[t.job_id] = [];
+            tasksMap[t.job_id].push(t);
+          });
+        }
+      } catch {}
 
       const jobsWithPrices = data.map(job => {
         const materialSubtotal = job.job_items?.filter(i => i.type === 'Materiál').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
@@ -71,12 +85,13 @@ export default function ZakazkyZoznamPage() {
           ? job.price_offers[job.price_offers.length - 1].status 
           : null;
 
-        return { 
-          ...job, 
+        return {
+          ...job,
+          job_tasks: tasksMap[job.id] || [],
           materialPrice: materialSubtotal * 1.23,
           workPrice: workSubtotal * 1.23,
           totalPrice: subtotal * 1.23,
-          offerStatus: offerStatus 
+          offerStatus: offerStatus
         };
       });
 
