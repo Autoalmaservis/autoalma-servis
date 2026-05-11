@@ -45,12 +45,13 @@ export default function KalendarPage() {
   const [viewMode, setViewMode] = useState('calendar');
 
   const [showClientModal, setShowClientModal] = useState(false);
+  const [clientModalStep, setClientModalStep] = useState(1);
   const [clientForm, setClientForm] = useState({
     clientType: 'Osoba', full_name: '', phone: '', email: '', password: '',
     company_name: '', ico: '', dic: '', ic_dph: '',
     address: '', city: '', zip: '', country: 'Slovensko',
   });
-  const [vehicleForm, setVehicleForm] = useState({ brand: '', model: '', vin: '', year: '', fuel_type: 'Diesel', mileage: '' });
+  const [vehicleForm, setVehicleForm] = useState({ brand: '', model: '', vin: '', year: '', engine_volume: '', engine_power: '', fuel_type: 'Diesel', mileage: '' });
   const [clientModalLoading, setClientModalLoading] = useState(false);
   const [vehicleLookupLoading, setVehicleLookupLoading] = useState(false);
 
@@ -344,18 +345,26 @@ export default function KalendarPage() {
     setIsModalOpen(true);
   };
 
-  const lookupVehicleForClient = async () => {
-    if (!plate) return;
+  const lookupVehicleForClient = async (spz) => {
+    const ecv = (spz || plate || '').toUpperCase().replace(/\s/g, '');
+    if (!ecv) return;
     setVehicleLookupLoading(true);
     try {
-      const res = await fetch(`/api/vehicle-lookup?ecv=${plate.toUpperCase().replace(/\s/g, '')}`);
+      const res = await fetch(`/api/vehicle-lookup?ecv=${ecv}`);
       const result = await res.json();
       if (result?.vehicle) {
         const v = result.vehicle;
         const yearOnly = v.dat_prva_evid ? v.dat_prva_evid.split('.').pop() : '';
-        setVehicleForm(p => ({ ...p, brand: v.znacka || '', model: v.obch_nazov || '', vin: v.vin || '', year: yearOnly, fuel_type: v.druh_paliva === 'Nafta' ? 'Diesel' : (v.druh_paliva || 'Diesel') }));
-      } else {
-        alert('Vozidlo sa nenašlo v databáze.');
+        setVehicleForm(p => ({
+          ...p,
+          brand: v.znacka || '',
+          model: v.obch_nazov || '',
+          vin: v.vin || '',
+          year: yearOnly,
+          engine_volume: v.objem || '',
+          engine_power: v.vykon || '',
+          fuel_type: v.druh_paliva === 'Nafta' ? 'Diesel' : (v.druh_paliva || 'Diesel'),
+        }));
       }
     } catch {}
     setVehicleLookupLoading(false);
@@ -396,8 +405,10 @@ export default function KalendarPage() {
           owner_email: clientForm.email.trim(),
           license_plate: plate.toUpperCase(),
           brand_model: `${vehicleForm.brand} ${vehicleForm.model}`.trim(),
-          vin_number: vehicleForm.vin.toUpperCase(),
+          vin_number: vehicleForm.vin ? vehicleForm.vin.toUpperCase() : '',
           year_produced: vehicleForm.year ? parseInt(vehicleForm.year) : null,
+          engine_volume: vehicleForm.engine_volume ? parseInt(vehicleForm.engine_volume) : null,
+          engine_power: vehicleForm.engine_power ? parseInt(vehicleForm.engine_power) : null,
           fuel_type: vehicleForm.fuel_type,
           mileage: vehicleForm.mileage ? parseInt(vehicleForm.mileage) : 0,
         }]);
@@ -799,90 +810,134 @@ export default function KalendarPage() {
         </div>
       )}
 
-      {/* MODÁL — NOVÝ ZÁKAZNÍK */}
+      {/* MODÁL — NOVÝ ZÁKAZNÍK (2-krokový wizard) */}
       {showClientModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 overflow-y-auto font-bold">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3rem] w-full max-w-4xl shadow-2xl my-auto">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3rem] w-full max-w-3xl shadow-2xl my-auto">
+
+            {/* HEADER + KROKY */}
             <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter">Nový <span className="text-red-600">Zákazník</span></h2>
-              <button onClick={() => setShowClientModal(false)} className="bg-zinc-800 hover:bg-white hover:text-black p-3 rounded-full transition-all text-lg">✕</button>
+              <div>
+                <h2 className="text-3xl font-black uppercase italic tracking-tighter">Nový <span className="text-red-600">Zákazník</span></h2>
+                <div className="flex items-center gap-3 mt-3">
+                  <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${clientModalStep === 1 ? 'text-white' : 'text-zinc-600'}`}>
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${clientModalStep === 1 ? 'bg-red-600 text-white' : 'bg-zinc-700 text-zinc-400'}`}>1</span>
+                    Zákazník
+                  </div>
+                  <span className="text-zinc-700">→</span>
+                  <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${clientModalStep === 2 ? 'text-white' : 'text-zinc-600'}`}>
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${clientModalStep === 2 ? 'bg-red-600 text-white' : 'bg-zinc-700 text-zinc-400'}`}>2</span>
+                    Vozidlo
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => { setShowClientModal(false); setClientModalStep(1); }} className="bg-zinc-800 hover:bg-white hover:text-black p-3 rounded-full transition-all text-lg">✕</button>
             </div>
 
-            <form onSubmit={handleCreateClientFull} className="space-y-6">
+            {/* ── KROK 1: ZÁKAZNÍK ── */}
+            {clientModalStep === 1 && (
+              <div className="space-y-6">
+                <div className="flex bg-black p-1 rounded-2xl border border-zinc-800">
+                  <button type="button" onClick={() => setClientForm(p => ({...p, clientType: 'Osoba'}))} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${clientForm.clientType === 'Osoba' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Súkromná Osoba</button>
+                  <button type="button" onClick={() => setClientForm(p => ({...p, clientType: 'Firma'}))} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${clientForm.clientType === 'Firma' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Firma / Živnostník</button>
+                </div>
 
-              {/* TYP */}
-              <div className="flex bg-black p-1 rounded-2xl border border-zinc-800">
-                <button type="button" onClick={() => setClientForm(p => ({...p, clientType: 'Osoba'}))} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${clientForm.clientType === 'Osoba' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Súkromná Osoba</button>
-                <button type="button" onClick={() => setClientForm(p => ({...p, clientType: 'Firma'}))} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${clientForm.clientType === 'Firma' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Firma / Živnostník</button>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Prihlasovacie údaje</p>
+                    <input required type="email" placeholder="E-mailová adresa" value={clientForm.email} onChange={e => setClientForm(p => ({...p, email: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
+                    <input required type="text" placeholder="Heslo do Garáže" value={clientForm.password} onChange={e => setClientForm(p => ({...p, password: e.target.value}))} className="w-full bg-black border border-red-600/30 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
+                    <p className="text-[9px] text-zinc-600 uppercase ml-1">Zákazník dostane e-mail s prihlasovacími údajmi</p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* ĽAVÝ STĹPEC */}
-                <div className="space-y-4">
-                  <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Kontaktné údaje</p>
-                  <input required type="text" placeholder={clientForm.clientType === 'Firma' ? 'Kontaktná osoba' : 'Meno a priezvisko'} value={clientForm.full_name} onChange={e => setClientForm(p => ({...p, full_name: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
-                  <input required type="tel" placeholder="Telefónne číslo" value={clientForm.phone} onChange={e => setClientForm(p => ({...p, phone: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
-                  <input required type="email" placeholder="E-mailová adresa" value={clientForm.email} onChange={e => setClientForm(p => ({...p, email: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
-                  <div className="bg-red-600/5 p-4 rounded-2xl border border-red-600/20 space-y-2">
-                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Heslo do Garáže</p>
-                    <input required type="text" placeholder="Dočasné heslo" value={clientForm.password} onChange={e => setClientForm(p => ({...p, password: e.target.value}))} className="w-full bg-black border border-red-600/30 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
-                    <p className="text-[9px] text-zinc-600 uppercase">Zákazník dostane e-mail s výzvou na zmenu hesla</p>
-                  </div>
+                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest pt-2">Kontaktné údaje</p>
+                    <input required type="text" placeholder={clientForm.clientType === 'Firma' ? 'Kontaktná osoba' : 'Meno a priezvisko'} value={clientForm.full_name} onChange={e => setClientForm(p => ({...p, full_name: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
+                    <input required type="tel" placeholder="Telefónne číslo" value={clientForm.phone} onChange={e => setClientForm(p => ({...p, phone: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
 
-                  {clientForm.clientType === 'Firma' && (
-                    <div className="space-y-3 pt-2 border-t border-zinc-800">
-                      <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Fakturačné údaje</p>
-                      <input type="text" placeholder="Obchodné meno" value={clientForm.company_name} onChange={e => setClientForm(p => ({...p, company_name: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-blue-500 font-bold" />
-                      <div className="grid grid-cols-3 gap-2">
-                        <input type="text" placeholder="IČO" value={clientForm.ico} onChange={e => setClientForm(p => ({...p, ico: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-blue-500 font-bold" />
-                        <input type="text" placeholder="DIČ" value={clientForm.dic} onChange={e => setClientForm(p => ({...p, dic: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-blue-500 font-bold" />
-                        <input type="text" placeholder="IČ DPH" value={clientForm.ic_dph} onChange={e => setClientForm(p => ({...p, ic_dph: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-blue-500 font-bold" />
+                    {clientForm.clientType === 'Firma' && (
+                      <div className="space-y-3 pt-2 border-t border-zinc-800">
+                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Fakturačné údaje</p>
+                        <input type="text" placeholder="Obchodné meno" value={clientForm.company_name} onChange={e => setClientForm(p => ({...p, company_name: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-blue-500 font-bold" />
+                        <div className="grid grid-cols-3 gap-2">
+                          <input type="text" placeholder="IČO" value={clientForm.ico} onChange={e => setClientForm(p => ({...p, ico: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-blue-500 font-bold" />
+                          <input type="text" placeholder="DIČ" value={clientForm.dic} onChange={e => setClientForm(p => ({...p, dic: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-blue-500 font-bold" />
+                          <input type="text" placeholder="IČ DPH" value={clientForm.ic_dph} onChange={e => setClientForm(p => ({...p, ic_dph: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-blue-500 font-bold" />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* PRAVÝ STĹPEC */}
-                <div className="space-y-4">
-                  <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Adresa</p>
-                  <input type="text" placeholder="Ulica a súpisné číslo" value={clientForm.address} onChange={e => setClientForm(p => ({...p, address: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input type="text" placeholder="Mesto" value={clientForm.city} onChange={e => setClientForm(p => ({...p, city: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
-                    <input type="text" placeholder="PSČ" value={clientForm.zip} onChange={e => setClientForm(p => ({...p, zip: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
+                    )}
                   </div>
-                  <input type="text" placeholder="Krajina" value={clientForm.country} onChange={e => setClientForm(p => ({...p, country: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
 
-                  {/* VOZIDLO */}
-                  <div className="pt-2 border-t border-zinc-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Vozidlo — {plate || '---'}</p>
-                      <button type="button" onClick={lookupVehicleForClient} disabled={!plate || vehicleLookupLoading} className="text-[9px] font-black text-red-500 uppercase tracking-widest hover:text-red-400 disabled:opacity-30 transition-all">
-                        {vehicleLookupLoading ? 'Načítavam...' : '⚡ Načítať z ŠPZ'}
-                      </button>
-                    </div>
+                  <div className="space-y-4">
+                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Adresa</p>
+                    <input type="text" placeholder="Ulica a súpisné číslo" value={clientForm.address} onChange={e => setClientForm(p => ({...p, address: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
                     <div className="grid grid-cols-2 gap-3">
-                      <input type="text" placeholder="Značka" value={vehicleForm.brand} onChange={e => setVehicleForm(p => ({...p, brand: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-sm outline-none focus:border-red-600 font-bold" />
-                      <input type="text" placeholder="Model" value={vehicleForm.model} onChange={e => setVehicleForm(p => ({...p, model: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-sm outline-none focus:border-red-600 font-bold" />
+                      <input type="text" placeholder="Mesto" value={clientForm.city} onChange={e => setClientForm(p => ({...p, city: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
+                      <input type="text" placeholder="PSČ" value={clientForm.zip} onChange={e => setClientForm(p => ({...p, zip: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
                     </div>
-                    <input type="text" placeholder="VIN číslo" value={vehicleForm.vin} onChange={e => setVehicleForm(p => ({...p, vin: e.target.value.toUpperCase()}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white font-mono text-sm outline-none focus:border-red-600 font-bold" />
-                    <div className="grid grid-cols-3 gap-2">
-                      <input type="number" placeholder="Rok" value={vehicleForm.year} onChange={e => setVehicleForm(p => ({...p, year: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-sm outline-none focus:border-red-600 font-bold" />
-                      <input type="number" placeholder="Km" value={vehicleForm.mileage} onChange={e => setVehicleForm(p => ({...p, mileage: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-sm outline-none focus:border-red-600 font-bold" />
-                      <select value={vehicleForm.fuel_type} onChange={e => setVehicleForm(p => ({...p, fuel_type: e.target.value}))} className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs outline-none focus:border-red-600 font-bold appearance-none">
-                        <option>Diesel</option><option>Benzín</option><option>Hybrid</option><option>Elektro</option>
-                      </select>
-                    </div>
+                    <input type="text" placeholder="Krajina" value={clientForm.country} onChange={e => setClientForm(p => ({...p, country: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600 font-bold" />
                   </div>
                 </div>
-              </div>
 
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowClientModal(false)} className="flex-1 text-zinc-500 font-black uppercase text-xs tracking-widest hover:text-white transition-all">Zrušiť</button>
-                <button type="submit" disabled={clientModalLoading} className="flex-[3] bg-red-600 hover:bg-red-500 text-white font-black py-5 rounded-2xl uppercase text-xs tracking-[0.2em] transition-all disabled:opacity-40 shadow-xl">
-                  {clientModalLoading ? 'Registrujem...' : '✅ Registrovať zákazníka'}
-                </button>
+                <div className="flex gap-4 pt-2">
+                  <button type="button" onClick={() => { setShowClientModal(false); setClientModalStep(1); }} className="flex-1 text-zinc-500 font-black uppercase text-xs tracking-widest hover:text-white transition-all">Zrušiť</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!clientForm.email || !clientForm.password || !clientForm.full_name || !clientForm.phone) { alert('Vyplňte všetky povinné polia.'); return; }
+                      setClientModalStep(2);
+                      setVehicleForm({ brand: '', model: '', vin: '', year: '', engine_volume: '', engine_power: '', fuel_type: 'Diesel', mileage: '' });
+                      lookupVehicleForClient(plate);
+                    }}
+                    className="flex-[3] bg-red-600 hover:bg-red-500 text-white font-black py-5 rounded-2xl uppercase text-xs tracking-[0.2em] transition-all shadow-xl"
+                  >
+                    Pokračovať → Vozidlo
+                  </button>
+                </div>
               </div>
-            </form>
+            )}
+
+            {/* ── KROK 2: VOZIDLO ── */}
+            {clientModalStep === 2 && (
+              <form onSubmit={handleCreateClientFull} className="space-y-6">
+                {/* ŠPZ veľká ako v klienti */}
+                <div>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase mb-3 ml-2 block tracking-widest">ŠPZ Vozidla</label>
+                  <div className="flex gap-3">
+                    <div className="flex-grow bg-white text-black font-black text-4xl tracking-widest px-6 py-4 rounded-3xl uppercase shadow-2xl">
+                      {plate || '---'}
+                    </div>
+                    <button type="button" onClick={() => lookupVehicleForClient(plate)} disabled={vehicleLookupLoading} className="px-6 bg-red-600/10 border border-red-600 text-red-500 rounded-3xl font-black uppercase text-[10px] hover:bg-red-600 hover:text-white transition-all disabled:opacity-40">
+                      {vehicleLookupLoading ? '...' : 'Načítať ⚡'}
+                    </button>
+                  </div>
+                  {vehicleLookupLoading && <p className="text-[9px] text-zinc-500 uppercase mt-2 ml-2 animate-pulse">Načítavam údaje z evidencie...</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">Značka</label><input required type="text" value={vehicleForm.brand} onChange={e => setVehicleForm(p => ({...p, brand: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">Model</label><input required type="text" value={vehicleForm.model} onChange={e => setVehicleForm(p => ({...p, model: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 font-bold" /></div>
+                </div>
+
+                <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">VIN číslo</label><input type="text" maxLength={17} value={vehicleForm.vin} onChange={e => setVehicleForm(p => ({...p, vin: e.target.value.toUpperCase()}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-mono outline-none focus:border-red-600 font-bold uppercase tracking-widest" /></div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[10px] font-black text-blue-400 uppercase mb-2 ml-1 block tracking-widest italic">Stav tachometra (km)</label><input type="number" value={vehicleForm.mileage} onChange={e => setVehicleForm(p => ({...p, mileage: e.target.value}))} className="w-full bg-black border border-blue-600/30 p-4 rounded-2xl text-white font-black text-xl outline-none focus:border-blue-500" /></div>
+                  <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">Rok výroby</label><input type="number" value={vehicleForm.year} onChange={e => setVehicleForm(p => ({...p, year: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 font-bold" /></div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">Objem (cm³)</label><input type="text" value={vehicleForm.engine_volume} onChange={e => setVehicleForm(p => ({...p, engine_volume: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">Výkon (kW)</label><input type="text" value={vehicleForm.engine_power} onChange={e => setVehicleForm(p => ({...p, engine_power: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 font-bold" /></div>
+                  <div><label className="text-[10px] font-black text-zinc-600 uppercase mb-2 ml-1 block tracking-widest">Palivo</label><select value={vehicleForm.fuel_type} onChange={e => setVehicleForm(p => ({...p, fuel_type: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 font-bold appearance-none"><option>Diesel</option><option>Benzín</option><option>Hybrid</option><option>Elektro</option><option>LPG/CNG</option></select></div>
+                </div>
+
+                <div className="flex gap-4 pt-2">
+                  <button type="button" onClick={() => setClientModalStep(1)} className="flex-1 text-zinc-500 font-black uppercase text-xs tracking-widest hover:text-white transition-all">← Späť</button>
+                  <button type="submit" disabled={clientModalLoading} className="flex-[3] bg-red-600 hover:bg-red-500 text-white font-black py-5 rounded-2xl uppercase text-xs tracking-[0.2em] transition-all disabled:opacity-40 shadow-xl">
+                    {clientModalLoading ? 'Registrujem...' : '✅ Registrovať zákazníka + Pridať vozidlo'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
