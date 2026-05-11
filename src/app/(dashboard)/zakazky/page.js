@@ -67,7 +67,7 @@ export default function ZakazkyZoznamPage() {
       try {
         const { data: tasksData } = await supabase
           .from('job_tasks')
-          .select('job_id, description, is_completed');
+          .select('job_id, task_description, is_completed');
         if (tasksData) {
           tasksData.forEach(t => {
             if (!tasksMap[t.job_id]) tasksMap[t.job_id] = [];
@@ -282,7 +282,7 @@ export default function ZakazkyZoznamPage() {
               const tasks = job.job_tasks || [];
               const workItems = (job.job_items || []).filter(i => i.type === 'Práca' && i.name);
               const items = tasks.length > 0
-                ? tasks.map(t => ({ label: t.description, done: t.is_completed }))
+                ? tasks.map(t => ({ label: t.task_description, done: t.is_completed }))
                 : workItems.map(i => ({ label: i.name, done: false }));
               if (items.length === 0) return null;
               const visible = items.slice(0, 3);
