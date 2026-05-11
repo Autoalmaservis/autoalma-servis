@@ -328,7 +328,7 @@ export default function DetailZakazkyPage() {
       if (error) throw error;
       fetchSavedForms();
       setShowFormFill(false);
-    } catch (err) { alert('Chyba: ' + err.message); }
+    } catch (err) { alert('Chyba: ' + err.message + '\n\nDetail: ' + JSON.stringify(err)); }
     finally { setSavingForm(false); }
   };
 
