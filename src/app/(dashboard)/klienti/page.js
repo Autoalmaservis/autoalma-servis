@@ -207,6 +207,20 @@ export default function KlientiPage() {
       if (editMode) { res = await supabase.from('user_profiles').update(profilePayload).eq('email', clientForm.customer_email); }
       else { res = await supabase.from('user_profiles').insert([profilePayload]); }
       if (res.error) throw res.error;
+
+      if (!editMode && clientForm.customer_email) {
+        fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: clientForm.customer_email,
+            name: clientForm.customer_name,
+            password: clientForm.password,
+            createdByAdmin: true,
+          }),
+        }).catch(() => {});
+      }
+
       setIsClientModalOpen(false);
       fetchKlienti();
     } catch (err) { alert("Chyba: " + err.message); }

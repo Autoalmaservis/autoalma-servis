@@ -57,7 +57,7 @@ export default function ZakazkyZoznamPage() {
     try {
       const { data, error } = await supabase
         .from('job_tickets')
-        .select('*, job_items(quantity, unit_price, type), price_offers(status)')
+        .select('*, job_items(name, quantity, unit_price, type), job_tasks(description, is_completed), price_offers(status)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -261,6 +261,34 @@ export default function ZakazkyZoznamPage() {
                 <p className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em]">{job.car_brand_model}</p>
               </div>
             </div>
+
+            {/* STRED — ČO SA NA AUTE ROBÍ */}
+            {(() => {
+              const tasks = job.job_tasks || [];
+              const workItems = (job.job_items || []).filter(i => i.type === 'Práca' && i.name);
+              const items = tasks.length > 0
+                ? tasks.map(t => ({ label: t.description, done: t.is_completed }))
+                : workItems.map(i => ({ label: i.name, done: false }));
+              if (items.length === 0) return null;
+              const visible = items.slice(0, 3);
+              const more = items.length - visible.length;
+              return (
+                <div className="hidden lg:flex flex-col justify-center flex-1 px-6 border-l border-zinc-800/50 min-w-0">
+                  <p className="text-[8px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-2">Úkony</p>
+                  <div className="flex flex-col gap-1.5">
+                    {visible.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 min-w-0">
+                        <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${item.done ? 'bg-green-500' : 'bg-zinc-600'}`} />
+                        <span className={`text-[10px] font-bold truncate ${item.done ? 'text-zinc-500 line-through' : 'text-zinc-300'}`}>{item.label}</span>
+                      </div>
+                    ))}
+                    {more > 0 && (
+                      <span className="text-[9px] font-black text-zinc-600 uppercase ml-3.5">+{more} ďalšie</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end">
               <div className="hidden sm:block text-right border-r border-zinc-800 pr-6">

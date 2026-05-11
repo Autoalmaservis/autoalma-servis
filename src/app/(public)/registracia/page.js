@@ -87,7 +87,16 @@ export default function RegistraciaPage() {
         console.error("Detail chyby profilu:", profileError);
         alert("Účet vytvorený, ale profil v databáze zlyhal. Prosím, kontaktujte nás.");
       } else {
-        // Kontrola, či je vyžadované overenie mailu
+        fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: formData.email.trim(),
+            name: formData.full_name,
+            createdByAdmin: false,
+          }),
+        }).catch(() => {});
+
         if (authData.session === null) {
             alert("Registrácia úspešná! Skontrolujte si e-mailovú schránku a potvrďte svoju adresu kliknutím na odkaz.");
         } else {

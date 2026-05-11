@@ -83,8 +83,14 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
           }]);
         }
 
-        console.log("REÁLNY TEXT ODOSLANÝ NA MOBIL:", finalMessage);
-        alert("Správa bola odoslaná aj s automatickým podpisom.");
+        const smsRes = await fetch('/api/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, message: finalMessage }),
+        });
+        const smsData = await smsRes.json();
+        if (!smsRes.ok || smsData.error) throw new Error(smsData.error || 'Chyba SMS brány');
+        alert("SMS bola odoslaná!");
       }
       setCustomText('');
     } catch (err) {
