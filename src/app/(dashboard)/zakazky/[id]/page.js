@@ -64,6 +64,7 @@ export default function DetailZakazkyPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('card'); // 'card' | 'cash'
   const [newTaskText, setNewTaskText] = useState('');
   const [newItem, setNewItem] = useState({
     name: '',
@@ -789,7 +790,7 @@ export default function DetailZakazkyPage() {
         payment_info: {
             issue_date: teraz.toISOString(),
             due_date: datumSplatnosti.toISOString(),
-            payment_method: isOfficial ? "Prevodom" : "Hotovosť"
+            payment_method: isOfficial ? (paymentMethod === 'cash' ? 'Hotovosť' : 'Kartou') : 'Odložená platba',
         },
 
         car_details: { 
@@ -802,6 +803,19 @@ export default function DetailZakazkyPage() {
 
       const { data: invData, error: invError } = await supabase.from('invoices').insert([invoicePayload]).select().single();
       if (invError) throw invError;
+
+      // Ak hotovosť a oficiálna faktúra → zapísať do kasy
+      if (isOfficial && paymentMethod === 'cash') {
+        const today = teraz.toISOString().split('T')[0];
+        await supabase.from('kasa_entries').insert([{
+          date: today,
+          type: 'prijem',
+          amount: Number(total),
+          description: `Zákazka ${zakazka.job_number || zakazka.id.slice(0, 8)} — ${zakazka.car_brand_model || ''}`.trim(),
+          spz: zakazka.plate_number,
+          job_id: id,
+        }]);
+      }
 
       await updateJobStatus('Archivované');
       router.push(`/faktury/${invData.id}`);
@@ -1036,7 +1050,7 @@ export default function DetailZakazkyPage() {
           </div>
           <div>
             <p className="text-[9px] text-zinc-500 mb-1">Forma úhrady</p>
-            <p className="text-xs">Prevodom / Karta</p>
+            <p className="text-xs">{zakazka.status === 'Archivované' ? (zakazka.payment_method || '—') : (paymentMethod === 'cash' ? '💵 Hotovosť' : '💳 Kartou')}</p>
           </div>
         </div>
 
@@ -1790,12 +1804,35 @@ export default function DetailZakazkyPage() {
       {isInvoiceModalOpen && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print font-black">
           <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[4rem] max-w-2xl w-full text-center shadow-2xl font-bold">
-            <h3 className="text-4xl font-black uppercase italic mb-6 tracking-tighter text-white">Finalizácia zákazky</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-4xl font-black uppercase italic mb-2 tracking-tighter text-white">Finalizácia zákazky</h3>
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest mb-8">{zakazka.customer_name} — {zakazka.plate_number} — {total.toFixed(2)} €</p>
+
+            {/* Spôsob platby */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Spôsob úhrady</p>
+            <div className="grid grid-cols-2 gap-3 mb-8">
+              <button
+                onClick={() => setPaymentMethod('card')}
+                className={`py-5 rounded-[2rem] font-black uppercase text-sm tracking-widest transition-all border-2 ${paymentMethod === 'card' ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}
+              >💳 Kartou</button>
+              <button
+                onClick={() => setPaymentMethod('cash')}
+                className={`py-5 rounded-[2rem] font-black uppercase text-sm tracking-widest transition-all border-2 ${paymentMethod === 'cash' ? 'bg-green-600 border-green-500 text-white shadow-lg shadow-green-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}
+              >💵 Hotovosť</button>
+            </div>
+
+            {paymentMethod === 'cash' && (
+              <div className="bg-green-600/10 border border-green-600/30 rounded-2xl px-4 py-3 mb-6 text-[10px] font-black text-green-400 uppercase tracking-widest">
+                Platba sa automaticky zapíše do kasy — {zakazka.plate_number} — {total.toFixed(2)} €
+              </div>
+            )}
+
+            {/* Typ dokladu */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Typ dokladu</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <button disabled={invoiceLoading} onClick={() => handleFinalizeJob(true)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-xl font-bold font-sans">📄 VYSTAVIŤ FAKTÚRU</button>
               <button disabled={invoiceLoading} onClick={() => handleFinalizeJob(false)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all font-bold font-sans">📂 IBA ODLOŽIŤ</button>
             </div>
-            <button onClick={() => setIsInvoiceModalOpen(false)} className="mt-8 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all italic font-black">Späť k úpravám</button>
+            <button onClick={() => setIsInvoiceModalOpen(false)} className="text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all italic font-black">Späť k úpravám</button>
           </div>
         </div>
       )}

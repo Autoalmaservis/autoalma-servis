@@ -202,6 +202,7 @@ export default function DashboardLayout({ children }) {
               <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
               <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia tímu" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
               <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
+              <MenuLink href="/kasa" icon="💵" label="Kasa" collapsed={isCollapsed} active={pathname === '/kasa'} />
             </div>
 
             {/* TO-DO — otvára modal */}
