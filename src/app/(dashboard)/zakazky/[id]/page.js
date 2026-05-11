@@ -189,9 +189,7 @@ export default function DetailZakazkyPage() {
 
         const enrichedData = { ...data, customer_id: finalCustomerId };
         setZakazka(enrichedData);
-        if (data.has_unread_finding) {
-          supabase.from('job_tickets').update({ has_unread_finding: false }).eq('id', id);
-        }
+        await supabase.from('job_tickets').update({ has_unread_finding: false }).eq('id', id);
         return enrichedData;
       }
     } catch (err) { console.error("Chyba detailu:", err.message); }
