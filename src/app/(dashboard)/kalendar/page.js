@@ -44,6 +44,10 @@ export default function KalendarPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('calendar');
 
+  const [showNewClientForm, setShowNewClientForm] = useState(false);
+  const [newClientData, setNewClientData] = useState({ name: '', phone: '', email: '', password: '' });
+  const [newClientLoading, setNewClientLoading] = useState(false);
+
   // --- 1. NAČÍTANIE DÁT ---
   const fetchData = async () => {
     setLoading(true);
@@ -332,6 +336,42 @@ export default function KalendarPage() {
     setPlannedWork(props.plannedWork || '');
     setTempCustomerContact({ phone: props.customerPhone || '', email: props.customerEmail || '', customerName: props.customerName || '', userId: props.userId || null });
     setIsModalOpen(true);
+  };
+
+  const handleCreateClient = async (e) => {
+    e.preventDefault();
+    setNewClientLoading(true);
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newClientData.email,
+        password: newClientData.password,
+        options: { data: { full_name: newClientData.name, role: 'zakaznik' } }
+      });
+      if (authError) throw authError;
+      const userId = authData.user?.id;
+      await supabase.from('user_profiles').insert([{
+        id: userId,
+        full_name: newClientData.name,
+        email: newClientData.email,
+        phone: newClientData.phone,
+        role: 'zakaznik'
+      }]);
+      fetch('/api/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newClientData.email, name: newClientData.name, password: newClientData.password, createdByAdmin: true }),
+      }).catch(() => {});
+      setCarData({ license_plate: plate, brand_model: '', owner_name: newClientData.name, owner_id: userId });
+      setTempCustomerContact({ phone: newClientData.phone, email: newClientData.email, customerName: newClientData.name, userId });
+      setSelectedClientName(newClientData.name);
+      setIsKnown(true);
+      setShowNewClientForm(false);
+      setNewClientData({ name: '', phone: '', email: '', password: '' });
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    } finally {
+      setNewClientLoading(false);
+    }
   };
 
   const deleteReservation = async () => {
@@ -687,9 +727,34 @@ export default function KalendarPage() {
                               <div><p className="text-[9px] font-black text-red-600 uppercase mb-1 font-bold">VIN</p><span className="font-mono text-xs font-bold">{carData.vin_number || '---'}</span></div>
                               <div><p className="text-[9px] font-black text-red-600 uppercase mb-1 font-bold">Majiteľ</p>{carData.owner_name}</div>
                             </div>
+                            <Link href={{ pathname: '/prijem', query: { spz: plate, meno: carData.owner_name } }} className="mt-6 w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all">
+                              📋 Otvoriť zákazku
+                            </Link>
+                          </div>
+                        ) : plate ? (
+                          <div className="border-2 border-dashed border-zinc-800 rounded-[3rem] p-8 space-y-4">
+                            <p className="text-center text-zinc-600 text-[10px] font-black uppercase tracking-[0.4em]">Vozidlo nie je v DB</p>
+                            {!showNewClientForm ? (
+                              <button onClick={() => setShowNewClientForm(true)} className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all">
+                                + Nový zákazník
+                              </button>
+                            ) : (
+                              <form onSubmit={handleCreateClient} className="space-y-3">
+                                <input required type="text" placeholder="Meno a priezvisko" value={newClientData.name} onChange={e => setNewClientData(p => ({...p, name: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3.5 rounded-xl text-white font-bold text-sm outline-none focus:border-red-600" />
+                                <input type="tel" placeholder="Telefón" value={newClientData.phone} onChange={e => setNewClientData(p => ({...p, phone: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3.5 rounded-xl text-white font-bold text-sm outline-none focus:border-red-600" />
+                                <input required type="email" placeholder="E-mail" value={newClientData.email} onChange={e => setNewClientData(p => ({...p, email: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3.5 rounded-xl text-white font-bold text-sm outline-none focus:border-red-600" />
+                                <input required type="text" placeholder="Heslo do Garáže" value={newClientData.password} onChange={e => setNewClientData(p => ({...p, password: e.target.value}))} className="w-full bg-black border border-red-600/30 p-3.5 rounded-xl text-white font-bold text-sm outline-none focus:border-red-600" />
+                                <div className="flex gap-2 pt-1">
+                                  <button type="button" onClick={() => setShowNewClientForm(false)} className="flex-1 text-zinc-500 font-black text-[10px] uppercase hover:text-white transition-all">Zrušiť</button>
+                                  <button type="submit" disabled={newClientLoading} className="flex-[2] bg-red-600 hover:bg-red-500 text-white font-black py-3.5 rounded-xl text-[10px] uppercase tracking-widest transition-all disabled:opacity-40">
+                                    {newClientLoading ? 'Vytváram...' : 'Registrovať + Zákazka'}
+                                  </button>
+                                </div>
+                              </form>
+                            )}
                           </div>
                         ) : (
-                          <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12 italic text-[10px] uppercase tracking-[0.5em] leading-relaxed font-bold"> Vozidlo nie je v DB </div>
+                          <div className="h-48 flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-800 text-center p-12 italic text-[10px] uppercase tracking-[0.5em] leading-relaxed font-bold">Zadajte ŠPZ</div>
                         )}
                       </div>
                     )}
