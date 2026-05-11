@@ -30,6 +30,20 @@ export default function DetailZakazkyPage() {
 
   const [myCompany, setMyCompany] = useState({ name: 'AutoAlma Servis', address: '', city: '', zip: '', ico: '', dic: '', bank: '', phone: '', email: '', web: '', logo_url: '' });
 
+  // Formuláre
+  const [formTemplates, setFormTemplates] = useState([]);
+  const [savedForms, setSavedForms] = useState([]);
+  const [showFormSelector, setShowFormSelector] = useState(false);
+  const [showFormFill, setShowFormFill] = useState(false);
+  const [activeFormTemplate, setActiveFormTemplate] = useState(null);
+  const [formFillData, setFormFillData] = useState({
+    customer_name: '', customer_address: '', customer_phone: '', customer_ico: '',
+    brand: '', model: '', plate: '', mileage: '', year: '', fuel: '', engine_volume: '', engine_power: '',
+    note: '', date_received: new Date().toISOString().split('T')[0], date_returned: '',
+    measurements: [],
+  });
+  const [savingForm, setSavingForm] = useState(false);
+
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
@@ -98,7 +112,9 @@ export default function DetailZakazkyPage() {
       fetchWarehouseItems(),
       fetchSettings(),
       fetchCurrentOffer(),
-      fetchPhotos()
+      fetchPhotos(),
+      fetchFormTemplates(),
+      fetchSavedForms(),
     ]);
 
     // Ak máme ŠPZ, vyhľadáme históriu ponúk
@@ -255,6 +271,114 @@ export default function DetailZakazkyPage() {
       if (error) throw error;
       if (data) setPhotos(data);
     } catch (err) { console.error("Chyba fotiek:", err.message); }
+  };
+
+  const fetchFormTemplates = async () => {
+    const { data } = await supabase.from('form_templates').select('*').order('created_at', { ascending: false });
+    if (data) setFormTemplates(data);
+  };
+
+  const fetchSavedForms = async () => {
+    const { data } = await supabase.from('job_forms').select('*').eq('job_id', id).order('created_at', { ascending: false });
+    if (data) setSavedForms(data);
+  };
+
+  const openFormFill = (template) => {
+    const z = zakazka || {};
+    const brandParts = (z.car_brand_model || '').split(' ');
+    setActiveFormTemplate(template);
+    setFormFillData({
+      customer_name: z.customer_name || '',
+      customer_address: '',
+      customer_phone: z.customer_phone || '',
+      customer_ico: '',
+      brand: brandParts[0] || '',
+      model: brandParts.slice(1).join(' ') || '',
+      plate: z.plate_number || '',
+      mileage: z.mileage || '',
+      year: z.year_produced || '',
+      fuel: z.fuel_type || '',
+      engine_volume: z.engine_volume || '',
+      engine_power: z.engine_power || '',
+      note: '',
+      date_received: new Date().toISOString().split('T')[0],
+      date_returned: '',
+      measurements: [
+        { label: 'Priechodnosť PRED', value: '' },
+        { label: 'Priechodnosť PO', value: '' },
+        { label: 'Stav DPF/FAP PRED', value: '' },
+        { label: 'Stav DPF/FAP PO', value: '' },
+        { label: 'Počet čistení', value: '' },
+      ],
+    });
+    setShowFormSelector(false);
+    setShowFormFill(true);
+  };
+
+  const handleSaveForm = async () => {
+    setSavingForm(true);
+    try {
+      await supabase.from('job_forms').insert([{
+        job_id: id,
+        template_id: activeFormTemplate.id,
+        template_name: activeFormTemplate.name,
+        filled_data: formFillData,
+      }]);
+      fetchSavedForms();
+      setShowFormFill(false);
+    } catch (err) { alert('Chyba: ' + err.message); }
+    finally { setSavingForm(false); }
+  };
+
+  const handlePrintForm = () => {
+    const d = formFillData;
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeFormTemplate?.name || 'Formulár'}</title>
+    <style>
+      body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#000;font-size:11px}
+      h1{color:#0000aa;font-size:16px;margin:0} h2{color:#cc0000;font-size:13px;margin:4px 0 12px}
+      p{margin:0 0 2px;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.05em}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0000aa;padding-bottom:10px;margin-bottom:16px}
+      .logo-area{text-align:right;font-size:10px}
+      table{width:100%;border-collapse:collapse;margin-bottom:12px}
+      td,th{border:1px solid #aaa;padding:5px 8px;font-size:11px}
+      th{background:#e8e8ff;text-align:left;font-weight:bold;color:#0000aa;font-size:10px;text-transform:uppercase;width:30%}
+      .section-label{background:#0000aa;color:#fff;font-weight:bold;padding:4px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.1em}
+      .measure-table td{border:1px solid #aaa;padding:5px 8px}
+      .measure-header{background:#ffeeee;font-weight:bold;color:#cc0000;font-size:10px;text-transform:uppercase}
+      .dates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+      .date-box{border:1px solid #aaa;padding:8px;border-radius:4px}
+      .sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
+      .sign-line{border-top:1px solid #000;padding-top:4px;font-size:10px;color:#555}
+      @media print{body{padding:10px}}
+    </style></head><body>
+    <div class="header">
+      <div><h1>${activeFormTemplate?.name || 'PROTOKOL'}</h1><h2>AutoAlma Servis s.r.o.</h2><p>DPF, FAP filtrov pevných častíc, katalyzátorov</p></div>
+      <div class="logo-area"><strong>AutoAlma Servis s.r.o.</strong><br/>Tel: 0940 449 449<br/>0908 647 227<br/>ul. Svornosti 119<br/>821 06 Bratislava</div>
+    </div>
+    <p class="section-label">Odovzdávajúci</p>
+    <table><tr><th>Meno / Názov spol.</th><td>${d.customer_name}</td></tr>
+    <tr><th>Adresa</th><td>${d.customer_address}</td></tr>
+    <tr><th>Tel. číslo</th><td>${d.customer_phone}</td><th>IČO</th><td>${d.customer_ico}</td></tr></table>
+    <p class="section-label" style="margin-top:10px">Údaje o vozidle</p>
+    <table>
+    <tr><th>Značka</th><td>${d.brand}</td><th>KW</th><td>${d.engine_power}</td></tr>
+    <tr><th>Model</th><td>${d.model}</td><th>Objem motora</th><td>${d.engine_volume}</td></tr>
+    <tr><th>EČV</th><td>${d.plate}</td><th>Rok výroby</th><td>${d.year}</td></tr>
+    <tr><th>Stav KM</th><td>${d.mileage}</td><th>Palivo</th><td>${d.fuel}</td></tr>
+    <tr><th>Poznámka</th><td colspan="3">${d.note}</td></tr></table>
+    ${d.measurements.length > 0 ? `
+    <p class="section-label" style="margin-top:10px">Merania</p>
+    <table class="measure-table">${d.measurements.map(m => `<tr><th class="measure-header">${m.label}</th><td>${m.value}</td></tr>`).join('')}</table>` : ''}
+    <div class="dates">
+      <div class="date-box"><p>Prevzaté dňa</p><strong>${d.date_received ? new Date(d.date_received + 'T12:00:00').toLocaleDateString('sk-SK') : '—'}</strong></div>
+      <div class="date-box"><p>Odovzdané dňa</p><strong>${d.date_returned ? new Date(d.date_returned + 'T12:00:00').toLocaleDateString('sk-SK') : '—'}</strong></div>
+    </div>
+    <div class="sign"><div class="sign-line">Podpis Preberajúceho</div><div class="sign-line">Podpis Odovzdávajúceho</div></div>
+    </body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 400);
   };
 
   const handleUploadPhoto = async (e) => {
@@ -835,14 +959,22 @@ export default function DetailZakazkyPage() {
                 )}
             </div>
 
-            {!activeOffer && (
-              <button 
-                onClick={() => router.push(`/zakazky/${id}/nova-ponuka`)} 
-                className="no-print bg-blue-600 border border-blue-600 text-white px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all font-bold shadow-lg"
+            <div className="no-print flex gap-2 items-center">
+              <button
+                onClick={() => setShowFormSelector(true)}
+                className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-zinc-700 hover:text-white transition-all shadow-lg"
               >
-                📝 Vytvoriť novú cenovú ponuku
+                📋 Pridať formulár
               </button>
-            )}
+              {!activeOffer && (
+                <button
+                  onClick={() => router.push(`/zakazky/${id}/nova-ponuka`)}
+                  className="bg-blue-600 border border-blue-600 text-white px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all font-bold shadow-lg"
+                >
+                  📝 Vytvoriť novú cenovú ponuku
+                </button>
+              )}
+            </div>
           </div>
           <div className="bg-black/30 rounded-3xl border border-zinc-800 overflow-hidden shadow-inner font-bold">
             <table className="w-full text-left text-sm">
@@ -1310,6 +1442,154 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
       )}
+      {/* ── MODÁL: VÝBER FORMULÁRA ── */}
+      {showFormSelector && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 no-print font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] w-full max-w-lg shadow-2xl">
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter">Vybrať <span className="text-red-600">formulár</span></h3>
+              <button onClick={() => setShowFormSelector(false)} className="bg-zinc-800 hover:bg-white hover:text-black p-3 rounded-full transition-all">✕</button>
+            </div>
+            {formTemplates.length === 0 ? (
+              <div className="text-center text-zinc-600 font-black uppercase text-xs tracking-widest py-8">
+                Žiadne formuláre. Nahrajte ich v <strong className="text-zinc-400">Nastavenia → Formuláre</strong>.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {formTemplates.map(t => (
+                  <button key={t.id} onClick={() => openFormFill(t)} className="w-full flex items-center gap-4 bg-zinc-800 hover:bg-red-600 border border-zinc-700 hover:border-red-600 p-5 rounded-2xl transition-all text-left group">
+                    <span className="text-2xl">📋</span>
+                    <div>
+                      <p className="font-black uppercase text-sm group-hover:text-white">{t.name}</p>
+                      <p className="text-[9px] text-zinc-500 uppercase tracking-widest">{new Date(t.created_at).toLocaleDateString('sk-SK')}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODÁL: VYPLNIŤ FORMULÁR ── */}
+      {showFormFill && activeFormTemplate && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-[200] flex no-print font-bold overflow-hidden">
+          <div className="flex flex-col w-full max-w-4xl mx-auto bg-zinc-950 border-x border-zinc-800 overflow-y-auto">
+            {/* HEADER */}
+            <div className="sticky top-0 bg-zinc-950 border-b border-zinc-800 px-8 py-5 flex justify-between items-center z-10">
+              <div>
+                <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Formulár</p>
+                <h3 className="text-xl font-black uppercase italic tracking-tighter">{activeFormTemplate.name}</h3>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={handlePrintForm} className="bg-zinc-800 hover:bg-white hover:text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">🖨️ Vytlačiť</button>
+                <button onClick={handleSaveForm} disabled={savingForm} className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40">
+                  {savingForm ? 'Ukladám...' : '💾 Uložiť do zákazky'}
+                </button>
+                <button onClick={() => setShowFormFill(false)} className="bg-zinc-800 hover:bg-white hover:text-black p-3 rounded-full transition-all">✕</button>
+              </div>
+            </div>
+
+            <div className="p-8 space-y-8">
+              {/* ODOVZDÁVAJÚCI */}
+              <section className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">Odovzdávajúci</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[['Meno / Názov spol.', 'customer_name'], ['Adresa', 'customer_address'], ['Tel. číslo', 'customer_phone'], ['IČO', 'customer_ico']].map(([label, key]) => (
+                    <div key={key}>
+                      <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">{label}</label>
+                      <input value={formFillData[key]} onChange={e => setFormFillData(p => ({...p, [key]: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* VOZIDLO */}
+              <section className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">Údaje o vozidle</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[['Značka', 'brand'], ['Model', 'model'], ['EČV', 'plate'], ['Stav KM', 'mileage'], ['Rok výroby', 'year'], ['Palivo', 'fuel'], ['KW', 'engine_power'], ['Objem motora', 'engine_volume']].map(([label, key]) => (
+                    <div key={key}>
+                      <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">{label}</label>
+                      <input value={formFillData[key]} onChange={e => setFormFillData(p => ({...p, [key]: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Poznámka</label>
+                  <textarea value={formFillData.note} onChange={e => setFormFillData(p => ({...p, note: e.target.value}))} rows={2} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold resize-none" />
+                </div>
+              </section>
+
+              {/* MERANIA */}
+              <section className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-red-400">Merania a hodnoty</h4>
+                  <button type="button" onClick={() => setFormFillData(p => ({...p, measurements: [...p.measurements, { label: '', value: '' }]}))} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white transition-all">+ Pridať riadok</button>
+                </div>
+                <div className="space-y-3">
+                  {formFillData.measurements.map((m, i) => (
+                    <div key={i} className="flex gap-3 items-center">
+                      <input placeholder="Názov merania" value={m.label} onChange={e => { const ms = [...formFillData.measurements]; ms[i] = {...ms[i], label: e.target.value}; setFormFillData(p => ({...p, measurements: ms})); }} className="flex-[2] bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-red-500 font-bold" />
+                      <input placeholder="Hodnota" value={m.value} onChange={e => { const ms = [...formFillData.measurements]; ms[i] = {...ms[i], value: e.target.value}; setFormFillData(p => ({...p, measurements: ms})); }} className="flex-1 bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-red-500 font-bold" />
+                      <button onClick={() => setFormFillData(p => ({...p, measurements: p.measurements.filter((_, j) => j !== i)}))} className="text-zinc-700 hover:text-red-500 transition-all font-black text-lg">×</button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* DÁTUMY */}
+              <section className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] space-y-4">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Dátumy</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Prevzaté dňa</label>
+                    <input type="date" value={formFillData.date_received} onChange={e => setFormFillData(p => ({...p, date_received: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Odovzdané dňa</label>
+                    <input type="date" value={formFillData.date_returned} onChange={e => setFormFillData(p => ({...p, date_returned: e.target.value}))} className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white text-sm outline-none focus:border-blue-500 font-bold" />
+                  </div>
+                </div>
+              </section>
+
+              {/* PDF REFERENCIA */}
+              {activeFormTemplate.pdf_url && (
+                <section className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem]">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-4">Referenčný formulár (PDF)</h4>
+                  <iframe src={activeFormTemplate.pdf_url} className="w-full h-[500px] rounded-xl border border-zinc-700" title="Formulár" />
+                </section>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ULOŽENÉ FORMULÁRE V ZÁKAZKE (kompaktný zoznam) ── */}
+      {savedForms.length > 0 && (
+        <div className="no-print mt-6 space-y-3">
+          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Uložené formuláre ({savedForms.length})</h4>
+          {savedForms.map(f => (
+            <div key={f.id} className="flex items-center justify-between bg-zinc-900/40 border border-zinc-800 px-5 py-3 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <span>📋</span>
+                <div>
+                  <p className="font-black uppercase text-xs">{f.template_name}</p>
+                  <p className="text-[9px] text-zinc-600 uppercase">{new Date(f.created_at).toLocaleDateString('sk-SK')}</p>
+                </div>
+              </div>
+              <button onClick={() => {
+                setActiveFormTemplate({ id: f.template_id, name: f.template_name, pdf_url: null });
+                setFormFillData(f.filled_data);
+                setShowFormFill(true);
+              }} className="text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-all px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500">
+                Otvoriť / Tlačiť
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <style jsx global>{`
         .zakazka-print-area { display: none; }
         .print-spacer { display: none; }
