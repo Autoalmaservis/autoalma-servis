@@ -288,17 +288,17 @@ export default function ZakazkyZoznamPage() {
               const visible = items.slice(0, 3);
               const more = items.length - visible.length;
               return (
-                <div className="hidden lg:flex flex-col justify-center flex-1 px-6 border-l border-zinc-800/50 min-w-0">
-                  <p className="text-[8px] font-black uppercase tracking-[0.2em] text-zinc-600 mb-2">Úkony</p>
-                  <div className="flex flex-col gap-1.5">
+                <div className="hidden lg:flex flex-col items-center justify-center flex-1 px-8 border-l border-zinc-800/50 min-w-0 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.25em] text-zinc-600 mb-3">Úkony</p>
+                  <div className="flex flex-col gap-2 w-full items-center">
                     {visible.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 min-w-0">
-                        <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${item.done ? 'bg-green-500' : 'bg-zinc-600'}`} />
-                        <span className={`text-[10px] font-bold truncate ${item.done ? 'text-zinc-500 line-through' : 'text-zinc-300'}`}>{item.label}</span>
+                      <div key={idx} className="flex items-center gap-2.5 min-w-0 max-w-full">
+                        <span className={`shrink-0 w-2 h-2 rounded-full ${item.done ? 'bg-green-500' : 'bg-zinc-500'}`} />
+                        <span className={`text-xs font-bold truncate ${item.done ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>{item.label}</span>
                       </div>
                     ))}
                     {more > 0 && (
-                      <span className="text-[9px] font-black text-zinc-600 uppercase ml-3.5">+{more} ďalšie</span>
+                      <span className="text-[10px] font-black text-zinc-600 uppercase mt-1">+{more} ďalšie</span>
                     )}
                   </div>
                 </div>
