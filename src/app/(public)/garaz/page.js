@@ -65,6 +65,7 @@ export default function GarazPage() {
   });
 
   const [vehicleForms, setVehicleForms] = useState([]);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('');
 
   // --- STAVY PRE EDITÁCIU PROFILU (ZACHOVANÉ) ---
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -152,6 +153,8 @@ export default function GarazPage() {
             }
           }
         }
+        const { data: logoSetting } = await supabase.from('business_settings').select('value').eq('id', 'company_logo').maybeSingle();
+        if (logoSetting?.value) setCompanyLogoUrl(logoSetting.value);
       } catch (err) {
         console.error("Chyba pri načítaní:", err);
       } finally {
@@ -475,72 +478,75 @@ export default function GarazPage() {
   const printSavedForm = (f) => {
     const d = f.filled_data || {};
     const title = f.template_name || 'PROTOKOL';
-    const dateRec = d.date_received ? new Date(d.date_received + 'T12:00:00').toLocaleDateString('sk-SK') : '...............';
-    const dateRet = d.date_returned ? new Date(d.date_returned + 'T12:00:00').toLocaleDateString('sk-SK') : '...............';
+    const dateRec = d.date_received ? new Date(d.date_received + 'T12:00:00').toLocaleDateString('sk-SK') : '';
+    const dateRet = d.date_returned ? new Date(d.date_returned + 'T12:00:00').toLocaleDateString('sk-SK') : '';
+    const meas = (d.measurements || []).filter(m => m.label);
+    const logo = companyLogoUrl;
     const w = window.open('', '_blank');
     if (!w) return;
-    w.document.write(`<!DOCTYPE html><html lang="sk"><head><meta charset="UTF-8">
-    <title>${title}</title>
+    w.document.write(`<!DOCTYPE html><html lang="sk"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:'Arial',sans-serif;background:#fff;color:#000;font-size:10pt;padding:14mm 14mm 10mm}
-      .page-header{display:flex;justify-content:space-between;align-items:stretch;border:2px solid #cc0000;margin-bottom:8mm}
-      .ph-left{background:#cc0000;color:#fff;padding:5mm 7mm;display:flex;flex-direction:column;justify-content:center;min-width:55mm}
-      .ph-left .company{font-size:15pt;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;line-height:1}
-      .ph-left .subtitle{font-size:7pt;text-transform:uppercase;letter-spacing:.12em;margin-top:2mm;opacity:.85}
-      .ph-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4mm;border-left:2px solid #cc0000;border-right:2px solid #cc0000}
-      .ph-center .doc-title{font-size:13pt;font-weight:900;text-transform:uppercase;color:#cc0000;letter-spacing:-.01em;text-align:center;line-height:1.2}
-      .ph-center .doc-num{font-size:8pt;color:#555;margin-top:1.5mm;text-align:center}
-      .ph-right{padding:4mm 5mm;font-size:8pt;line-height:1.7;text-align:right;display:flex;flex-direction:column;justify-content:center}
-      .ph-right strong{display:block;font-size:9pt}
-      .section{margin-bottom:5mm}
-      .section-title{background:#222;color:#fff;font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.15em;padding:2mm 4mm;margin-bottom:0}
+      body{font-family:'Arial',sans-serif;background:#fff;color:#1a1a1a;font-size:9.5pt;padding:12mm 14mm 10mm}
+      .header{display:flex;align-items:stretch;border:2.5px solid #cc0000;border-radius:3px;margin-bottom:6mm;overflow:hidden}
+      .h-logo{background:#cc0000;padding:5mm 6mm;display:flex;align-items:center;justify-content:center;min-width:44mm}
+      .h-logo img{max-height:18mm;max-width:40mm;object-fit:contain;filter:brightness(0)invert(1)}
+      .h-logo-text{color:#fff;font-size:16pt;font-weight:900;text-transform:uppercase;letter-spacing:-.03em}
+      .h-title{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4mm 6mm;border-left:2px solid #cc0000;border-right:2px solid #cc0000}
+      .h-title .doc-name{font-size:14pt;font-weight:900;text-transform:uppercase;color:#cc0000;line-height:1.15;text-align:center}
+      .h-title .doc-sub{font-size:7.5pt;color:#888;text-transform:uppercase;letter-spacing:.12em;margin-top:1.5mm;text-align:center}
+      .h-info{padding:4mm 5mm;font-size:8pt;line-height:1.75;text-align:right;display:flex;flex-direction:column;justify-content:center;min-width:52mm}
+      .h-info b{font-size:9pt;display:block;margin-bottom:1mm}
+      .two-col{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-bottom:4mm}
+      .sec{margin-bottom:4mm}
+      .sec-head{background:#cc0000;color:#fff;font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.18em;padding:1.8mm 4mm}
+      .sec-head.dark{background:#1a1a1a}
       table{width:100%;border-collapse:collapse}
-      td,th{border:1px solid #bbb;padding:2.5mm 3.5mm;font-size:9.5pt;vertical-align:middle}
-      th{background:#f5f5f5;font-weight:700;color:#333;font-size:8pt;text-transform:uppercase;letter-spacing:.05em;width:32%;white-space:nowrap}
-      td.val{width:18%}
-      .meas-table th{background:#fff0f0;color:#cc0000;width:60%}
-      .meas-table td{font-weight:700;font-size:10pt;text-align:center}
-      .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:6mm}
-      .box{border:1px solid #bbb;padding:3mm 4mm}
-      .box-label{font-size:7.5pt;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:1mm}
-      .box-value{font-size:11pt;font-weight:700}
-      .sign-area{margin-top:12mm;display:grid;grid-template-columns:1fr 1fr;gap:20mm}
-      .sign-block{text-align:center}
-      .sign-line{border-top:1px solid #000;padding-top:2mm;font-size:8pt;color:#555;text-transform:uppercase;letter-spacing:.08em}
-      .footer{margin-top:8mm;border-top:1px solid #ddd;padding-top:3mm;font-size:7.5pt;color:#888;display:flex;justify-content:space-between}
-      @media print{body{padding:10mm 10mm 8mm}@page{size:A4;margin:0}}
+      td,th{border:1px solid #d0d0d0;padding:2mm 3.5mm;font-size:9pt;vertical-align:middle}
+      th{background:#fafafa;font-weight:700;color:#444;font-size:7.8pt;text-transform:uppercase;letter-spacing:.04em;width:36%;white-space:nowrap}
+      td{color:#111} td.w18{width:18%} td.w22{width:22%}
+      .plate-cell{font-size:13pt;font-weight:900;letter-spacing:.12em;color:#cc0000;text-transform:uppercase}
+      .meas th{background:#fff5f5;color:#cc0000;font-size:8pt;width:65%}
+      .meas td{font-size:10.5pt;font-weight:700;text-align:center;background:#fffafa}
+      .meas tr:nth-child(odd) th{background:#ffecec}
+      .meas tr:nth-child(odd) td{background:#fff5f5}
+      .signs{display:grid;grid-template-columns:1fr 1fr;gap:24mm;margin-top:14mm}
+      .sign{text-align:center}
+      .sign-line{border-top:1.5px solid #333;padding-top:2mm;font-size:7.5pt;color:#666;text-transform:uppercase;letter-spacing:.1em}
+      .footer{margin-top:6mm;border-top:1px solid #e0e0e0;padding-top:2.5mm;display:flex;justify-content:space-between;font-size:7pt;color:#aaa}
+      @media print{body{padding:8mm 10mm 6mm}@page{size:A4;margin:0}}
     </style></head><body>
-    <div class="page-header">
-      <div class="ph-left"><div class="company">Auto<span style="opacity:.7">Alma</span></div><div class="subtitle">Servis s.r.o.</div></div>
-      <div class="ph-center"><div class="doc-title">${title}</div><div class="doc-num">Dátum prevzatia: ${dateRec}</div></div>
-      <div class="ph-right"><strong>AutoAlma Servis s.r.o.</strong>ul. Svornosti 119, 821 06 Bratislava<br/>Tel: 0940 449 449 / 0908 647 227<br/>IČO: 46044876 | DIČ: 2023194316</div>
+    <div class="header">
+      <div class="h-logo">${logo ? `<img src="${logo}" alt="Logo"/>` : '<div class="h-logo-text">AutoAlma</div>'}</div>
+      <div class="h-title"><div class="doc-name">${title}</div><div class="doc-sub">Servisný protokol • AutoAlma</div></div>
+      <div class="h-info"><b>AutoAlma Servis s.r.o.</b>ul. Svornosti 119, 821 06 Bratislava<br/>Tel: 0940 449 449 / 0908 647 227<br/>IČO: 46044876&nbsp;&nbsp;DIČ: 2023194316</div>
     </div>
-    <div class="section"><div class="section-title">Odovzdávajúci</div><table>
-      <tr><th>Meno / Obchodný názov</th><td colspan="3">${d.customer_name||''}</td></tr>
-      <tr><th>Adresa</th><td colspan="3">${d.customer_address||''}</td></tr>
-      <tr><th>Telefón</th><td class="val">${d.customer_phone||''}</td><th>IČO</th><td class="val">${d.customer_ico||''}</td></tr>
+    <div class="two-col">
+      <div class="sec"><div class="sec-head">Odovzdávajúci (zákazník)</div><table>
+        <tr><th>Meno / Firma</th><td colspan="3"><b>${d.customer_name||''}</b></td></tr>
+        <tr><th>Adresa</th><td colspan="3">${d.customer_address||''}</td></tr>
+        <tr><th>Telefón</th><td>${d.customer_phone||''}</td></tr>
+        <tr><th>IČO</th><td>${d.customer_ico||''}</td></tr>
+      </table></div>
+      <div class="sec"><div class="sec-head dark">Dátumy servisu</div><table>
+        <tr><th>Prevzaté dňa</th><td><b>${dateRec||'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</b></td></tr>
+        <tr><th>Odovzdané dňa</th><td><b>${dateRet||'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</b></td></tr>
+      </table></div>
+    </div>
+    <div class="sec"><div class="sec-head dark">Údaje o vozidle</div><table>
+      <tr><th>EČV</th><td class="plate-cell w22">${d.plate||''}</td><th>Značka / Model</th><td>${(d.brand||'')+' '+(d.model||'')}</td><th>Rok výroby</th><td class="w18">${d.year||''}</td></tr>
+      <tr><th>Palivo</th><td class="w22">${d.fuel||''}</td><th>Stav KM pri prevzatí</th><td><b>${d.mileage ? d.mileage+' km' : ''}</b></td><th>Výkon / Objem</th><td class="w18">${d.engine_power ? d.engine_power+' kW' : ''} ${d.engine_volume ? '/ '+d.engine_volume : ''}</td></tr>
+      ${d.note ? `<tr><th>Poznámka</th><td colspan="5">${d.note}</td></tr>` : ''}
     </table></div>
-    <div class="section"><div class="section-title">Údaje o vozidle</div><table>
-      <tr><th>Značka</th><td class="val">${d.brand||''}</td><th>Model</th><td>${d.model||''}</td></tr>
-      <tr><th>EČV</th><td class="val">${d.plate||''}</td><th>Rok výroby</th><td class="val">${d.year||''}</td></tr>
-      <tr><th>Palivo</th><td class="val">${d.fuel||''}</td><th>Stav KM</th><td class="val">${d.mileage||''}</td></tr>
-      <tr><th>Výkon (kW)</th><td class="val">${d.engine_power||''}</td><th>Objem motora</th><td class="val">${d.engine_volume||''}</td></tr>
-      ${d.note?`<tr><th>Poznámka</th><td colspan="3">${d.note}</td></tr>`:''}
-    </table></div>
-    ${(d.measurements||[]).filter(m=>m.label).length?`<div class="section"><div class="section-title">Merania a namerané hodnoty</div><table class="meas-table">
-      <tr style="background:#f8f8f8"><th style="background:#eee;color:#333;font-weight:700">Meranie</th><td style="text-align:center;font-weight:700;color:#333">Hodnota</td></tr>
-      ${(d.measurements).filter(m=>m.label).map(m=>`<tr><th>${m.label}</th><td>${m.value||''}</td></tr>`).join('')}
-    </table></div>`:''}
-    <div class="bottom-grid">
-      <div class="box"><div class="box-label">Prevzaté dňa</div><div class="box-value">${dateRec}</div></div>
-      <div class="box"><div class="box-label">Odovzdané dňa</div><div class="box-value">${dateRet}</div></div>
+    ${meas.length ? `<div class="sec"><div class="sec-head">Merania a namerané hodnoty</div><table class="meas">
+      <tr><th style="background:#f0f0f0;color:#333">Meranie / Parameter</th><td style="background:#f0f0f0;text-align:center;font-weight:700;font-size:9pt;color:#333">Nameraná hodnota</td></tr>
+      ${meas.map(m=>`<tr><th>${m.label}</th><td>${m.value||''}</td></tr>`).join('')}
+    </table></div>` : ''}
+    <div class="signs">
+      <div class="sign"><div style="height:16mm;border-bottom:1px dashed #ccc;margin-bottom:2mm"></div><div class="sign-line">Podpis zákazníka — odovzdávajúci</div></div>
+      <div class="sign"><div style="height:16mm;border-bottom:1px dashed #ccc;margin-bottom:2mm"></div><div class="sign-line">Podpis technika — preberajúci</div></div>
     </div>
-    <div class="sign-area">
-      <div class="sign-block"><div style="height:14mm"></div><div class="sign-line">Podpis zákazníka (odovzdávajúci)</div></div>
-      <div class="sign-block"><div style="height:14mm"></div><div class="sign-line">Podpis technika (preberajúci)</div></div>
-    </div>
-    <div class="footer"><span>AutoAlma Servis s.r.o. • ul. Svornosti 119, 821 06 Bratislava • IČ DPH: SK2023194316</span><span>${new Date().toLocaleDateString('sk-SK')}</span></div>
+    <div class="footer"><span>AutoAlma Servis s.r.o. • ul. Svornosti 119, 821 06 Bratislava • IČ DPH: SK2023194316</span><span>Vytlačené: ${new Date().toLocaleDateString('sk-SK')}</span></div>
     <script>window.onload=function(){window.print();}<\/script></body></html>`);
     w.document.close();
   };
