@@ -806,7 +806,7 @@ export default function DetailZakazkyPage() {
 
       // Ak hotovosť → zapísať do kasy (bez ohľadu na typ dokladu)
       if (paymentMethod === 'cash') {
-        const today = teraz.toISOString().split('T')[0];
+        const today = `${teraz.getFullYear()}-${String(teraz.getMonth()+1).padStart(2,'0')}-${String(teraz.getDate()).padStart(2,'0')}`;
         await supabase.from('kasa_entries').insert([{
           date: today,
           type: 'prijem',

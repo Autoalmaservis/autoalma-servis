@@ -512,6 +512,7 @@ export default function KalendarPage() {
             initialView="timeGridWeek"
             headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek' }}
             locale="sk"
+            firstDay={1}
             events={events}
             editable={true}
             selectable={true}

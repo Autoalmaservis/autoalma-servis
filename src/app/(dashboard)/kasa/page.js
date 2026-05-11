@@ -18,8 +18,12 @@ function fDate(d) {
   return d.toLocaleDateString('sk-SK', { day: 'numeric', month: 'numeric' });
 }
 
+// Vždy lokálny dátum — bez UTC posunu
 function toDateStr(d) {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export default function KasaPage() {
@@ -30,6 +34,7 @@ export default function KasaPage() {
   const [modalDay, setModalDay] = useState(null);
   const [form, setForm] = useState({ type: 'vydaj', amount: '', description: '', spz: '' });
   const [saving, setSaving] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
   useEffect(() => { fetchEntries(); }, [weekStart]);
@@ -83,6 +88,23 @@ export default function KasaPage() {
     fetchEntries();
   };
 
+  const handleTransferToNextWeek = async () => {
+    if (zostatok <= 0) return;
+    if (!confirm(`Preniesť ${zostatok.toFixed(2)} € do nasledujúceho týždňa?`)) return;
+    setTransferring(true);
+    const nextMonday = new Date(weekStart.getTime() + 7 * 86400000);
+    await supabase.from('kasa_entries').insert([{
+      date: toDateStr(nextMonday),
+      type: 'prijem',
+      amount: zostatok,
+      description: `Prevod z týždňa ${fDate(days[0])} – ${fDate(days[4])}`,
+      spz: null,
+    }]);
+    setTransferring(false);
+    // Prejdi na ďalší týždeň
+    setWeekStart(nextMonday);
+  };
+
   const weekLabel = `${fDate(days[0])} – ${fDate(days[4])}.${days[0].getFullYear()}`;
   const isCurrentWeek = toDateStr(weekStart) === toDateStr(getMonday(new Date()));
 
@@ -128,65 +150,82 @@ export default function KasaPage() {
         {loading ? (
           <div className="text-center text-zinc-600 uppercase tracking-widest text-[10px] py-20 animate-pulse">Načítavam...</div>
         ) : (
-          <div className="grid grid-cols-5 gap-3">
-            {days.map((day, idx) => {
-              const de = dayEntries(day);
-              const dayPrijem = de.filter(e => e.type === 'prijem').reduce((s, e) => s + Number(e.amount), 0);
-              const dayVydaj  = de.filter(e => e.type === 'vydaj').reduce((s, e) => s + Number(e.amount), 0);
-              const dayNet    = dayPrijem - dayVydaj;
-              const isToday   = toDateStr(day) === toDateStr(new Date());
+          <>
+            <div className="grid grid-cols-5 gap-3 mb-4">
+              {days.map((day, idx) => {
+                const de = dayEntries(day);
+                const dayPrijem = de.filter(e => e.type === 'prijem').reduce((s, e) => s + Number(e.amount), 0);
+                const dayVydaj  = de.filter(e => e.type === 'vydaj').reduce((s, e) => s + Number(e.amount), 0);
+                const dayNet    = dayPrijem - dayVydaj;
+                const isToday   = toDateStr(day) === toDateStr(new Date());
 
-              return (
-                <div key={idx} className={`rounded-[1.5rem] border flex flex-col ${isToday ? 'border-red-600/50 bg-red-600/5' : 'border-zinc-800 bg-zinc-900'}`}>
-                  {/* Hlavička dňa */}
-                  <div className={`px-3 py-3 text-center border-b ${isToday ? 'border-red-600/30' : 'border-zinc-800'}`}>
-                    <p className={`text-[10px] font-black uppercase tracking-widest ${isToday ? 'text-red-400' : 'text-zinc-500'}`}>{DAY_SHORT[idx]}</p>
-                    <p className="text-sm font-black">{fDate(day)}</p>
-                  </div>
+                return (
+                  <div key={idx} className={`rounded-[1.5rem] border flex flex-col ${isToday ? 'border-red-600/50 bg-red-600/5' : 'border-zinc-800 bg-zinc-900'}`}>
+                    {/* Hlavička dňa */}
+                    <div className={`px-3 py-3 text-center border-b ${isToday ? 'border-red-600/30' : 'border-zinc-800'}`}>
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${isToday ? 'text-red-400' : 'text-zinc-500'}`}>{DAY_SHORT[idx]}</p>
+                      <p className="text-sm font-black">{fDate(day)}</p>
+                    </div>
 
-                  {/* Záznamy */}
-                  <div className="flex-1 p-2 space-y-1.5 min-h-[160px]">
-                    {de.map(entry => (
-                      <div
-                        key={entry.id}
-                        onClick={() => setDeleteId(deleteId === entry.id ? null : entry.id)}
-                        className={`rounded-xl p-2 text-[10px] font-black cursor-pointer transition-all ${entry.type === 'prijem' ? 'bg-green-600/10 border border-green-600/20 hover:border-green-500/50' : 'bg-red-600/10 border border-red-600/20 hover:border-red-500/50'}`}
-                      >
-                        {entry.spz && <p className="text-zinc-200 uppercase tracking-wider text-[11px]">{entry.spz}</p>}
-                        {entry.description && <p className="text-zinc-400 truncate">{entry.description}</p>}
-                        <p className={`font-black text-[13px] mt-0.5 ${entry.type === 'prijem' ? 'text-green-400' : 'text-red-400'}`}>
-                          {entry.type === 'prijem' ? '+' : '−'}{Number(entry.amount).toFixed(2)} €
-                        </p>
-                        {deleteId === entry.id && (
-                          <button
-                            onClick={e => { e.stopPropagation(); handleDelete(entry.id); }}
-                            className="mt-1 w-full bg-red-600 hover:bg-red-500 text-white text-[9px] py-1 rounded-lg uppercase tracking-widest transition-all"
-                          >Vymazať</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                    {/* Tlačidlo + Záznam HORE */}
+                    <div className="px-2 pt-2">
+                      <button
+                        onClick={() => openModal(day)}
+                        className="w-full bg-zinc-800 hover:bg-red-600 text-zinc-400 hover:text-white py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                      >+ Záznam</button>
+                    </div>
 
-                  {/* Deň súčet + tlačidlo */}
-                  <div className="p-2 border-t border-zinc-800 space-y-1.5">
+                    {/* Záznamy */}
+                    <div className="flex-1 p-2 space-y-1.5 min-h-[140px]">
+                      {de.map(entry => (
+                        <div
+                          key={entry.id}
+                          onClick={() => setDeleteId(deleteId === entry.id ? null : entry.id)}
+                          className={`rounded-xl p-2 text-[10px] font-black cursor-pointer transition-all ${entry.type === 'prijem' ? 'bg-green-600/10 border border-green-600/20 hover:border-green-500/50' : 'bg-red-600/10 border border-red-600/20 hover:border-red-500/50'}`}
+                        >
+                          {entry.spz && <p className="text-zinc-200 uppercase tracking-wider text-[11px]">{entry.spz}</p>}
+                          {entry.description && <p className="text-zinc-400 truncate">{entry.description}</p>}
+                          <p className={`font-black text-[13px] mt-0.5 ${entry.type === 'prijem' ? 'text-green-400' : 'text-red-400'}`}>
+                            {entry.type === 'prijem' ? '+' : '−'}{Number(entry.amount).toFixed(2)} €
+                          </p>
+                          {deleteId === entry.id && (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDelete(entry.id); }}
+                              className="mt-1 w-full bg-red-600 hover:bg-red-500 text-white text-[9px] py-1 rounded-lg uppercase tracking-widest transition-all"
+                            >Vymazať</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Deň súčet */}
                     {(dayPrijem > 0 || dayVydaj > 0) && (
-                      <div className="text-[9px] font-black uppercase space-y-0.5 px-1">
-                        {dayPrijem > 0 && <div className="flex justify-between text-green-500"><span>In:</span><span>+{dayPrijem.toFixed(2)} €</span></div>}
-                        {dayVydaj  > 0 && <div className="flex justify-between text-red-400"><span>Out:</span><span>−{dayVydaj.toFixed(2)} €</span></div>}
-                        <div className={`flex justify-between border-t border-zinc-800 pt-0.5 ${dayNet >= 0 ? 'text-white' : 'text-orange-400'}`}>
-                          <span>=</span><span>{dayNet >= 0 ? '+' : ''}{dayNet.toFixed(2)} €</span>
+                      <div className="p-2 border-t border-zinc-800">
+                        <div className="text-[9px] font-black uppercase space-y-0.5 px-1">
+                          {dayPrijem > 0 && <div className="flex justify-between text-green-500"><span>In:</span><span>+{dayPrijem.toFixed(2)} €</span></div>}
+                          {dayVydaj  > 0 && <div className="flex justify-between text-red-400"><span>Out:</span><span>−{dayVydaj.toFixed(2)} €</span></div>}
+                          <div className={`flex justify-between border-t border-zinc-800 pt-0.5 ${dayNet >= 0 ? 'text-white' : 'text-orange-400'}`}>
+                            <span>=</span><span>{dayNet >= 0 ? '+' : ''}{dayNet.toFixed(2)} €</span>
+                          </div>
                         </div>
                       </div>
                     )}
-                    <button
-                      onClick={() => openModal(day)}
-                      className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
-                    >+ Záznam</button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+
+            {/* Prevod do ďalšieho týždňa */}
+            <button
+              onClick={handleTransferToNextWeek}
+              disabled={transferring || zostatok <= 0}
+              className="w-full bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 border border-zinc-700 hover:border-green-600 text-zinc-400 hover:text-green-400 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3"
+            >
+              <span>→</span>
+              {transferring ? 'Prenášam...' : `Preniesť zostatok ${zostatok > 0 ? zostatok.toFixed(2) + ' €' : ''} do ďalšieho týždňa`}
+              <span>→</span>
+            </button>
+          </>
         )}
       </div>
 
@@ -195,7 +234,9 @@ export default function KasaPage() {
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 font-bold">
           <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3rem] w-full max-w-md shadow-2xl">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter mb-1">Nový záznam</h3>
-            <p className="text-zinc-500 text-[10px] uppercase tracking-widest mb-6">{modalDay ? DAY_NAMES[days.indexOf(days.find(d => toDateStr(d) === toDateStr(modalDay)))] + ', ' + fDate(modalDay) : ''}</p>
+            <p className="text-zinc-500 text-[10px] uppercase tracking-widest mb-6">
+              {modalDay ? `${DAY_NAMES[days.findIndex(d => toDateStr(d) === toDateStr(modalDay))]}, ${fDate(modalDay)}` : ''}
+            </p>
 
             <div className="flex gap-2 mb-5">
               <button onClick={() => setForm(f => ({ ...f, type: 'vydaj' }))} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${form.type === 'vydaj' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>− Výdaj</button>
@@ -204,10 +245,11 @@ export default function KasaPage() {
 
             <div className="space-y-3 mb-6">
               <input
-                type="number" min="0" step="0.01"
+                type="number" min="0" step="any"
                 placeholder="Suma v €"
                 value={form.amount}
                 onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                onFocus={e => e.target.select()}
                 className="w-full bg-black border border-zinc-700 focus:border-red-500 p-4 rounded-2xl text-white text-sm font-bold outline-none"
                 autoFocus
               />
