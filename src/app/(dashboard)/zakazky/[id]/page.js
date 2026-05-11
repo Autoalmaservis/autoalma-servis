@@ -36,6 +36,9 @@ export default function DetailZakazkyPage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [editingComplaints, setEditingComplaints] = useState(false);
+  const [complaintsText, setComplaintsText] = useState('');
+  const [savingComplaints, setSavingComplaints] = useState(false);
 
   // Formuláre
   const [formTemplates, setFormTemplates] = useState([]);
@@ -803,6 +806,19 @@ export default function DetailZakazkyPage() {
     if (!error) { setNewTaskText(''); fetchTasks(); }
   };
 
+  const saveComplaints = async () => {
+    if (!await ensureAuth()) return;
+    setSavingComplaints(true);
+    const { error } = await supabase.from('job_tickets').update({ complaints: complaintsText }).eq('id', id);
+    setSavingComplaints(false);
+    if (!error) {
+      setEditingComplaints(false);
+      fetchDetail();
+    } else {
+      alert('Chyba: ' + error.message);
+    }
+  };
+
   const toggleTaskStatus = async (taskId, currentStatus) => {
     const newStatus = !currentStatus;
     setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? { ...t, is_completed: newStatus } : t));
@@ -1065,10 +1081,33 @@ export default function DetailZakazkyPage() {
               </div>
               
               <div className="bg-red-600/5 p-8 rounded-[2rem] border border-red-600/20 shadow-inner">
-                <h2 className="text-red-600 font-black uppercase text-[10px] tracking-widest mb-4 italic font-black">Zistené závady / Poznámky</h2>
-                <pre className="text-xs font-sans text-zinc-400 whitespace-pre-wrap font-bold leading-relaxed">
-                  {zakazka.complaints || 'Žiadne zaznamenané závady.'}
-                </pre>
+                <div className="flex items-center justify-between mb-4 no-print">
+                  <h2 className="text-red-600 font-black uppercase text-[10px] tracking-widest italic">Zistené závady / Poznámky</h2>
+                  {!editingComplaints ? (
+                    <button
+                      onClick={() => { setComplaintsText(zakazka.complaints || ''); setEditingComplaints(true); }}
+                      className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest"
+                    >✏️ Upraviť</button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingComplaints(false)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition-all tracking-widest">Zrušiť</button>
+                      <button onClick={saveComplaints} disabled={savingComplaints} className="text-[9px] font-black uppercase bg-red-600 hover:bg-red-500 text-white px-4 py-1.5 rounded-lg transition-all tracking-widest disabled:opacity-50">{savingComplaints ? 'Ukladám...' : 'Uložiť'}</button>
+                    </div>
+                  )}
+                </div>
+                {editingComplaints ? (
+                  <textarea
+                    value={complaintsText}
+                    onChange={e => setComplaintsText(e.target.value)}
+                    rows={5}
+                    autoFocus
+                    className="w-full bg-black/40 border border-red-600/40 focus:border-red-500 p-4 rounded-2xl text-sm text-white font-bold outline-none leading-relaxed resize-none"
+                  />
+                ) : (
+                  <pre className="text-xs font-sans text-zinc-400 whitespace-pre-wrap font-bold leading-relaxed">
+                    {zakazka.complaints || 'Žiadne zaznamenané závady.'}
+                  </pre>
+                )}
               </div>
           </div>
 
