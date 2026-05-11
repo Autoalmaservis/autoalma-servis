@@ -35,6 +35,7 @@ export default function DetailZakazkyPage() {
   const [customersList, setCustomersList] = useState([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [changingCustomer, setChangingCustomer] = useState(false);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   // Formuláre
   const [formTemplates, setFormTemplates] = useState([]);
@@ -342,8 +343,10 @@ export default function DetailZakazkyPage() {
   };
 
   const fetchCustomersList = async () => {
+    setLoadingCustomers(true);
     const { data } = await supabase.from('customers').select('id, name, phone, email, company_name, ico, dic, ic_dph, address, city, zip, client_type').order('name', { ascending: true });
     setCustomersList(data || []);
+    setLoadingCustomers(false);
   };
 
   const handleChangeCustomer = async (cust) => {
@@ -1804,7 +1807,9 @@ export default function DetailZakazkyPage() {
             />
 
             <div className="overflow-y-auto space-y-2 flex-1 pr-1">
-              {(() => {
+              {loadingCustomers ? (
+                <p className="text-center text-zinc-600 text-[10px] uppercase tracking-widest py-8 animate-pulse">Načítavam klientov...</p>
+              ) : (() => {
                 const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
                 const q = nd(customerSearch);
                 if (!q) return (
