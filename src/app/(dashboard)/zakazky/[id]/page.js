@@ -846,10 +846,6 @@ export default function DetailZakazkyPage() {
     setMechanicSplits(prev => prev.map(s => s.employee_id === employeeId ? { ...s, hours: val } : s));
   };
 
-  const handleSplitHoursBlur = () => {
-    saveMechanicSplits(mechanicSplits);
-  };
-
   const saveComplaints = async () => {
     if (!await ensureAuth()) return;
     setSavingComplaints(true);
@@ -1464,19 +1460,19 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        {/* HODINY MECHANIKOV */}
+        {/* HODINY MECHANIKOV — no-print, nezobrazí sa na tlači */}
         <div className="mt-12 no-print font-bold">
           {(() => {
             const totalWorkHours = items.filter(i => i.type === 'Práca').reduce((a, i) => a + Number(i.quantity), 0);
             const splitTotal = mechanicSplits.reduce((a, s) => a + Number(s.hours), 0);
-            const remaining = Math.max(0, totalWorkHours - splitTotal);
+            const diff = totalWorkHours - splitTotal;
+            const saved = !savingSplits;
             return (
               <div className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-6 mb-4">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-5">
                   <h2 className="text-yellow-400 font-black uppercase text-[10px] tracking-widest italic">Hodiny mechanikov</h2>
                   <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                    Spolu z práce: <span className="text-white">{totalWorkHours.toFixed(2)} hod</span>
-                    {remaining > 0.001 && <span className="text-orange-400 ml-2">· nerozdelených: {remaining.toFixed(2)} hod</span>}
+                    Zo zákazky: <span className="text-white">{totalWorkHours.toFixed(2)} hod</span>
                   </span>
                 </div>
 
@@ -1490,7 +1486,6 @@ export default function DetailZakazkyPage() {
                         step="0.25"
                         value={s.hours}
                         onChange={e => handleSplitHoursChange(s.employee_id, e.target.value)}
-                        onBlur={handleSplitHoursBlur}
                         className="w-20 bg-zinc-800 border border-zinc-700 focus:border-yellow-500 px-3 py-1.5 rounded-xl text-white text-[12px] font-black outline-none text-right"
                       />
                       <span className="text-zinc-500 text-[10px] font-black uppercase">hod</span>
@@ -1504,8 +1499,9 @@ export default function DetailZakazkyPage() {
                   )}
                 </div>
 
+                {/* Pridať mechanika */}
                 {showAddMechanic ? (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center mb-4">
                     <select
                       value={newMechanicId}
                       onChange={e => setNewMechanicId(e.target.value)}
@@ -1517,14 +1513,34 @@ export default function DetailZakazkyPage() {
                       ))}
                     </select>
                     <button onClick={handleAddMechanic} className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Pridať</button>
-                    <button onClick={() => { setShowAddMechanic(false); setNewMechanicId(''); }} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Zrušiť</button>
+                    <button onClick={() => { setShowAddMechanic(false); setNewMechanicId(''); }} className="bg-zinc-800 text-zinc-400 px-3 py-2 rounded-xl text-[10px] font-black uppercase transition-all">Zrušiť</button>
                   </div>
                 ) : (
-                  <button onClick={() => setShowAddMechanic(true)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-yellow-400 border border-zinc-800 hover:border-yellow-600 px-4 py-2 rounded-xl transition-all tracking-widest">
+                  <button onClick={() => setShowAddMechanic(true)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-yellow-400 border border-zinc-800 hover:border-yellow-600 px-4 py-2 rounded-xl transition-all tracking-widest mb-4 inline-block">
                     + Pridať ďalšieho mechanika
                   </button>
                 )}
-                {savingSplits && <p className="text-[9px] text-zinc-600 uppercase tracking-widest mt-2">Ukladám...</p>}
+
+                {/* Súčet + Uložiť */}
+                <div className="flex items-center justify-between border-t border-zinc-800 pt-4 mt-2">
+                  <div className="text-[10px] font-black uppercase tracking-widest">
+                    <span className="text-zinc-500">Rozdelené: </span>
+                    <span className={splitTotal > 0 ? 'text-white' : 'text-zinc-600'}>{splitTotal.toFixed(2)} hod</span>
+                    {Math.abs(diff) > 0.001 && (
+                      <span className={`ml-3 ${diff > 0 ? 'text-orange-400' : 'text-red-400'}`}>
+                        {diff > 0 ? `· zostatok: ${diff.toFixed(2)} hod` : `· prečerpané: ${Math.abs(diff).toFixed(2)} hod`}
+                      </span>
+                    )}
+                    {Math.abs(diff) <= 0.001 && splitTotal > 0 && <span className="text-green-500 ml-3">· rozdelené správne ✓</span>}
+                  </div>
+                  <button
+                    onClick={() => saveMechanicSplits(mechanicSplits)}
+                    disabled={savingSplits}
+                    className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                  >
+                    {savingSplits ? 'Ukladám...' : '💾 Uložiť hodiny'}
+                  </button>
+                </div>
               </div>
             );
           })()}
