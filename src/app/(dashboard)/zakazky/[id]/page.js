@@ -30,6 +30,12 @@ export default function DetailZakazkyPage() {
 
   const [myCompany, setMyCompany] = useState({ name: 'AutoAlma Servis', address: '', city: '', zip: '', ico: '', dic: '', bank: '', phone: '', email: '', web: '', logo_url: '' });
 
+  // Zmena odberateľa
+  const [showChangeCustomer, setShowChangeCustomer] = useState(false);
+  const [customersList, setCustomersList] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [changingCustomer, setChangingCustomer] = useState(false);
+
   // Formuláre
   const [formTemplates, setFormTemplates] = useState([]);
   const [savedForms, setSavedForms] = useState([]);
@@ -333,6 +339,37 @@ export default function DetailZakazkyPage() {
     });
     setShowFormSelector(false);
     setShowFormFill(true);
+  };
+
+  const fetchCustomersList = async () => {
+    const { data } = await supabase.from('customers').select('id, name, phone, email, company_name, ico, dic, ic_dph, address, city, zip, client_type').order('name', { ascending: true });
+    setCustomersList(data || []);
+  };
+
+  const handleChangeCustomer = async (cust) => {
+    if (!await ensureAuth()) return;
+    setChangingCustomer(true);
+    const { error } = await supabase.from('job_tickets').update({
+      customer_name: cust.name,
+      customer_phone: cust.phone || null,
+      customer_email: cust.email || null,
+      customer_id: cust.id,
+      company_name: cust.company_name || null,
+      ico: cust.ico || null,
+      dic: cust.dic || null,
+      ic_dph: cust.ic_dph || null,
+      address: cust.address || null,
+      city: cust.city || null,
+      zip: cust.zip || null,
+    }).eq('id', id);
+    setChangingCustomer(false);
+    if (!error) {
+      setShowChangeCustomer(false);
+      setCustomerSearch('');
+      fetchDetail();
+    } else {
+      alert('Chyba: ' + error.message);
+    }
   };
 
   const handleDeleteForm = async (formId) => {
@@ -699,15 +736,15 @@ export default function DetailZakazkyPage() {
         total_amount: Number(total) || 0,
         is_official: isOfficial,
         
-        // DOPLNENÉ: ÚDAJE O DODÁVATEĽOVI
+        // ÚDAJE O DODÁVATEĽOVI z nastavení
         supplier_details: {
-            company_name: "AutoAlma Servis s.r.o.", 
-            address: "Slovenská ulica 12, 040 01 Košice",
-            ico: "12345678",
-            dic: "2021234567",
-            ic_dph: "SK2021234567",
-            bank_account: "SK12 1100 0000 0012 3456 7890", 
-            bank_name: "Tatra Banka, a.s."
+            company_name: myCompany.name || 'AutoAlma Servis s.r.o.',
+            address: [myCompany.address, myCompany.zip, myCompany.city].filter(Boolean).join(', ') || 'ul. Svornosti 119, 821 06 Bratislava',
+            ico: myCompany.ico || '46044876',
+            dic: myCompany.dic || '2023194316',
+            ic_dph: `SK${(myCompany.dic || '2023194316').replace('SK','')}`,
+            bank_account: myCompany.bank || '',
+            bank_name: '',
         },
 
         // DOPLNENÉ: KOMPLETNÉ ÚDAJE O ZÁKAZNÍKOVI (ADRESA ZAKLADANÁ)
@@ -893,11 +930,11 @@ export default function DetailZakazkyPage() {
         <div className="grid grid-cols-2 gap-10 mb-10 border-b border-zinc-800 pb-10">
           <div>
             <h4 className="text-red-600 uppercase text-[10px] mb-3 font-black tracking-widest italic">Dodávateľ</h4>
-            <p className="text-lg font-black italic">AutoAlma Servis s.r.o.</p>
-            <p className="text-xs text-zinc-400">Slovenská ulica 12, 040 01 Košice</p>
+            <p className="text-lg font-black italic">{myCompany.name || 'AutoAlma Servis s.r.o.'}</p>
+            <p className="text-xs text-zinc-400">{[myCompany.address, myCompany.zip, myCompany.city].filter(Boolean).join(', ') || 'ul. Svornosti 119, 821 06 Bratislava'}</p>
             <div className="mt-4 text-[10px] font-bold text-zinc-500 uppercase leading-relaxed font-black">
-              <p>IČO: 12345678 | DIČ: 2021234567</p>
-              <p className="mt-2 text-white italic">IBAN: SK12 1100 0000 0012 3456 7890</p>
+              <p>IČO: {myCompany.ico || '46044876'} | DIČ: {myCompany.dic || '2023194316'}</p>
+              {myCompany.bank && <p className="mt-2 text-white italic">IBAN: {myCompany.bank}</p>}
             </div>
           </div>
           
@@ -995,7 +1032,10 @@ export default function DetailZakazkyPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12 font-bold">
           <div className="space-y-4">
-              <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">Partner a Technika</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">Partner a Technika</h2>
+                <button onClick={() => { setShowChangeCustomer(true); fetchCustomersList(); }} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest">✏️ Zmeniť odberateľa</button>
+              </div>
               <div className="bg-black/30 p-8 rounded-3xl border border-zinc-800 space-y-4">
                 <div>
                   <p className="text-2xl font-black uppercase italic tracking-tighter leading-none">{zakazka.customer_name}</p>
@@ -1739,6 +1779,60 @@ export default function DetailZakazkyPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── MODÁL: ZMENA ODBERATEĽA ── */}
+      {showChangeCustomer && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 no-print font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3rem] w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <div>
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter">Zmeniť <span className="text-blue-500">odberateľa</span></h3>
+                <p className="text-[9px] text-zinc-500 uppercase tracking-widest mt-1">Aktuálny: {zakazka.customer_name}</p>
+              </div>
+              <button onClick={() => { setShowChangeCustomer(false); setCustomerSearch(''); }} className="bg-zinc-800 hover:bg-white hover:text-black p-3 rounded-full transition-all">✕</button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Hľadaj podľa mena, firmy alebo telefónu..."
+              value={customerSearch}
+              onChange={e => setCustomerSearch(e.target.value)}
+              className="w-full bg-black border border-zinc-700 focus:border-blue-500 p-4 rounded-2xl text-white text-sm outline-none font-bold mb-4 shrink-0"
+              autoFocus
+            />
+
+            <div className="overflow-y-auto space-y-2 flex-1 pr-1">
+              {customersList
+                .filter(c => {
+                  const q = customerSearch.toLowerCase();
+                  return !q || (c.name || '').toLowerCase().includes(q) || (c.company_name || '').toLowerCase().includes(q) || (c.phone || '').includes(q);
+                })
+                .map(cust => (
+                  <button
+                    key={cust.id}
+                    onClick={() => handleChangeCustomer(cust)}
+                    disabled={changingCustomer}
+                    className="w-full flex items-start justify-between bg-zinc-800 hover:bg-blue-600 border border-zinc-700 hover:border-blue-500 p-4 rounded-2xl transition-all text-left group disabled:opacity-40"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-black uppercase text-sm group-hover:text-white truncate">{cust.name}</p>
+                      {cust.company_name && <p className="text-[10px] text-zinc-400 group-hover:text-blue-200 uppercase tracking-widest">{cust.company_name}</p>}
+                      <p className="text-[9px] text-zinc-600 group-hover:text-blue-300 mt-0.5">{cust.phone} {cust.email && `· ${cust.email}`}</p>
+                    </div>
+                    <span className="text-zinc-600 group-hover:text-white ml-3 shrink-0 text-lg">→</span>
+                  </button>
+                ))
+              }
+              {customersList.filter(c => {
+                const q = customerSearch.toLowerCase();
+                return !q || (c.name || '').toLowerCase().includes(q) || (c.company_name || '').toLowerCase().includes(q) || (c.phone || '').includes(q);
+              }).length === 0 && (
+                <p className="text-center text-zinc-600 text-[10px] uppercase tracking-widest py-8">Žiadny zákazník nenájdený</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
