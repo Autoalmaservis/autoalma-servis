@@ -13,9 +13,14 @@ export default function PracovnyList() {
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
 
-  // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ---
+  // --- STAVY PRE FOTODOKUMENTÁCIU ---
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
+
+  // --- STAVY PRE NAHLÁSENIE ZISTENIA ---
+  const [showFinding, setShowFinding] = useState(false);
+  const [findingText, setFindingText] = useState('');
+  const [sendingFinding, setSendingFinding] = useState(false);
 
   // Zisťujeme, či je zákazka už uzavretá (Audit podľa statusu v DB)
   const isLocked = job?.status === 'Dokončené' || job?.status === 'Archivované' || job?.status === 'Čaká na schválenie';
@@ -130,6 +135,40 @@ export default function PracovnyList() {
       // Refresh len zoznamu položiek
       const { data: i } = await supabase.from('job_items').select('*').eq('job_id', id);
       setItems(i || []);
+    }
+  };
+
+  const handleSendFinding = async () => {
+    if (!findingText.trim()) return;
+    setSendingFinding(true);
+    try {
+      await supabase.from('job_tasks').insert([{
+        job_id: id,
+        task_description: `⚠️ ZISTENIE: ${findingText.trim()}`,
+        is_completed: false,
+      }]);
+
+      const plate = job?.plate_number || '';
+      const customer = job?.customer_name || '';
+      const smsMsg = `AutoAlma Servis: Mechanik nahlásil nové zistenie na zákazke ${plate} (${customer}): "${findingText.trim()}" — zákazka pokračuje.`;
+
+      const { data: phoneSetting } = await supabase.from('business_settings').select('value').eq('id', 'company_phone').maybeSingle();
+      const receptionPhone = phoneSetting?.value || '0940449449';
+
+      await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: receptionPhone, message: smsMsg }),
+      });
+
+      setFindingText('');
+      setShowFinding(false);
+      loadData();
+      alert('Zistenie bolo nahlásené a SMS odoslaná na recepciu.');
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    } finally {
+      setSendingFinding(false);
     }
   };
 
@@ -291,14 +330,63 @@ export default function PracovnyList() {
         </div>
       </section>
 
+      {/* NAHLÁSENIE ZISTENIA */}
+      {!isLocked && (
+        <section className="bg-yellow-950/30 border border-yellow-800/40 p-8 rounded-[3rem]">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="text-[10px] font-black uppercase text-yellow-400 tracking-[0.3em] italic">Nahlásiť nové zistenie</h3>
+              <p className="text-[9px] text-zinc-500 uppercase tracking-widest mt-1">Zákazka pokračuje — recepcia dostane SMS</p>
+            </div>
+            <button
+              onClick={() => setShowFinding(v => !v)}
+              className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${showFinding ? 'bg-zinc-800 text-zinc-400' : 'bg-yellow-500 text-black hover:bg-yellow-400'}`}
+            >
+              {showFinding ? 'Zrušiť' : '⚠️ Nahlásiť zistenie'}
+            </button>
+          </div>
+
+          {showFinding && (
+            <div className="space-y-3 mt-4">
+              <textarea
+                value={findingText}
+                onChange={e => setFindingText(e.target.value)}
+                placeholder="Popíš čo si zistil na vozidle... (napr. prasklá hadica chladenia, korózia na podvozku...)"
+                rows={4}
+                className="w-full bg-black border border-yellow-800/50 focus:border-yellow-500 p-5 rounded-2xl outline-none text-sm font-bold text-white resize-none placeholder:text-zinc-600"
+              />
+              <button
+                onClick={handleSendFinding}
+                disabled={sendingFinding || !findingText.trim()}
+                className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] transition-all disabled:opacity-40 shadow-lg"
+              >
+                {sendingFinding ? 'Odosielam...' : '📤 Odoslať zistenie + SMS na recepciu'}
+              </button>
+            </div>
+          )}
+
+          {/* Predchádzajúce zistenia v tejto zákazke */}
+          {tasks.filter(t => t.task_description?.startsWith('⚠️ ZISTENIE:')).length > 0 && (
+            <div className="mt-5 space-y-2">
+              <p className="text-[9px] font-black uppercase text-zinc-600 tracking-widest">Nahlásené zistenia</p>
+              {tasks.filter(t => t.task_description?.startsWith('⚠️ ZISTENIE:')).map(t => (
+                <div key={t.id} className="bg-yellow-950/40 border border-yellow-900/30 px-4 py-3 rounded-xl">
+                  <p className="text-xs font-bold text-yellow-300">{t.task_description.replace('⚠️ ZISTENIE: ', '')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* STATUS TLAČIDLO */}
       {isLocked ? (
           <div className="w-full bg-zinc-900 border border-zinc-800 text-zinc-500 font-black py-8 rounded-[2.5rem] text-center uppercase tracking-widest italic border-dashed font-bold">
               Zákazka je v stave "{job.status}" a nie je možné ju meniť
           </div>
       ) : (
-          <button 
-            onClick={finishJob} 
+          <button
+            onClick={finishJob}
             className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-8 rounded-[2.5rem] uppercase italic tracking-widest shadow-2xl transition-all text-xl"
           >
             DOKONČENÉ - ODOVZDAŤ NA KONTROLU
