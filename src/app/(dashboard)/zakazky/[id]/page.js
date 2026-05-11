@@ -328,6 +328,13 @@ export default function DetailZakazkyPage() {
     setShowFormFill(true);
   };
 
+  const handleDeleteForm = async (formId) => {
+    if (!confirm('Naozaj vymazať tento formulár? Akciu nie je možné vrátiť.')) return;
+    if (!await ensureAuth()) return;
+    const { error } = await supabase.from('job_forms').delete().eq('id', formId);
+    if (!error) fetchSavedForms();
+  };
+
   const handleSaveForm = async () => {
     if (!await ensureAuth()) return;
     setSavingForm(true);
@@ -347,53 +354,116 @@ export default function DetailZakazkyPage() {
 
   const handlePrintForm = () => {
     const d = formFillData;
+    const title = activeFormTemplate?.name || 'PROTOKOL';
+    const dateRec = d.date_received ? new Date(d.date_received + 'T12:00:00').toLocaleDateString('sk-SK') : '...............';
+    const dateRet = d.date_returned ? new Date(d.date_returned + 'T12:00:00').toLocaleDateString('sk-SK') : '...............';
     const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${activeFormTemplate?.name || 'Formulár'}</title>
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html lang="sk"><head><meta charset="UTF-8">
+    <title>${title}</title>
     <style>
-      body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#000;font-size:11px}
-      h1{color:#0000aa;font-size:16px;margin:0} h2{color:#cc0000;font-size:13px;margin:4px 0 12px}
-      p{margin:0 0 2px;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.05em}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0000aa;padding-bottom:10px;margin-bottom:16px}
-      .logo-area{text-align:right;font-size:10px}
-      table{width:100%;border-collapse:collapse;margin-bottom:12px}
-      td,th{border:1px solid #aaa;padding:5px 8px;font-size:11px}
-      th{background:#e8e8ff;text-align:left;font-weight:bold;color:#0000aa;font-size:10px;text-transform:uppercase;width:30%}
-      .section-label{background:#0000aa;color:#fff;font-weight:bold;padding:4px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.1em}
-      .measure-table td{border:1px solid #aaa;padding:5px 8px}
-      .measure-header{background:#ffeeee;font-weight:bold;color:#cc0000;font-size:10px;text-transform:uppercase}
-      .dates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-      .date-box{border:1px solid #aaa;padding:8px;border-radius:4px}
-      .sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:40px}
-      .sign-line{border-top:1px solid #000;padding-top:4px;font-size:10px;color:#555}
-      @media print{body{padding:10px}}
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Arial',sans-serif;background:#fff;color:#000;font-size:10pt;padding:14mm 14mm 10mm}
+      /* HLAVIČKA */
+      .page-header{display:flex;justify-content:space-between;align-items:stretch;border:2px solid #cc0000;margin-bottom:8mm}
+      .ph-left{background:#cc0000;color:#fff;padding:5mm 7mm;display:flex;flex-direction:column;justify-content:center;min-width:55mm}
+      .ph-left .company{font-size:15pt;font-weight:900;text-transform:uppercase;letter-spacing:-.02em;line-height:1}
+      .ph-left .subtitle{font-size:7pt;text-transform:uppercase;letter-spacing:.12em;margin-top:2mm;opacity:.85}
+      .ph-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4mm;border-left:2px solid #cc0000;border-right:2px solid #cc0000}
+      .ph-center .doc-title{font-size:13pt;font-weight:900;text-transform:uppercase;color:#cc0000;letter-spacing:-.01em;text-align:center;line-height:1.2}
+      .ph-center .doc-num{font-size:8pt;color:#555;margin-top:1.5mm;text-align:center}
+      .ph-right{padding:4mm 5mm;font-size:8pt;line-height:1.7;text-align:right;display:flex;flex-direction:column;justify-content:center}
+      .ph-right strong{display:block;font-size:9pt}
+      /* SEKCIE */
+      .section{margin-bottom:5mm}
+      .section-title{background:#222;color:#fff;font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:.15em;padding:2mm 4mm;margin-bottom:0}
+      /* TABUĽKY */
+      table{width:100%;border-collapse:collapse}
+      td,th{border:1px solid #bbb;padding:2.5mm 3.5mm;font-size:9.5pt;vertical-align:middle}
+      th{background:#f5f5f5;font-weight:700;color:#333;font-size:8pt;text-transform:uppercase;letter-spacing:.05em;width:32%;white-space:nowrap}
+      td.val{width:18%}
+      /* MERANIA */
+      .meas-table th{background:#fff0f0;color:#cc0000;width:60%}
+      .meas-table td{font-weight:700;font-size:10pt;text-align:center}
+      .meas-table tr:nth-child(even) th{background:#ffe8e8}
+      /* DÁTUMY A PODPISY */
+      .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:6mm}
+      .box{border:1px solid #bbb;padding:3mm 4mm}
+      .box-label{font-size:7.5pt;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:1mm}
+      .box-value{font-size:11pt;font-weight:700}
+      .sign-area{margin-top:12mm;display:grid;grid-template-columns:1fr 1fr;gap:20mm}
+      .sign-block{text-align:center}
+      .sign-line{border-top:1px solid #000;padding-top:2mm;font-size:8pt;color:#555;text-transform:uppercase;letter-spacing:.08em}
+      /* PÄTA */
+      .footer{margin-top:8mm;border-top:1px solid #ddd;padding-top:3mm;font-size:7.5pt;color:#888;display:flex;justify-content:space-between}
+      @media print{body{padding:10mm 10mm 8mm}@page{size:A4;margin:0}}
     </style></head><body>
-    <div class="header">
-      <div><h1>${activeFormTemplate?.name || 'PROTOKOL'}</h1><h2>AutoAlma Servis s.r.o.</h2><p>DPF, FAP filtrov pevných častíc, katalyzátorov</p></div>
-      <div class="logo-area"><strong>AutoAlma Servis s.r.o.</strong><br/>Tel: 0940 449 449<br/>0908 647 227<br/>ul. Svornosti 119<br/>821 06 Bratislava</div>
+
+    <div class="page-header">
+      <div class="ph-left">
+        <div class="company">Auto<span style="opacity:.7">Alma</span></div>
+        <div class="subtitle">Servis s.r.o.</div>
+      </div>
+      <div class="ph-center">
+        <div class="doc-title">${title}</div>
+        <div class="doc-num">Dátum prevzatia: ${dateRec}</div>
+      </div>
+      <div class="ph-right">
+        <strong>AutoAlma Servis s.r.o.</strong>
+        ul. Svornosti 119, 821 06 Bratislava<br/>
+        Tel: 0940 449 449 / 0908 647 227<br/>
+        IČO: 46044876 | DIČ: 2023194316
+      </div>
     </div>
-    <p class="section-label">Odovzdávajúci</p>
-    <table><tr><th>Meno / Názov spol.</th><td>${d.customer_name}</td></tr>
-    <tr><th>Adresa</th><td>${d.customer_address}</td></tr>
-    <tr><th>Tel. číslo</th><td>${d.customer_phone}</td><th>IČO</th><td>${d.customer_ico}</td></tr></table>
-    <p class="section-label" style="margin-top:10px">Údaje o vozidle</p>
-    <table>
-    <tr><th>Značka</th><td>${d.brand}</td><th>KW</th><td>${d.engine_power}</td></tr>
-    <tr><th>Model</th><td>${d.model}</td><th>Objem motora</th><td>${d.engine_volume}</td></tr>
-    <tr><th>EČV</th><td>${d.plate}</td><th>Rok výroby</th><td>${d.year}</td></tr>
-    <tr><th>Stav KM</th><td>${d.mileage}</td><th>Palivo</th><td>${d.fuel}</td></tr>
-    <tr><th>Poznámka</th><td colspan="3">${d.note}</td></tr></table>
-    ${d.measurements.length > 0 ? `
-    <p class="section-label" style="margin-top:10px">Merania</p>
-    <table class="measure-table">${d.measurements.map(m => `<tr><th class="measure-header">${m.label}</th><td>${m.value}</td></tr>`).join('')}</table>` : ''}
-    <div class="dates">
-      <div class="date-box"><p>Prevzaté dňa</p><strong>${d.date_received ? new Date(d.date_received + 'T12:00:00').toLocaleDateString('sk-SK') : '—'}</strong></div>
-      <div class="date-box"><p>Odovzdané dňa</p><strong>${d.date_returned ? new Date(d.date_returned + 'T12:00:00').toLocaleDateString('sk-SK') : '—'}</strong></div>
+
+    <div class="section">
+      <div class="section-title">Odovzdávajúci</div>
+      <table>
+        <tr><th>Meno / Obchodný názov</th><td colspan="3">${d.customer_name||''}</td></tr>
+        <tr><th>Adresa</th><td colspan="3">${d.customer_address||''}</td></tr>
+        <tr><th>Telefón</th><td class="val">${d.customer_phone||''}</td><th>IČO</th><td class="val">${d.customer_ico||''}</td></tr>
+      </table>
     </div>
-    <div class="sign"><div class="sign-line">Podpis Preberajúceho</div><div class="sign-line">Podpis Odovzdávajúceho</div></div>
+
+    <div class="section">
+      <div class="section-title">Údaje o vozidle</div>
+      <table>
+        <tr><th>Značka</th><td class="val">${d.brand||''}</td><th>Model</th><td>${d.model||''}</td></tr>
+        <tr><th>EČV</th><td class="val">${d.plate||''}</td><th>Rok výroby</th><td class="val">${d.year||''}</td></tr>
+        <tr><th>Palivo</th><td class="val">${d.fuel||''}</td><th>Stav KM</th><td class="val">${d.mileage||''}</td></tr>
+        <tr><th>Výkon (kW)</th><td class="val">${d.engine_power||''}</td><th>Objem motora</th><td class="val">${d.engine_volume||''}</td></tr>
+        ${d.note ? `<tr><th>Poznámka</th><td colspan="3">${d.note}</td></tr>` : ''}
+      </table>
+    </div>
+
+    ${(d.measurements||[]).filter(m => m.label).length > 0 ? `
+    <div class="section">
+      <div class="section-title">Merania a namerané hodnoty</div>
+      <table class="meas-table">
+        <tr style="background:#f8f8f8"><th style="background:#eee;color:#333;font-weight:700">Meranie</th><td style="text-align:center;font-weight:700;color:#333">Hodnota</td></tr>
+        ${(d.measurements).filter(m=>m.label).map((m,i)=>`<tr><th>${m.label}</th><td>${m.value||''}</td></tr>`).join('')}
+      </table>
+    </div>` : ''}
+
+    <div class="bottom-grid">
+      <div class="box"><div class="box-label">Prevzaté dňa</div><div class="box-value">${dateRec}</div></div>
+      <div class="box"><div class="box-label">Odovzdané dňa</div><div class="box-value">${dateRet}</div></div>
+    </div>
+
+    <div class="sign-area">
+      <div class="sign-block"><div style="height:14mm"></div><div class="sign-line">Podpis zákazníka (odovzdávajúci)</div></div>
+      <div class="sign-block"><div style="height:14mm"></div><div class="sign-line">Podpis technika (preberajúci)</div></div>
+    </div>
+
+    <div class="footer">
+      <span>AutoAlma Servis s.r.o. • ul. Svornosti 119, 821 06 Bratislava • IČ DPH: SK2023194316</span>
+      <span>${new Date().toLocaleDateString('sk-SK')}</span>
+    </div>
+
+    <script>window.onload=function(){window.print();}<\/script>
     </body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 400);
   };
 
   const handleUploadPhoto = async (e) => {
@@ -1620,14 +1690,21 @@ export default function DetailZakazkyPage() {
                   <p className="text-[9px] text-zinc-600 uppercase">{new Date(f.created_at).toLocaleDateString('sk-SK')}</p>
                 </div>
               </div>
-              <button onClick={() => {
-                setActiveFormTemplate({ id: f.template_id, name: f.template_name, pdf_url: null });
-                setFormFillData(f.filled_data);
-                setFormViewOnly(true);
-                setShowFormFill(true);
-              }} className="text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-all px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500">
-                🖨️ Otvoriť / Tlačiť
-              </button>
+              <div className="flex items-center gap-2">
+                {zakazka && zakazka.status !== 'Dokončené' && zakazka.status !== 'Archivované' && (
+                  <button onClick={() => handleDeleteForm(f.id)} className="text-[9px] font-black uppercase text-zinc-700 hover:text-red-500 transition-all px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-red-800">
+                    🗑 Vymazať
+                  </button>
+                )}
+                <button onClick={() => {
+                  setActiveFormTemplate({ id: f.template_id, name: f.template_name, pdf_url: null });
+                  setFormFillData(f.filled_data);
+                  setFormViewOnly(true);
+                  setShowFormFill(true);
+                }} className="text-[9px] font-black uppercase text-zinc-400 hover:text-white transition-all px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-500">
+                  🖨️ Otvoriť / Tlačiť
+                </button>
+              </div>
             </div>
           ))}
         </div>
