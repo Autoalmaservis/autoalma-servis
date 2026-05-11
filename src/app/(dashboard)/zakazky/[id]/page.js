@@ -931,7 +931,8 @@ export default function DetailZakazkyPage() {
     const itemToSave = {
       ...newItem,
       type: isPraca ? 'Práca' : 'Materiál',
-      unit_price: isPraca ? getRateValue(newItem.rateType) : newItem.unit_price,
+      quantity: parseFloat(newItem.quantity) || 1,
+      unit_price: isPraca ? getRateValue(newItem.rateType) : (parseFloat(newItem.unit_price) || 0),
       unit: isPraca ? 'hod' : newItem.unit,
     };
 
@@ -1382,15 +1383,18 @@ export default function DetailZakazkyPage() {
                     </div>
                   </td>
                   <td className="p-3">
-                    <input type="number" min="0.5" step="0.5" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 1})} />
+                    <input type="number" min="0" step="any" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: e.target.value})} onFocus={e => e.target.select()} />
                   </td>
                   <td className="p-3 w-32">
                     <input
                       type="number"
+                      min="0"
+                      step="any"
                       className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-right text-xs font-black outline-none disabled:opacity-40"
-                      value={newItem.unit_price || 0}
+                      value={newItem.unit_price ?? ''}
                       disabled={newItem.type === 'Práca'}
-                      onChange={(e) => setNewItem({...newItem, unit_price: parseFloat(e.target.value) || 0})}
+                      onChange={(e) => setNewItem({...newItem, unit_price: e.target.value})}
+                      onFocus={e => e.target.select()}
                     />
                   </td>
                   <td className="p-3"><button onClick={addItem} className="w-full bg-red-600 text-white font-black py-3 rounded-xl hover:bg-red-500 transition-all shadow-xl text-lg">+</button></td>
@@ -1416,10 +1420,10 @@ export default function DetailZakazkyPage() {
                     <input
                       type="number"
                       min="0"
-                      max={discountType === 'pct' ? 100 : undefined}
-                      step="0.01"
+                      step="any"
                       value={discountValue}
                       onChange={e => setDiscountValue(e.target.value)}
+                      onFocus={e => e.target.select()}
                       placeholder={discountType === 'pct' ? '0 %' : '0.00 €'}
                       className="w-24 bg-black border border-zinc-700 focus:border-red-500 px-3 py-1 rounded-lg text-white text-[11px] font-black outline-none text-right"
                     />
@@ -1497,9 +1501,10 @@ export default function DetailZakazkyPage() {
                       <input
                         type="number"
                         min="0"
-                        step="0.25"
+                        step="any"
                         value={s.hours}
                         onChange={e => handleSplitHoursChange(s.employee_id, e.target.value)}
+                        onFocus={e => e.target.select()}
                         className="w-20 bg-zinc-800 border border-zinc-700 focus:border-yellow-500 px-3 py-1.5 rounded-xl text-white text-[12px] font-black outline-none text-right"
                       />
                       <span className="text-zinc-500 text-[10px] font-black uppercase">hod</span>
