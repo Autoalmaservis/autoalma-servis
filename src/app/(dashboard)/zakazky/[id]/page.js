@@ -316,14 +316,16 @@ export default function DetailZakazkyPage() {
   };
 
   const handleSaveForm = async () => {
+    if (!await ensureAuth()) return;
     setSavingForm(true);
     try {
-      await supabase.from('job_forms').insert([{
+      const { error } = await supabase.from('job_forms').insert([{
         job_id: id,
         template_id: activeFormTemplate.id,
         template_name: activeFormTemplate.name,
         filled_data: formFillData,
       }]);
+      if (error) throw error;
       fetchSavedForms();
       setShowFormFill(false);
     } catch (err) { alert('Chyba: ' + err.message); }
