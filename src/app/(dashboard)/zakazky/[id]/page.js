@@ -36,6 +36,8 @@ export default function DetailZakazkyPage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [discountType, setDiscountType] = useState('pct');
+  const [discountValue, setDiscountValue] = useState('');
   const [editingComplaints, setEditingComplaints] = useState(false);
   const [complaintsText, setComplaintsText] = useState('');
   const [savingComplaints, setSavingComplaints] = useState(false);
@@ -901,11 +903,14 @@ export default function DetailZakazkyPage() {
     const subtotalWork = items.filter(i => i.type === 'Práca').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
     const subtotal = subtotalMaterial + subtotalWork;
     const tax = subtotal * 0.23;
-    const total = subtotal + tax;
-    return { subtotalMaterial, subtotalWork, subtotal, tax, total };
+    const totalBefore = subtotal + tax;
+    const discNum = parseFloat(discountValue) || 0;
+    const discountAmount = discountType === 'eur' ? discNum : totalBefore * discNum / 100;
+    const total = Math.max(0, totalBefore - discountAmount);
+    return { subtotalMaterial, subtotalWork, subtotal, tax, total, discountAmount, totalBefore };
   };
 
-  const { subtotalMaterial, subtotalWork, subtotal, tax, total } = calculateTotal();
+  const { subtotalMaterial, subtotalWork, subtotal, tax, total, discountAmount, totalBefore } = calculateTotal();
   const handlePrint = () => window.print();
 
   if (loading) return (
@@ -1344,7 +1349,40 @@ export default function DetailZakazkyPage() {
               <div className="flex justify-between w-72 text-zinc-500 text-[10px] font-black uppercase tracking-widest border-b border-zinc-800 pb-3"><span>Práca (Základ):</span><span className="text-blue-400">{subtotalWork.toFixed(2)} €</span></div>
               <div className="flex justify-between w-72 text-zinc-400 text-[11px] font-black uppercase tracking-widest pt-1"><span>Základ dane:</span><span className="text-white">{subtotal.toFixed(2)} €</span></div>
               <div className="flex justify-between w-72 text-zinc-400 text-[11px] font-black uppercase tracking-widest border-b-2 border-zinc-800 pb-3"><span>DPH (23%):</span><span className="text-white">{tax.toFixed(2)} €</span></div>
-              <div className="flex justify-between w-80 pt-4"><span className="text-red-600 font-black uppercase italic tracking-tighter text-xl leading-none font-black">Spolu k úhrade:</span><span className="text-4xl font-black italic tracking-tighter leading-none">{total.toFixed(2)} €</span></div>
+
+              {/* ZĽAVA */}
+              {zakazka.status !== 'Archivované' && (
+                <div className="w-80 no-print">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Zľava:</span>
+                    <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-[10px] font-black">
+                      <button onClick={() => setDiscountType('pct')} className={`px-3 py-1 transition-all ${discountType === 'pct' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}>%</button>
+                      <button onClick={() => setDiscountType('eur')} className={`px-3 py-1 transition-all ${discountType === 'eur' ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}>€</button>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max={discountType === 'pct' ? 100 : undefined}
+                      step="0.01"
+                      value={discountValue}
+                      onChange={e => setDiscountValue(e.target.value)}
+                      placeholder={discountType === 'pct' ? '0 %' : '0.00 €'}
+                      className="w-24 bg-black border border-zinc-700 focus:border-red-500 px-3 py-1 rounded-lg text-white text-[11px] font-black outline-none text-right"
+                    />
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between w-full text-red-500 text-[11px] font-black uppercase tracking-widest">
+                      <span>Zľava {discountType === 'pct' ? `(${discountValue}%)` : ''}:</span>
+                      <span>− {discountAmount.toFixed(2)} €</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-between w-80 pt-4 border-t-2 border-zinc-700">
+                <span className="text-red-600 font-black uppercase italic tracking-tighter text-xl leading-none">Spolu k úhrade:</span>
+                <span className={`text-4xl font-black italic tracking-tighter leading-none ${discountAmount > 0 ? 'text-green-400' : ''}`}>{total.toFixed(2)} €</span>
+              </div>
             </div>
           </div>
         </div>
