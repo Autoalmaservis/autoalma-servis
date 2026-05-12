@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { supabase } from '@/app/lib/supabase';
 
 const PRIORITY_ICON  = { red: '🔴', yellow: '🟡', green: '🟢' };
 const PRIORITY_LABEL = { red: 'Naliehavé', yellow: 'Stredné', green: 'Nízka priorita' };
@@ -11,29 +12,40 @@ export default function TodoPage() {
   const [newTodo, setNewTodo] = useState('');
   const [newPriority, setNewPriority] = useState('red');
   const [addingTodo, setAddingTodo] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchTodos = async () => {
+    const { data } = await supabase.from('todos').select('*').order('created_at', { ascending: true });
+    setTodos(data || []);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const saved = localStorage.getItem('autoalma_todos');
-    if (saved) try {
-      const parsed = JSON.parse(saved);
-      setTodos(parsed.map(t => ({ ...t, priority: t.priority === 'orange' ? 'yellow' : t.priority })));
-    } catch {}
+    fetchTodos();
+    const channel = supabase.channel('todos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, fetchTodos)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('autoalma_todos', JSON.stringify(todos));
-    window.dispatchEvent(new Event('autoalma_todos_changed'));
-  }, [todos]);
-
-  const addTodo = () => {
+  const addTodo = async () => {
     if (!newTodo.trim()) return;
-    setTodos(prev => [...prev, { id: Date.now(), text: newTodo.trim(), priority: newPriority, done: false }]);
+    await supabase.from('todos').insert([{ text: newTodo.trim(), priority: newPriority, done: false }]);
     setNewTodo('');
     setAddingTodo(false);
   };
-  const toggleTodo = (id) => setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const deleteTodo = (id) => setTodos(prev => prev.filter(t => t.id !== id));
+
+  const toggleTodo = async (todo) => {
+    await supabase.from('todos').update({ done: !todo.done }).eq('id', todo.id);
+  };
+
+  const deleteTodo = async (id) => {
+    await supabase.from('todos').delete().eq('id', id);
+  };
+
   const undoneTodos = todos.filter(t => !t.done);
+
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-zinc-600 font-black uppercase text-xs tracking-widest animate-pulse">Načítavam...</div>;
 
   return (
     <div className="p-8 bg-black min-h-screen text-white font-sans">
@@ -69,11 +81,8 @@ export default function TodoPage() {
             <p className="text-[10px] font-black uppercase text-zinc-600 tracking-widest">Priorita:</p>
             <div className="flex gap-2">
               {['red', 'yellow', 'green'].map(p => (
-                <button
-                  key={p}
-                  onClick={() => setNewPriority(p)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all border ${newPriority === p ? 'border-zinc-500 bg-zinc-700 text-white scale-105' : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700'}`}
-                >
+                <button key={p} onClick={() => setNewPriority(p)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all border ${newPriority === p ? 'border-zinc-500 bg-zinc-700 text-white scale-105' : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700'}`}>
                   {PRIORITY_ICON[p]} {PRIORITY_LABEL[p]}
                 </button>
               ))}
@@ -110,7 +119,7 @@ export default function TodoPage() {
                     <div className="flex items-start gap-3">
                       <p className="flex-1 text-sm font-bold text-white leading-snug">{todo.text}</p>
                       <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={() => toggleTodo(todo.id)} title="Označiť ako vybavené" className="w-7 h-7 rounded-xl bg-green-900/40 hover:bg-green-800/60 flex items-center justify-center text-green-500 text-xs transition-all">✓</button>
+                        <button onClick={() => toggleTodo(todo)} title="Označiť ako vybavené" className="w-7 h-7 rounded-xl bg-green-900/40 hover:bg-green-800/60 flex items-center justify-center text-green-500 text-xs transition-all">✓</button>
                         <button onClick={() => deleteTodo(todo.id)} title="Vymazať" className="w-7 h-7 rounded-xl bg-zinc-900 hover:bg-red-900/40 flex items-center justify-center text-zinc-600 hover:text-red-500 text-xs transition-all">✕</button>
                       </div>
                     </div>
@@ -132,7 +141,7 @@ export default function TodoPage() {
                 <span className="text-sm">{PRIORITY_ICON[todo.priority]}</span>
                 <p className="flex-1 text-sm font-bold text-zinc-500 line-through">{todo.text}</p>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                  <button onClick={() => toggleTodo(todo.id)} title="Obnoviť" className="text-[10px] font-black text-zinc-600 hover:text-white transition-all px-3 py-1.5 rounded-xl hover:bg-zinc-800">↩ Obnoviť</button>
+                  <button onClick={() => toggleTodo(todo)} title="Obnoviť" className="text-[10px] font-black text-zinc-600 hover:text-white transition-all px-3 py-1.5 rounded-xl hover:bg-zinc-800">↩ Obnoviť</button>
                   <button onClick={() => deleteTodo(todo.id)} className="text-[10px] font-black text-zinc-700 hover:text-red-500 transition-all px-3 py-1.5 rounded-xl hover:bg-zinc-900">✕</button>
                 </div>
               </div>

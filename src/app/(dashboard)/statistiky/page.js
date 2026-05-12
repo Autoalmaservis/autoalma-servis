@@ -76,10 +76,18 @@ export default function StatistikyPage() {
   const [selMech, setSelMech]     = useState(null); // null = všetci
   const [loading, setLoading]     = useState(true);
 
+  const [tab, setTab]             = useState('prehlad');
   const [employees, setEmployees] = useState([]);
   const [stats, setStats]         = useState(null);
   const [trend, setTrend]         = useState([]);
-  const [mechJobs, setMechJobs]   = useState([]); // zákazky pre vybraného mechanika
+  const [mechJobs, setMechJobs]   = useState([]);
+
+  // --- TAB: MECHANICI ---
+  const [mechPeriod, setMechPeriod]         = useState('month');
+  const [mechCustomFrom, setMechCustomFrom] = useState('');
+  const [mechCustomTo, setMechCustomTo]     = useState('');
+  const [mechPayouts, setMechPayouts]       = useState([]);
+  const [mechLoading, setMechLoading]       = useState(false);
 
   // Načítame zamestnancov raz
   useEffect(() => {
@@ -221,6 +229,27 @@ export default function StatistikyPage() {
     if (employees.length > 0 || true) fetchStats();
   }, [fetchStats]);
 
+  const fetchMechPayouts = useCallback(async () => {
+    setMechLoading(true);
+    const { from, to } = getDateRange(mechPeriod, mechCustomFrom, mechCustomTo);
+    const fromDate = from.slice(0, 10);
+    const toDate   = to.slice(0, 10);
+    const { data } = await supabase
+      .from('kasa_entries')
+      .select('id, date, amount, description, employee_id')
+      .eq('type', 'vydaj')
+      .not('employee_id', 'is', null)
+      .gte('date', fromDate)
+      .lte('date', toDate)
+      .order('date', { ascending: false });
+    setMechPayouts(data || []);
+    setMechLoading(false);
+  }, [mechPeriod, mechCustomFrom, mechCustomTo]);
+
+  useEffect(() => {
+    if (tab === 'mechanici') fetchMechPayouts();
+  }, [tab, fetchMechPayouts]);
+
   const periodLabel = (() => {
     const { from, to } = getDateRange(period, customFrom, customTo);
     const f = new Date(from).toLocaleDateString('sk-SK', { day: 'numeric', month: 'short' });
@@ -239,6 +268,18 @@ export default function StatistikyPage() {
         <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Štatistiky</h1>
         <p className="text-zinc-600 text-xs font-bold mt-1">{periodLabel}</p>
       </div>
+
+      {/* ZÁLOŽKY */}
+      <div className="flex bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 mb-8 w-fit gap-1">
+        {[{ key: 'prehlad', label: '📊 Celkový prehľad' }, { key: 'mechanici', label: '👨‍🔧 Mechanici' }].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === t.key ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'prehlad' && <>
 
       {/* FILTRE */}
       <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 mb-8 space-y-5">
@@ -480,6 +521,125 @@ export default function StatistikyPage() {
           )}
         </>
       )}
+
+      </> /* koniec tab prehlad */}
+
+      {/* ===== TAB: MECHANICI ===== */}
+      {tab === 'mechanici' && (
+        <div>
+          {/* Filter obdobia */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 mb-8 space-y-4">
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Obdobie</p>
+            <div className="flex flex-wrap gap-2">
+              {PERIODS.map(p => (
+                <button key={p.key} onClick={() => setMechPeriod(p.key)}
+                  className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${mechPeriod === p.key ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-black border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {mechPeriod === 'custom' && (
+              <div className="flex gap-4 mt-2">
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Od</label>
+                  <input type="date" value={mechCustomFrom} onChange={e => setMechCustomFrom(e.target.value)}
+                    className="bg-black border border-zinc-800 focus:border-red-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm outline-none transition-all" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-1">Do</label>
+                  <input type="date" value={mechCustomTo} onChange={e => setMechCustomTo(e.target.value)}
+                    className="bg-black border border-zinc-800 focus:border-red-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm outline-none transition-all" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {mechLoading ? (
+            <div className="py-24 text-center text-zinc-600 animate-pulse font-black uppercase text-xs tracking-widest">Načítavam výplaty...</div>
+          ) : (() => {
+            // Zoskup výplaty per mechanik
+            const byEmp = {};
+            mechPayouts.forEach(p => {
+              const emp = employees.find(e => e.id === p.employee_id);
+              const name = emp?.name || 'Neznámy';
+              const color = emp?.color || '#666';
+              if (!byEmp[p.employee_id]) byEmp[p.employee_id] = { id: p.employee_id, name, color, total: 0, entries: [] };
+              byEmp[p.employee_id].total += Number(p.amount);
+              byEmp[p.employee_id].entries.push(p);
+            });
+            const mechs = Object.values(byEmp).sort((a, b) => b.total - a.total);
+            const grandTotal = mechs.reduce((s, m) => s + m.total, 0);
+
+            if (mechs.length === 0) return (
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-10 text-center text-zinc-700 text-xs font-black uppercase tracking-widest italic">
+                Za toto obdobie neboli zaznamenané žiadne výplaty mechanikov
+              </div>
+            );
+
+            return (
+              <div className="space-y-6">
+                {/* Súhrn */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="md:col-span-2 bg-amber-600/10 border border-amber-600/20 rounded-[1.5rem] p-6 flex items-center gap-4">
+                    <span className="text-3xl">💰</span>
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1">Celkovo vyplatené</p>
+                      <p className="text-3xl font-black text-amber-400">{fmt(grandTotal)}</p>
+                    </div>
+                  </div>
+                  {mechs.map(m => (
+                    <div key={m.id} className="bg-zinc-950 border border-zinc-800 rounded-[1.5rem] p-5 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-white shrink-0"
+                        style={{ background: m.color }}>
+                        {m.name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{m.name}</p>
+                        <p className="text-lg font-black text-white">{fmt(m.total)}</p>
+                        <p className="text-[9px] text-zinc-600 font-bold">{m.entries.length} výplat</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Detail per mechanik */}
+                {mechs.map(m => (
+                  <div key={m.id} className="bg-zinc-950 border border-zinc-900 rounded-[2rem] overflow-hidden">
+                    <div className="flex items-center gap-4 px-7 py-5 border-b border-zinc-900">
+                      <div className="w-11 h-11 rounded-2xl flex items-center justify-center font-black text-white text-lg"
+                        style={{ background: m.color }}>
+                        {m.name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Mechanik</p>
+                        <h3 className="text-xl font-black uppercase italic tracking-tighter text-white">{m.name}</h3>
+                      </div>
+                      <div className="ml-auto text-right">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-0.5">Spolu</p>
+                        <p className="text-2xl font-black text-amber-400">{fmt(m.total)}</p>
+                      </div>
+                    </div>
+                    <div className="divide-y divide-zinc-900">
+                      {m.entries.map(e => (
+                        <div key={e.id} className="flex items-center justify-between px-7 py-4 hover:bg-black/30 transition-colors">
+                          <div>
+                            <p className="text-sm font-black text-white">{e.description || 'Výplata'}</p>
+                            <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">
+                              {new Date(e.date + 'T12:00:00').toLocaleDateString('sk-SK', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </p>
+                          </div>
+                          <p className="text-lg font-black text-white">{fmt(Number(e.amount))}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
     </div>
   );
 }

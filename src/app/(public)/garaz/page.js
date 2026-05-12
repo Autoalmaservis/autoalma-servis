@@ -595,9 +595,9 @@ export default function GarazPage() {
 
             <div>
               <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] mb-2 font-bold italic">Moja Klientska Zóna</p>
-              <h1 className="text-2xl md:text-5xl font-black uppercase italic tracking-tighter leading-none flex flex-wrap items-center gap-3 font-bold">
-                {userProfile?.full_name || 'Môj Profil'}
-                <button onClick={() => setIsProfileModalOpen(true)} className="text-[10px] bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-xl hover:bg-white hover:text-black transition-all not-italic tracking-normal font-black uppercase font-bold">
+              <h1 className="text-2xl md:text-5xl font-black uppercase italic tracking-tighter leading-none font-bold break-words">
+                <span className="break-words">{userProfile?.full_name || 'Môj Profil'}</span>
+                <button onClick={() => setIsProfileModalOpen(true)} className="ml-3 text-[10px] bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-xl hover:bg-white hover:text-black transition-all not-italic tracking-normal font-black uppercase font-bold align-middle">
                   ⚙️ Upraviť údaje
                 </button>
               </h1>
@@ -615,25 +615,25 @@ export default function GarazPage() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6 font-bold">
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                   <div className="bg-white text-black px-4 py-2 md:px-6 md:py-3 rounded-2xl font-black text-xl md:text-3xl tracking-tighter shadow-xl font-bold shrink-0">{vehicle.license_plate}</div>
-                  <div className="min-w-0">
-                    <h2 className="text-2xl md:text-4xl font-black uppercase italic tracking-tight mb-1 font-bold break-words">{vehicle.brand_model}</h2>
-                    <p className="text-zinc-500 text-[12px] font-black uppercase tracking-widest font-bold break-all">VIN: {vehicle.vin_number || 'Neuvedené'}</p>
+                  <div className="min-w-0 w-full">
+                    <h2 className="text-xl md:text-4xl font-black uppercase italic tracking-tight mb-1 font-bold break-words leading-tight">{vehicle.brand_model}</h2>
+                    <p className="text-zinc-500 text-[11px] font-black uppercase tracking-wider font-bold break-all">VIN: {vehicle.vin_number || 'Neuvedené'}</p>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <button onClick={() => openEditModal(vehicle)} className="p-4 bg-zinc-800 rounded-2xl hover:bg-white hover:text-black transition-all text-sm font-bold">Upraviť ✏️</button>
-                  <button onClick={() => handleDelete(vehicle.id, vehicle.license_plate)} className="p-4 bg-zinc-800 rounded-2xl hover:bg-red-600 transition-all text-sm font-bold font-bold">Vymazať 🗑️</button>
+                <div className="flex gap-3 shrink-0">
+                  <button onClick={() => openEditModal(vehicle)} className="p-3 md:p-4 bg-zinc-800 rounded-2xl hover:bg-white hover:text-black transition-all text-sm font-bold whitespace-nowrap">Upraviť ✏️</button>
+                  <button onClick={() => handleDelete(vehicle.id, vehicle.license_plate)} className="p-3 md:p-4 bg-zinc-800 rounded-2xl hover:bg-red-600 transition-all text-sm font-bold whitespace-nowrap">Vymazať 🗑️</button>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 border-t border-zinc-800/50 pt-8">
                   <div className="bg-black/20 p-4 rounded-3xl">
                     <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Motorizácia</p>
-                    <p className="text-sm font-black">{vehicle.engine_volume || '---'} ccm / {vehicle.engine_power || '---'} kW</p>
+                    <p className="text-sm font-black break-words">{vehicle.engine_volume || '---'} ccm / {vehicle.engine_power || '---'} kW</p>
                   </div>
                   <div className="bg-black/20 p-4 rounded-3xl">
                     <p className="text-zinc-600 text-[9px] uppercase font-black mb-1">Palivo & Rok</p>
-                    <p className="text-sm font-black">{vehicle.fuel_type} • {vehicle.year_produced || '---'}</p>
+                    <p className="text-sm font-black break-words">{vehicle.fuel_type} • {vehicle.year_produced || '---'}</p>
                   </div>
                   <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10">
                     <p className="text-blue-500/60 text-[9px] uppercase font-black mb-1">Stav Tachometra</p>
@@ -887,7 +887,7 @@ export default function GarazPage() {
                                       {catMap[norm.category_id] || ''}
                                     </span>
                                   )}
-                                  <span className="text-xs font-black uppercase italic text-white transition-colors truncate">
+                                  <span className="text-xs font-black uppercase italic text-white transition-colors break-words min-w-0">
                                     {norm.service_name}
                                   </span>
                                 </div>
@@ -906,7 +906,7 @@ export default function GarazPage() {
                       ) : (
                         selectedNorms.map(sn => (
                           <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-3 rounded-xl animate-in fade-in zoom-in duration-200">
-                            <span className="text-xs font-black uppercase text-white italic truncate mr-3">{sn.service_name}</span>
+                            <span className="text-xs font-black uppercase text-white italic break-words min-w-0 mr-3">{sn.service_name}</span>
                             <div className="flex items-center gap-3 shrink-0">
                               <span className="text-[10px] font-black text-white not-italic">~{sn.duration_minutes} min</span>
                               <button type="button" onClick={() => removeNormFromSelection(sn.id)} className="text-red-500 hover:text-white font-bold not-italic">✕</button>

@@ -13,25 +13,21 @@ export default function DashboardLayout({ children }) {
   const [jobUpdateCount, setJobUpdateCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [findingJobs, setFindingJobs] = useState([]);
-  const [todos, setTodos] = useState([]);
+  const [todoCount, setTodoCount] = useState(0);
   const jobStatusRef = useRef({});
   const pathname = usePathname();
 
-  const loadTodos = () => {
-    const saved = localStorage.getItem('autoalma_todos');
-    if (saved) try {
-      const parsed = JSON.parse(saved);
-      setTodos(parsed.map(t => ({ ...t, priority: t.priority === 'orange' ? 'yellow' : t.priority })));
-    } catch {}
-  };
-
   useEffect(() => {
-    loadTodos();
-    window.addEventListener('autoalma_todos_changed', loadTodos);
-    return () => window.removeEventListener('autoalma_todos_changed', loadTodos);
+    const fetchCount = async () => {
+      const { count } = await supabase.from('todos').select('*', { count: 'exact', head: true }).eq('done', false);
+      setTodoCount(count || 0);
+    };
+    fetchCount();
+    const channel = supabase.channel('todos-badge')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'todos' }, fetchCount)
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, []);
-
-  const undoneTodos = todos.filter(t => !t.done);
 
   const addStatusNotification = (notif) => {
     setNotifications(prev => [notif, ...prev].slice(0, 8));
@@ -194,7 +190,7 @@ export default function DashboardLayout({ children }) {
 
             {/* TO-DO — stránka */}
             <div className="pt-3 mt-3 border-t border-zinc-900">
-              <MenuLink href="/todo" icon="📋" label="To-Do zoznam" collapsed={isCollapsed} active={pathname === '/todo'} badge={undoneTodos.length} />
+              <MenuLink href="/todo" icon="📋" label="To-Do zoznam" collapsed={isCollapsed} active={pathname === '/todo'} badge={todoCount} />
             </div>
           </nav>
 
