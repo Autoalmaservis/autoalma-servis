@@ -45,6 +45,7 @@ export default function SmsEmailPage() {
   const [newContent, setNewContent] = useState('');
   const [newSubject, setNewSubject] = useState('');
   const [savingTpl, setSavingTpl] = useState(false);
+  const [tplError, setTplError] = useState(null);
 
   // --- Plánované ---
   const [scheduled, setScheduled] = useState([]);
@@ -139,14 +140,19 @@ export default function SmsEmailPage() {
   const addTemplate = async () => {
     if (!newLabel.trim() || !newContent.trim()) return;
     setSavingTpl(true);
-    await supabase.from('sms_templates').insert([{
+    setTplError(null);
+    const { error } = await supabase.from('sms_templates').insert([{
       label: newLabel,
       content: newContent,
       type: channel,
       ...(channel === 'email' && newSubject ? { subject: newSubject } : {}),
     }]);
-    setNewLabel(''); setNewContent(''); setNewSubject('');
-    fetchTemplates();
+    if (error) {
+      setTplError(error.message);
+    } else {
+      setNewLabel(''); setNewContent(''); setNewSubject('');
+      fetchTemplates();
+    }
     setSavingTpl(false);
   };
 
@@ -292,6 +298,29 @@ export default function SmsEmailPage() {
                 className="px-8 py-3 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 {savingTpl ? 'Ukladám...' : '+ Pridať'}
               </button>
+              {tplError && (
+                <div className="bg-red-600/10 border border-red-600/30 rounded-2xl p-4 space-y-2">
+                  <p className="text-red-400 font-black text-xs uppercase tracking-widest">Chyba uloženia šablóny</p>
+                  <p className="text-zinc-400 text-xs font-mono">{tplError}</p>
+                  {tplError.includes('subject') && (
+                    <div>
+                      <p className="text-zinc-500 text-[10px] font-bold mb-1">Spusti v Supabase SQL editore:</p>
+                      <code className="block bg-black text-green-400 text-[10px] font-mono p-3 rounded-xl select-all">
+                        ALTER TABLE sms_templates ADD COLUMN IF NOT EXISTS subject text;
+                      </code>
+                    </div>
+                  )}
+                  {(tplError.includes('type') || tplError.includes('column')) && !tplError.includes('subject') && (
+                    <div>
+                      <p className="text-zinc-500 text-[10px] font-bold mb-1">Spusti v Supabase SQL editore:</p>
+                      <code className="block bg-black text-green-400 text-[10px] font-mono p-3 rounded-xl select-all whitespace-pre">
+{`ALTER TABLE sms_templates ADD COLUMN IF NOT EXISTS type text NOT NULL DEFAULT 'sms';
+ALTER TABLE sms_templates ADD COLUMN IF NOT EXISTS subject text;`}
+                      </code>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
