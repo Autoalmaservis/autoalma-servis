@@ -1059,7 +1059,7 @@ export default function DetailZakazkyPage() {
       ...newItem,
       type: isPraca ? 'Práca' : 'Materiál',
       quantity: parseFloat(newItem.quantity) || 1,
-      unit_price: isPraca ? getRateValue(newItem.rateType) : (parseFloat(newItem.unit_price) || 0),
+      unit_price: parseFloat(newItem.unit_price) || 0,
       unit: isPraca ? 'hod' : newItem.unit,
     };
 
@@ -1462,6 +1462,7 @@ export default function DetailZakazkyPage() {
                           unit_price: isPraca ? getRateValue(newItem.rateType) : 0,
                           name: isPraca ? `Servisná práca ${newItem.rateType}` : '',
                         });
+                        setNewItemVatStr(isPraca ? (getRateValue(newItem.rateType) * 1.23).toFixed(2) : '');
                       }}
                     >
                       <option value="Materiál">MATERIÁL</option>
@@ -1473,7 +1474,9 @@ export default function DetailZakazkyPage() {
                         value={newItem.rateType}
                         onChange={(e) => {
                           const rt = e.target.value;
-                          setNewItem({ ...newItem, rateType: rt, unit_price: getRateValue(rt), name: `Servisná práca ${rt}` });
+                          const rateVal = getRateValue(rt);
+                          setNewItem({ ...newItem, rateType: rt, unit_price: rateVal, name: `Servisná práca ${rt}` });
+                          setNewItemVatStr((rateVal * 1.23).toFixed(2));
                         }}
                       >
                         {rateCategories.map(c => (
@@ -1567,35 +1570,28 @@ export default function DetailZakazkyPage() {
                     <input type="number" min="0" step="any" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: e.target.value})} onFocus={e => e.target.select()} />
                   </td>
                   <td className="p-3 w-48">
-                    {newItem.type === 'Práca' ? (
-                      <div className="text-right pr-1">
-                        <p className="font-mono text-xs text-white">{parseFloat(newItem.unit_price || 0).toFixed(2)} €</p>
-                        <p className="font-mono text-[9px] text-amber-500/60">{(parseFloat(newItem.unit_price || 0) * 1.23).toFixed(2)} € s DPH</p>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[8px] text-zinc-500 font-black shrink-0 w-11">bez DPH</span>
+                        <input type="number" step="any" min="0"
+                          value={newItem.unit_price || ''}
+                          placeholder="0.00"
+                          onChange={e => { const v = parseFloat(e.target.value) || 0; setNewItem({...newItem, unit_price: v}); setNewItemVatStr((v * 1.23).toFixed(2)); }}
+                          onFocus={e => e.target.select()}
+                          className="flex-1 bg-zinc-900 border border-zinc-800 p-2 rounded-lg text-white text-xs text-right font-black outline-none focus:border-blue-500"
+                        />
                       </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] text-zinc-500 font-black shrink-0 w-11">bez DPH</span>
-                          <input type="number" step="any" min="0"
-                            value={newItem.unit_price || ''}
-                            placeholder="0.00"
-                            onChange={e => { const v = parseFloat(e.target.value) || 0; setNewItem({...newItem, unit_price: v}); setNewItemVatStr((v * 1.23).toFixed(2)); }}
-                            onFocus={e => e.target.select()}
-                            className="flex-1 bg-zinc-900 border border-zinc-800 p-2 rounded-lg text-white text-xs text-right font-black outline-none focus:border-blue-500"
-                          />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] text-amber-500 font-black shrink-0 w-11">s DPH</span>
-                          <input type="number" step="any" min="0"
-                            value={newItemVatStr}
-                            placeholder="0.00"
-                            onChange={e => { setNewItemVatStr(e.target.value); setNewItem({...newItem, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0}); }}
-                            onFocus={e => e.target.select()}
-                            className="flex-1 bg-zinc-900 border border-amber-600/30 p-2 rounded-lg text-amber-300 text-xs text-right font-black outline-none focus:border-amber-500"
-                          />
-                        </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[8px] text-amber-500 font-black shrink-0 w-11">s DPH</span>
+                        <input type="number" step="any" min="0"
+                          value={newItemVatStr}
+                          placeholder="0.00"
+                          onChange={e => { setNewItemVatStr(e.target.value); setNewItem({...newItem, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0}); }}
+                          onFocus={e => e.target.select()}
+                          className="flex-1 bg-zinc-900 border border-amber-600/30 p-2 rounded-lg text-amber-300 text-xs text-right font-black outline-none focus:border-amber-500"
+                        />
                       </div>
-                    )}
+                    </div>
                   </td>
                   <td className="p-3"><button onClick={addItem} className="w-full bg-red-600 text-white font-black py-3 rounded-xl hover:bg-red-500 transition-all shadow-xl text-lg">+</button></td>
                   <td className="p-3"></td>
