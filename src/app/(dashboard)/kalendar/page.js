@@ -44,6 +44,11 @@ export default function KalendarPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('calendar');
 
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [clientVehicles, setClientVehicles] = useState([]);
+  const searchRef = useRef(null);
+
   const [showClientModal, setShowClientModal] = useState(false);
   const [clientModalStep, setClientModalStep] = useState(1);
   const [clientForm, setClientForm] = useState({
@@ -227,13 +232,14 @@ export default function KalendarPage() {
     setSelectedClientName(props.customerName || '');
     setIssueDescription(props.issueDescription || '');
     setPlannedWork(props.plannedWork || '');
-    setTempCustomerContact({ 
-      phone: props.customerPhone || '', 
-      email: props.customerEmail || '', 
+    setTempCustomerContact({
+      phone: props.customerPhone || '',
+      email: props.customerEmail || '',
       customerName: props.customerName || '',
-      userId: props.userId || null 
+      userId: props.userId || null
     });
-    
+    setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
+
     setIsModalOpen(true);
   };
 
@@ -242,6 +248,57 @@ export default function KalendarPage() {
     calendarApi.changeView('timeGridDay');
     calendarApi.gotoDate(ev.start);
     setIsInboxOpen(false);
+  };
+
+  const searchClients = async (q) => {
+    if (q.length < 2) { setClientSearchResults([]); return; }
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('id, full_name, phone, email, company_name')
+      .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%,company_name.ilike.%${q}%`)
+      .limit(8);
+    setClientSearchResults(data || []);
+  };
+
+  const handleClientSearchChange = (e) => {
+    const q = e.target.value;
+    setClientSearch(q);
+    setClientVehicles([]);
+    searchClients(q);
+  };
+
+  const selectClientFromSearch = async (client) => {
+    const displayName = client.company_name || client.full_name;
+    setClientSearch(displayName);
+    setClientSearchResults([]);
+    setSelectedClientName(displayName);
+    setTempCustomerContact({ phone: client.phone || '', email: client.email || '', customerName: displayName, userId: client.id });
+
+    const { data } = await supabase.from('vehicles').select('*').eq('owner_id', client.id);
+    const vehicles = data || [];
+
+    if (vehicles.length === 1) {
+      const v = vehicles[0];
+      setPlate(v.license_plate);
+      setCarData(v);
+      setIsKnown(true);
+      setClientVehicles([]);
+    } else if (vehicles.length > 1) {
+      setClientVehicles(vehicles);
+      setPlate('');
+      setCarData(null);
+    } else {
+      setClientVehicles([]);
+      setPlate('');
+      setCarData(null);
+    }
+  };
+
+  const selectVehicleFromPicker = (v) => {
+    setPlate(v.license_plate);
+    setCarData(v);
+    setIsKnown(true);
+    setClientVehicles([]);
   };
 
   const handlePlateBlur = async (spz) => { loadCarDetails(spz); };
@@ -265,6 +322,7 @@ export default function KalendarPage() {
     
     setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork('');
     setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
+    setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
     
     setSelectionMode('ask');
     setIsModalOpen(true);
@@ -689,17 +747,72 @@ export default function KalendarPage() {
                     </div>
 
                     {selectionMode === 'order' && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-bold">
-                        <div>
-                          <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">ŠPZ Vozidla</label>
-                          <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-5 rounded-3xl font-black text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
+                      <div className="space-y-5 font-bold">
+                        {/* VYHĽADÁVANIE ZÁKAZNÍKA */}
+                        <div
+                          ref={searchRef}
+                          className="relative"
+                          onBlur={(e) => { if (!searchRef.current?.contains(e.relatedTarget)) setClientSearchResults([]); }}
+                        >
+                          <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Vyhľadať zákazníka</label>
+                          <input
+                            type="text"
+                            value={clientSearch}
+                            onChange={handleClientSearchChange}
+                            placeholder="Meno, telefón, email, firma..."
+                            className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 transition-all"
+                          />
+                          {clientSearchResults.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 z-20 bg-zinc-900 border border-zinc-700 rounded-2xl mt-1 shadow-2xl overflow-hidden">
+                              {clientSearchResults.map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => selectClientFromSearch(c)}
+                                  className="w-full text-left px-5 py-4 hover:bg-zinc-800 flex justify-between items-center border-b border-zinc-800 last:border-0 transition-all"
+                                >
+                                  <span className="font-black uppercase text-sm text-white">{c.company_name || c.full_name}</span>
+                                  <span className="text-zinc-500 text-xs">{c.phone}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
-                          <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
-                            <option value="">-- Vybrať --</option>
-                            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
-                          </select>
+
+                        {/* VÝBER VOZIDLA (ak má klient viac vozidiel) */}
+                        {clientVehicles.length > 1 && (
+                          <div>
+                            <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Vyberte vozidlo zákazníka</label>
+                            <div className="grid gap-2">
+                              {clientVehicles.map(v => (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  onClick={() => selectVehicleFromPicker(v)}
+                                  className={`flex items-center gap-4 p-4 rounded-2xl border transition-all text-left ${plate === v.license_plate ? 'border-red-600 bg-red-600/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}
+                                >
+                                  <span className="bg-white text-black font-black text-sm tracking-widest px-3 py-1.5 rounded-lg uppercase shrink-0">{v.license_plate}</span>
+                                  <span className="text-zinc-300 font-bold text-sm">{v.brand_model}</span>
+                                  {v.year_produced && <span className="text-zinc-600 text-xs ml-auto">{v.year_produced}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ŠPZ + MECHANIK */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">ŠPZ Vozidla</label>
+                            <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-5 rounded-3xl font-black text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
+                            <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
+                              <option value="">-- Vybrať --</option>
+                              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
+                            </select>
+                          </div>
                         </div>
                       </div>
                     )}
