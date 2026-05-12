@@ -84,6 +84,15 @@ export default function DetailZakazkyPage() {
   const [nextDate, setNextDate] = useState('');
   const [nextNote, setNextNote] = useState('');
   const [completeSaving, setCompleteSaving] = useState(false);
+  // Naplánované upozornenia v modáli dokončenia
+  const [existingScheduled, setExistingScheduled] = useState([]);
+  const [showAddReminder, setShowAddReminder] = useState(false);
+  const [reminderChannel, setReminderChannel] = useState('sms');
+  const [reminderMsg, setReminderMsg] = useState('');
+  const [reminderSubject, setReminderSubject] = useState('');
+  const [reminderDate, setReminderDate] = useState('');
+  const [reminderTime, setReminderTime] = useState('09:00');
+  const [reminderSaving, setReminderSaving] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
   const [newItem, setNewItem] = useState({
     name: '',
@@ -753,19 +762,51 @@ export default function DetailZakazkyPage() {
   };
 
   const openCompleteModal = async () => {
-    const { data } = await supabase.from('sms_templates').select('*').order('label');
-    setCompleteTemplates(data || []);
-    const name = zakazka.customer_name || 'klient';
     const plate = zakazka.plate_number || '';
+    const name = zakazka.customer_name || 'klient';
+    const [tplRes, schedRes] = await Promise.all([
+      supabase.from('sms_templates').select('*').order('label'),
+      supabase.from('scheduled_sms').select('*').eq('plate_number', plate).eq('status', 'pending').order('scheduled_for', { ascending: true }),
+    ]);
+    setCompleteTemplates(tplRes.data || []);
+    setExistingScheduled(schedRes.data || []);
     setCompleteMsg(`Dobry den p. ${name}, Vase vozidlo ${plate} je pripravene na vyzdvihnutie. Tesime sa na Vas! AutoAlma servis, tel: 0940 449 449.`);
     setCompleteSubject(`Vaše vozidlo ${plate} je pripravené na vyzdvihnutie`);
     setCompleteChannel('sms');
     setCompleteSendMsg(true);
     setScheduleNext(false);
-    setNextType('');
-    setNextDate('');
-    setNextNote('');
+    setNextType(''); setNextDate(''); setNextNote('');
+    setShowAddReminder(false);
+    setReminderChannel('sms'); setReminderMsg(''); setReminderSubject('');
+    setReminderDate(''); setReminderTime('09:00');
     setShowCompleteModal(true);
+  };
+
+  const addReminderToScheduled = async () => {
+    if (!reminderMsg.trim() || !reminderDate) return;
+    setReminderSaving(true);
+    const { data, error } = await supabase.from('scheduled_sms').insert([{
+      customer_phone: reminderChannel === 'sms' ? (zakazka.customer_phone || null) : null,
+      customer_email: reminderChannel === 'email' ? (zakazka.customer_email || null) : null,
+      customer_name: zakazka.customer_name,
+      plate_number: zakazka.plate_number,
+      message: reminderMsg,
+      subject: reminderChannel === 'email' ? reminderSubject : null,
+      type: reminderChannel,
+      scheduled_for: new Date(`${reminderDate}T${reminderTime}:00`).toISOString(),
+      status: 'pending',
+    }]).select().single();
+    if (!error && data) {
+      setExistingScheduled(prev => [...prev, data]);
+      setShowAddReminder(false);
+      setReminderMsg(''); setReminderSubject(''); setReminderDate(''); setReminderTime('09:00');
+    }
+    setReminderSaving(false);
+  };
+
+  const cancelReminder = async (remId) => {
+    await supabase.from('scheduled_sms').delete().eq('id', remId);
+    setExistingScheduled(prev => prev.filter(r => r.id !== remId));
   };
 
   const handleCompleteWithActions = async () => {
@@ -2193,6 +2234,105 @@ export default function DetailZakazkyPage() {
                         </p>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* === SEKCIA 3: NAPLÁNOVANÉ UPOZORNENIA === */}
+              <div className="border-t border-zinc-800 pt-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                    Naplánované správy
+                    {existingScheduled.length > 0 && (
+                      <span className="ml-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 text-[8px] font-black px-2 py-0.5 rounded-lg">{existingScheduled.length}</span>
+                    )}
+                  </h3>
+                  <button
+                    onClick={() => setShowAddReminder(p => !p)}
+                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800"
+                  >
+                    {showAddReminder ? '✕ Zrušiť' : '+ Pridať upozornenie'}
+                  </button>
+                </div>
+
+                {/* Zoznam existujúcich */}
+                {existingScheduled.length > 0 && (
+                  <div className="space-y-2">
+                    {existingScheduled.map(r => (
+                      <div key={r.id} className="flex items-start gap-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4">
+                        <span className={`text-[8px] font-black px-2 py-1 rounded shrink-0 mt-0.5 ${(!r.type || r.type === 'sms' || r.type === 'one-time') ? 'bg-blue-600/20 text-blue-400' : 'bg-purple-600/20 text-purple-400'}`}>
+                          {(!r.type || r.type === 'sms' || r.type === 'one-time') ? '📱 SMS' : '✉️ Email'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[10px] font-black text-amber-400 uppercase mb-0.5">
+                            📅 {new Date(r.scheduled_for).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                          {r.subject && <p className="text-purple-300 text-[9px] font-bold mb-0.5">Predmet: {r.subject}</p>}
+                          <p className="text-zinc-400 text-xs font-bold truncate">{r.message}</p>
+                        </div>
+                        <button onClick={() => cancelReminder(r.id)} className="shrink-0 w-7 h-7 flex items-center justify-center bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white rounded-xl transition-all font-black text-xs">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {existingScheduled.length === 0 && !showAddReminder && (
+                  <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest text-center py-2">Žiadne naplánované správy pre {zakazka.plate_number}</p>
+                )}
+
+                {/* Formulár pridania nového upozornenia */}
+                {showAddReminder && (
+                  <div className="bg-zinc-900/40 border border-zinc-700 rounded-2xl p-5 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                    {/* Channel toggle */}
+                    <div className="flex gap-2">
+                      <button onClick={() => setReminderChannel('sms')}
+                        className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${reminderChannel === 'sms' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}>
+                        📱 SMS
+                      </button>
+                      <button onClick={() => setReminderChannel('email')}
+                        className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${reminderChannel === 'email' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}>
+                        ✉️ Email
+                      </button>
+                    </div>
+
+                    {/* Template picker */}
+                    {completeTemplates.filter(t => (t.type || 'sms') === reminderChannel).length > 0 && (
+                      <select onChange={e => { const t = completeTemplates.find(t => t.id.toString() === e.target.value); if (t) { setReminderMsg(t.content); if (t.subject) setReminderSubject(t.subject); } }}
+                        className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-black text-[10px] uppercase outline-none focus:border-red-500" defaultValue="">
+                        <option value="">— Vybrať šablónu —</option>
+                        {completeTemplates.filter(t => (t.type || 'sms') === reminderChannel).map(t => (
+                          <option key={t.id} value={t.id}>{t.label}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {reminderChannel === 'email' && (
+                      <input type="text" placeholder="Predmet emailu" value={reminderSubject} onChange={e => setReminderSubject(e.target.value)}
+                        className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-purple-500" />
+                    )}
+
+                    <textarea placeholder="Text správy / upozornenia..." value={reminderMsg} onChange={e => setReminderMsg(e.target.value)} rows={3}
+                      className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-blue-500 resize-none text-sm" />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Dátum odoslania</label>
+                        <input type="date" value={reminderDate} onChange={e => setReminderDate(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-blue-500"
+                          style={{ colorScheme: 'dark' }} />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Čas</label>
+                        <input type="time" value={reminderTime} onChange={e => setReminderTime(e.target.value)}
+                          className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-blue-500" />
+                      </div>
+                    </div>
+
+                    <button onClick={addReminderToScheduled} disabled={reminderSaving || !reminderMsg.trim() || !reminderDate}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all">
+                      {reminderSaving ? 'Ukladám...' : '📅 Naplánovať správu'}
+                    </button>
                   </div>
                 )}
               </div>
