@@ -595,7 +595,7 @@ export default function GarazPage() {
 
             <div>
               <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] mb-2 font-bold italic">Moja Klientska Zóna</p>
-              <h1 className="text-5xl font-black uppercase italic tracking-tighter leading-none flex items-center gap-4 font-bold">
+              <h1 className="text-2xl md:text-5xl font-black uppercase italic tracking-tighter leading-none flex flex-wrap items-center gap-3 font-bold">
                 {userProfile?.full_name || 'Môj Profil'}
                 <button onClick={() => setIsProfileModalOpen(true)} className="text-[10px] bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-xl hover:bg-white hover:text-black transition-all not-italic tracking-normal font-black uppercase font-bold">
                   ⚙️ Upraviť údaje
@@ -611,13 +611,13 @@ export default function GarazPage() {
         {/* --- ZOZNAM VOZIDIEL --- */}
         <div className="flex flex-col gap-8 font-bold">
           {vehicles.map((vehicle) => (
-            <div key={vehicle.id} className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] relative group hover:border-zinc-700 transition-all shadow-xl font-bold w-full">
+            <div key={vehicle.id} className="bg-zinc-900/50 border border-zinc-800 p-5 md:p-12 rounded-[3.5rem] relative group hover:border-zinc-700 transition-all shadow-xl font-bold w-full">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6 font-bold">
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                  <div className="bg-white text-black px-6 py-3 rounded-2xl font-black text-3xl tracking-tighter shadow-xl font-bold">{vehicle.license_plate}</div>
-                  <div>
-                    <h2 className="text-4xl font-black uppercase italic tracking-tight mb-1 font-bold">{vehicle.brand_model}</h2>
-                    <p className="text-zinc-500 text-[12px] font-black uppercase tracking-widest font-bold">VIN: {vehicle.vin_number || 'Neuvedené'}</p>
+                  <div className="bg-white text-black px-4 py-2 md:px-6 md:py-3 rounded-2xl font-black text-xl md:text-3xl tracking-tighter shadow-xl font-bold shrink-0">{vehicle.license_plate}</div>
+                  <div className="min-w-0">
+                    <h2 className="text-2xl md:text-4xl font-black uppercase italic tracking-tight mb-1 font-bold break-words">{vehicle.brand_model}</h2>
+                    <p className="text-zinc-500 text-[12px] font-black uppercase tracking-widest font-bold break-all">VIN: {vehicle.vin_number || 'Neuvedené'}</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
