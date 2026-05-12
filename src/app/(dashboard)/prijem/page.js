@@ -37,6 +37,25 @@ function PrijemForm() {
   const [tasks, setTasks] = useState([{ description: '' }]);
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+
+  const validate = () => {
+    const errors = {};
+    if (!formData.customer_name.trim()) errors.customer_name = 'Meno zákazníka je povinné';
+    if (!formData.plate_number.trim()) {
+      errors.plate_number = 'ŠPZ je povinná';
+    } else if (!/^[A-Z0-9]{4,8}$/.test(formData.plate_number.replace(/\s/g, ''))) {
+      errors.plate_number = 'Neplatný formát ŠPZ (napr. BA123AB)';
+    }
+    if (formData.customer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customer_email)) {
+      errors.customer_email = 'Neplatný e-mail';
+    }
+    if (formData.customer_phone && !/^[\d\s\+\-]{9,15}$/.test(formData.customer_phone)) {
+      errors.customer_phone = 'Neplatné telefónne číslo';
+    }
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -158,6 +177,7 @@ function PrijemForm() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!validate()) return;
     setLoading(true);
 
     const finalTasks = tasks.filter(t => t.description.trim() !== '');
@@ -254,7 +274,8 @@ function PrijemForm() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end">
             <div>
               <label className="text-[10px] font-black text-red-600 uppercase mb-3 ml-2 block tracking-widest italic">ŠPZ Vozidla</label>
-              <input required type="text" value={formData.plate_number} onChange={(e) => setFormData({...formData, plate_number: e.target.value.toUpperCase()})} className="w-full bg-white border-none p-6 rounded-3xl text-black font-black text-4xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none shadow-2xl uppercase" placeholder="SPZ" />
+              <input required type="text" value={formData.plate_number} onChange={(e) => { setFormData({...formData, plate_number: e.target.value.toUpperCase()}); setValidationErrors(v => ({...v, plate_number: undefined})); }} className={`w-full bg-white border-none p-6 rounded-3xl text-black font-black text-4xl tracking-widest focus:ring-4 outline-none shadow-2xl uppercase ${validationErrors.plate_number ? 'ring-4 ring-red-600' : 'focus:ring-red-600'}`} placeholder="SPZ" />
+              {validationErrors.plate_number && <p className="text-red-500 text-[10px] mt-2 ml-2 font-bold uppercase tracking-widest">{validationErrors.plate_number}</p>}
             </div>
             <div>
               <label className="text-[10px] font-black text-zinc-500 uppercase mb-3 ml-2 block tracking-widest">Značka a Model</label>
@@ -289,9 +310,18 @@ function PrijemForm() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
           <div className="space-y-4">
             <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 block tracking-widest uppercase">Partner / Zákazník</label>
-            <input required type="text" value={formData.customer_name} onChange={(e) => setFormData({...formData, customer_name: e.target.value})} placeholder="Meno alebo názov firmy" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-600 shadow-inner" />
-            <input type="tel" value={formData.customer_phone} onChange={(e) => setFormData({...formData, customer_phone: e.target.value})} placeholder="Telefón" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-600 shadow-inner" />
-            <input type="email" value={formData.customer_email} onChange={(e) => setFormData({...formData, customer_email: e.target.value})} placeholder="Email" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-600 shadow-inner" />
+            <div>
+              <input required type="text" value={formData.customer_name} onChange={(e) => { setFormData({...formData, customer_name: e.target.value}); setValidationErrors(v => ({...v, customer_name: undefined})); }} placeholder="Meno alebo názov firmy" className={`w-full bg-black border p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-600 shadow-inner ${validationErrors.customer_name ? 'border-red-600' : 'border-zinc-800'}`} />
+              {validationErrors.customer_name && <p className="text-red-500 text-[10px] mt-1 ml-2 font-bold uppercase tracking-widest">{validationErrors.customer_name}</p>}
+            </div>
+            <div>
+              <input type="tel" value={formData.customer_phone} onChange={(e) => { setFormData({...formData, customer_phone: e.target.value}); setValidationErrors(v => ({...v, customer_phone: undefined})); }} placeholder="Telefón" className={`w-full bg-black border p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-600 shadow-inner ${validationErrors.customer_phone ? 'border-red-600' : 'border-zinc-800'}`} />
+              {validationErrors.customer_phone && <p className="text-red-500 text-[10px] mt-1 ml-2 font-bold uppercase tracking-widest">{validationErrors.customer_phone}</p>}
+            </div>
+            <div>
+              <input type="email" value={formData.customer_email} onChange={(e) => { setFormData({...formData, customer_email: e.target.value}); setValidationErrors(v => ({...v, customer_email: undefined})); }} placeholder="Email" className={`w-full bg-black border p-5 rounded-2xl text-white font-bold outline-none focus:border-blue-600 shadow-inner ${validationErrors.customer_email ? 'border-red-600' : 'border-zinc-800'}`} />
+              {validationErrors.customer_email && <p className="text-red-500 text-[10px] mt-1 ml-2 font-bold uppercase tracking-widest">{validationErrors.customer_email}</p>}
+            </div>
           </div>
           
           <div className="space-y-4">

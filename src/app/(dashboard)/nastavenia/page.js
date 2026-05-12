@@ -13,7 +13,7 @@ const PRESET_COLORS = [
 
 function ColorPicker({ value, onChange }) {
   return (
-    <div className="grid grid-cols-10 gap-1.5 p-3 bg-black rounded-2xl border border-zinc-800">
+    <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5 p-3 bg-black rounded-2xl border border-zinc-800">
       {PRESET_COLORS.map(color => (
         <button
           key={color}
@@ -365,7 +365,7 @@ export default function NastaveniaPage() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto bg-black min-h-screen text-white relative font-sans select-none font-bold">
+    <div className="p-3 md:p-8 max-w-7xl mx-auto bg-black min-h-screen text-white relative font-sans select-none font-bold">
       <header className="mb-10 border-l-4 border-red-600 pl-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tighter italic text-white leading-none">Nastavenia <span className="text-red-600">Systému</span></h1>
@@ -640,7 +640,7 @@ export default function NastaveniaPage() {
               ) : (
                 <div className="space-y-3">
                   {formTemplates.map(t => (
-                    <div key={t.id} className="flex items-center justify-between bg-zinc-900/40 border border-zinc-800 px-6 py-4 rounded-2xl">
+                    <div key={t.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-zinc-900/40 border border-zinc-800 px-6 py-4 rounded-2xl">
                       <div className="flex items-center gap-4">
                         <span className="text-2xl">📋</span>
                         <div>
@@ -703,7 +703,7 @@ export default function NastaveniaPage() {
               <h3 className="text-[10px] font-black uppercase text-zinc-500 mb-2 tracking-[0.3em] ml-2 italic">Aktuálny zoznam tímu</h3>
               <div className="grid gap-3">
                 {employees.map((emp) => (
-                  <div key={emp.id} className={`flex justify-between items-center bg-zinc-900/80 border border-zinc-800 p-5 rounded-[2rem] transition-all hover:border-red-600/50 ${!emp.active ? 'opacity-50 grayscale' : ''}`}>
+                  <div key={emp.id} className={`flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-zinc-900/80 border border-zinc-800 p-5 rounded-[2rem] transition-all hover:border-red-600/50 ${!emp.active ? 'opacity-50 grayscale' : ''}`}>
                     <div className="flex items-center gap-5">
                       <div
                         className="w-12 h-12 rounded-full border-2 border-zinc-700 shrink-0 cursor-pointer"
@@ -718,10 +718,10 @@ export default function NastaveniaPage() {
                         {emp.hourly_rate > 0 && <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-0.5">💰 {emp.hourly_rate} €/hod</p>}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button onClick={() => openEditModal(emp)} className="p-3 bg-zinc-800 rounded-xl hover:text-red-500 transition-colors">✏️</button>
-                      <button 
-                        onClick={() => toggleActive(emp.id, emp.active)} 
+                      <button
+                        onClick={() => toggleActive(emp.id, emp.active)}
                         className={`text-[9px] font-black uppercase px-4 py-2 rounded-xl border transition-all ${emp.active ? 'border-green-600/30 text-green-500 bg-green-600/5' : 'border-zinc-700 text-zinc-500'}`}
                       >
                         {emp.active ? 'AKTÍVNY' : 'NEAKTÍVNY'}

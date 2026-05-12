@@ -628,7 +628,7 @@ export default function DetailZakazkyPage() {
 
       <div className="printable-area no-print bg-zinc-900 border border-zinc-800 p-8 md:p-16 rounded-[3rem] shadow-2xl max-w-5xl mx-auto text-white">
         
-        <div className="flex justify-between items-start border-b-2 border-red-600 pb-8 mb-8 font-bold">
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b-2 border-red-600 pb-8 mb-8 font-bold">
           <div>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter leading-none">AutoAlma <span className="text-red-600">Servis</span></h1>
             <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-3 italic uppercase">{[myCompany.address, myCompany.zip, myCompany.city].filter(Boolean).join(', ') || 'ul. Svornosti 119, 821 06 Bratislava'}{myCompany.web ? ` | ${myCompany.web}` : ''}</p>
@@ -643,7 +643,7 @@ export default function DetailZakazkyPage() {
         </div>
 
         {/* --- HLAVIČKA FAKTÚRY S ADRESAMI --- */}
-        <div className="grid grid-cols-2 gap-10 mb-10 border-b border-zinc-800 pb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-10 mb-10 border-b border-zinc-800 pb-10">
           <div>
             <h4 className="text-red-600 uppercase text-[10px] mb-3 font-black tracking-widest italic">Dodávateľ</h4>
             <p className="text-lg font-black italic">{myCompany.name || 'AutoAlma Servis s.r.o.'}</p>
@@ -671,7 +671,7 @@ export default function DetailZakazkyPage() {
         </div>
 
         {/* PLATOBNÉ INFO V TLAČI */}
-        <div className="grid grid-cols-3 gap-4 mb-10 bg-zinc-800/20 p-8 rounded-[2rem] border border-zinc-800 text-center font-black uppercase italic">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-10 bg-zinc-800/20 p-4 sm:p-8 rounded-[2rem] border border-zinc-800 text-center font-black uppercase italic">
           <div>
             <p className="text-[9px] text-zinc-500 mb-1">Dátum vystavenia</p>
             <p className="text-xs">{new Date().toLocaleDateString('sk-SK')}</p>
@@ -854,8 +854,8 @@ export default function DetailZakazkyPage() {
               )}
             </div>
           </div>
-          <div className="bg-black/30 rounded-3xl border border-zinc-800 overflow-hidden shadow-inner font-bold">
-            <table className="w-full text-left text-sm">
+          <div className="bg-black/30 rounded-3xl border border-zinc-800 overflow-x-auto shadow-inner font-bold">
+            <table className="w-full text-left text-sm min-w-[640px]">
               <thead className="bg-zinc-800/50 text-[10px] uppercase font-black text-zinc-400 tracking-widest italic">
                 <tr>
                   <th className="p-4 w-32">Typ</th>

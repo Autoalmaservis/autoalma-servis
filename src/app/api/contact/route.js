@@ -1,16 +1,4 @@
-import nodemailer from 'nodemailer';
-
-function createTransport() {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.websupport.sk',
-    port: parseInt(process.env.SMTP_PORT || '465'),
-    secure: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-}
+import { createMailTransport } from '@/app/lib/mailer';
 
 export async function POST(request) {
   try {
@@ -54,7 +42,7 @@ export async function POST(request) {
       ? `Správa z webu: ${name || 'zákazník'} · ${plate.toUpperCase()}`
       : `Správa z webu: ${name || 'zákazník'}`;
 
-    const transporter = createTransport();
+    const transporter = createMailTransport();
     await transporter.sendMail({
       from: `"AutoAlma Servis" <${process.env.SMTP_USER}>`,
       to: 'autoalma@autoalma.sk',
