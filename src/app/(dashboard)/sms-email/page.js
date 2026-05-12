@@ -50,6 +50,7 @@ export default function SmsEmailPage() {
   const [scheduled, setScheduled] = useState([]);
   const [loadingSched, setLoadingSched] = useState(false);
   const [schedError, setSchedError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'sent'
 
   // --- Hromadné ---
   const [customers, setCustomers] = useState([]);
@@ -84,18 +85,24 @@ export default function SmsEmailPage() {
     if (data) setTemplates(data);
   };
 
+  // SMS kanál: type='sms', type='one-time', type=NULL → všetko čo nie je 'email'
+  const isSmsType = (t) => !t || t === 'sms' || t === 'one-time';
+
   const fetchScheduled = async () => {
     setLoadingSched(true);
     setSchedError(null);
     const { data, error } = await supabase
-      .from('scheduled_sms').select('*').eq('status', 'pending')
-      .order('scheduled_for', { ascending: true });
+      .from('scheduled_sms').select('*')
+      .order('scheduled_for', { ascending: false }); // najnovšie hore
     if (error) {
       setSchedError(error.message);
       setScheduled([]);
     } else {
-      // Filtrovanie podľa kanála client-side — NULL = sms (spätná kompatibilita)
-      setScheduled((data || []).filter(s => (s.type || 'sms') === channel));
+      // Filtrovanie client-side — one-time/null = sms
+      const filtered = (data || []).filter(s =>
+        channel === 'sms' ? isSmsType(s.type) : s.type === 'email'
+      );
+      setScheduled(filtered);
     }
     setLoadingSched(false);
   };
@@ -328,49 +335,75 @@ export default function SmsEmailPage() {
               <div className="bg-red-600/10 border border-red-600/30 rounded-2xl p-5 mb-4">
                 <p className="text-red-400 font-black text-xs uppercase tracking-widest mb-2">Chyba načítania tabuľky scheduled_sms</p>
                 <p className="text-zinc-400 text-xs font-mono mb-3">{schedError}</p>
-                <p className="text-zinc-500 text-[10px] font-bold">Pravdepodobne chýba prístup (RLS). Spusti v Supabase SQL editore:</p>
+                <p className="text-zinc-500 text-[10px] font-bold">Spusti v Supabase SQL editore:</p>
                 <code className="block bg-black text-green-400 text-[10px] font-mono p-3 rounded-xl mt-2 select-all">
                   ALTER TABLE scheduled_sms DISABLE ROW LEVEL SECURITY;
                 </code>
               </div>
             )}
 
+            {/* Status filter */}
+            {!schedError && (
+              <div className="flex gap-2 mb-4">
+                {[['all','Všetky'],['pending','Čakajúce'],['sent','Odoslané']].map(([key, label]) => (
+                  <button key={key} onClick={() => setStatusFilter(key)}
+                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${
+                      statusFilter === key ? 'bg-zinc-700 border-zinc-500 text-white' : 'bg-black border-zinc-800 text-zinc-600 hover:text-zinc-300'
+                    }`}>
+                    {label}
+                    <span className="ml-1.5 text-zinc-500">
+                      {key === 'all' ? scheduled.length : scheduled.filter(s => s.status === key).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {loadingSched ? (
               <div className="text-center text-zinc-600 animate-pulse py-12 font-black uppercase text-xs">Načítavam...</div>
-            ) : scheduled.length === 0 && !schedError ? (
-              <div className="text-center text-zinc-700 font-black uppercase text-xs tracking-widest py-16 border-2 border-dashed border-zinc-900 rounded-[2rem]">
-                Žiadne naplánované {channel === 'sms' ? 'SMS' : 'emaily'}
-              </div>
-            ) : scheduled.map(item => (
-              <div key={item.id} className="bg-zinc-900/40 border border-zinc-800 rounded-[1.5rem] p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${channel === 'sms' ? 'bg-blue-600/20 text-blue-400' : 'bg-purple-600/20 text-purple-400'}`}>
-                        {channel === 'sms' ? 'SMS' : 'Email'}
-                      </span>
-                      <p className="font-black text-sm text-white">{item.customer_name || 'Neznámy'}</p>
-                      {item.plate_number && <span className="bg-white text-black text-[9px] font-black px-2 py-0.5 rounded-lg">{item.plate_number}</span>}
+            ) : (() => {
+              const visible = statusFilter === 'all' ? scheduled : scheduled.filter(s => s.status === statusFilter);
+              if (visible.length === 0 && !schedError) return (
+                <div className="text-center text-zinc-700 font-black uppercase text-xs tracking-widest py-16 border-2 border-dashed border-zinc-900 rounded-[2rem]">
+                  Žiadne {statusFilter === 'pending' ? 'čakajúce' : statusFilter === 'sent' ? 'odoslané' : ''} záznamy
+                </div>
+              );
+              return visible.map(item => (
+                <div key={item.id} className={`border rounded-[1.5rem] p-5 mb-3 ${item.status === 'pending' ? 'bg-zinc-900/40 border-zinc-700' : 'bg-zinc-950 border-zinc-800'}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${item.status === 'pending' ? 'bg-amber-600/20 text-amber-400' : 'bg-green-600/20 text-green-400'}`}>
+                          {item.status === 'pending' ? '⏳ Čaká' : '✓ Odoslaná'}
+                        </span>
+                        <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${channel === 'sms' ? 'bg-blue-600/20 text-blue-400' : 'bg-purple-600/20 text-purple-400'}`}>
+                          {channel === 'sms' ? 'SMS' : 'Email'}
+                        </span>
+                        <p className="font-black text-sm text-white">{item.customer_name || 'Neznámy'}</p>
+                        {item.plate_number && <span className="bg-white text-black text-[9px] font-black px-2 py-0.5 rounded-lg">{item.plate_number}</span>}
+                      </div>
+                      <p className="text-zinc-500 text-[10px] font-black uppercase mb-1">
+                        📅 {fmtDt(item.scheduled_for)} · {contactIcon} {channel === 'sms' ? item.customer_phone : item.customer_email}
+                      </p>
+                      {item.subject && <p className="text-purple-300 text-[10px] font-bold mb-1">Predmet: {item.subject}</p>}
+                      <p className="text-zinc-400 text-xs font-bold leading-relaxed line-clamp-3">{item.message}</p>
                     </div>
-                    <p className="text-zinc-500 text-[10px] font-black uppercase mb-1">
-                      📅 {fmtDt(item.scheduled_for)} · {contactIcon} {channel === 'sms' ? item.customer_phone : item.customer_email}
-                    </p>
-                    {item.subject && <p className="text-purple-300 text-[10px] font-bold mb-1">Predmet: {item.subject}</p>}
-                    <p className="text-zinc-400 text-xs font-bold leading-relaxed line-clamp-2">{item.message}</p>
-                  </div>
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <button onClick={() => sendNow(item)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[9px] font-black uppercase rounded-xl transition-all">
-                      Odoslať teraz
-                    </button>
-                    <button onClick={() => cancelScheduled(item.id)}
-                      className="px-4 py-2 bg-zinc-800 hover:bg-red-600/20 text-zinc-400 hover:text-red-400 text-[9px] font-black uppercase rounded-xl transition-all">
-                      Zrušiť
-                    </button>
+                    {item.status === 'pending' && (
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <button onClick={() => sendNow(item)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[9px] font-black uppercase rounded-xl transition-all">
+                          Odoslať teraz
+                        </button>
+                        <button onClick={() => cancelScheduled(item.id)}
+                          className="px-4 py-2 bg-zinc-800 hover:bg-red-600/20 text-zinc-400 hover:text-red-400 text-[9px] font-black uppercase rounded-xl transition-all">
+                          Zrušiť
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         )}
 
