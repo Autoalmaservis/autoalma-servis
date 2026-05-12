@@ -87,9 +87,9 @@ export default function SmsEmailPage() {
     setLoadingSched(true);
     const { data } = await supabase
       .from('scheduled_sms').select('*').eq('status', 'pending')
-      .eq('type', channel)
       .order('scheduled_for', { ascending: true });
-    if (data) setScheduled(data);
+    // Filtrovanie podľa kanála client-side — robustné aj bez type stĺpca (NULL = sms)
+    if (data) setScheduled(data.filter(s => (s.type || 'sms') === channel));
     setLoadingSched(false);
   };
 
