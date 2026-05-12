@@ -3,6 +3,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 import SmsPanel from '../../prijem/SmsPanel'; // PRIDANÝ IMPORT ZACHOVANÝ
+import PrintForm from './components/PrintForm';
+import CompletionModal from './components/CompletionModal';
+import JobPhotos from './components/JobPhotos';
+import JobTasks from './components/JobTasks';
 
 export default function DetailZakazkyPage() {
   const { id } = useParams();
@@ -23,10 +27,6 @@ export default function DetailZakazkyPage() {
   const [rateCategories, setRateCategories] = useState([]);
   const [activeOffer, setActiveOffer] = useState(null);
   const [pastOffers, setPastOffers] = useState([]); // HISTÓRIA PONÚK ZACHOVANÁ
-
-  // --- DOPLNENÉ STAVY PRE FOTODOKUMENTÁCIU ZACHOVANÉ ---
-  const [photos, setPhotos] = useState([]);
-  const [uploading, setUploading] = useState(false);
 
   const [myCompany, setMyCompany] = useState({ name: 'AutoAlma Servis', address: '', city: '', zip: '', ico: '', dic: '', bank: '', phone: '', email: '', web: '', logo_url: '' });
 
@@ -74,26 +74,6 @@ export default function DetailZakazkyPage() {
 
   // Modál dokončenia zákazky
   const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const [completeChannel, setCompleteChannel] = useState('sms');
-  const [completeMsg, setCompleteMsg] = useState('');
-  const [completeSubject, setCompleteSubject] = useState('');
-  const [completeSendMsg, setCompleteSendMsg] = useState(true);
-  const [completeTemplates, setCompleteTemplates] = useState([]);
-  const [scheduleNext, setScheduleNext] = useState(false);
-  const [nextType, setNextType] = useState('');
-  const [nextDate, setNextDate] = useState('');
-  const [nextNote, setNextNote] = useState('');
-  const [completeSaving, setCompleteSaving] = useState(false);
-  // Naplánované upozornenia v modáli dokončenia
-  const [existingScheduled, setExistingScheduled] = useState([]);
-  const [showAddReminder, setShowAddReminder] = useState(false);
-  const [reminderChannel, setReminderChannel] = useState('sms');
-  const [reminderMsg, setReminderMsg] = useState('');
-  const [reminderSubject, setReminderSubject] = useState('');
-  const [reminderDate, setReminderDate] = useState('');
-  const [reminderTime, setReminderTime] = useState('09:00');
-  const [reminderSaving, setReminderSaving] = useState(false);
-  const [newTaskText, setNewTaskText] = useState('');
   const [newItem, setNewItem] = useState({
     name: '',
     quantity: 1,
@@ -115,8 +95,6 @@ export default function DetailZakazkyPage() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'job_items', filter: `job_id=eq.${id}` }, () => { fetchItems(); })
         // Sledovanie zmien v ponukách
         .on('postgres_changes', { event: '*', schema: 'public', table: 'price_offers', filter: `job_id=eq.${id}` }, () => { fetchCurrentOffer(); })
-        // DOPLNENÉ: Sledovanie zmien vo fotkách
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'job_photos', filter: `job_id=eq.${id}` }, () => { fetchPhotos(); })
         .subscribe();
 
       return () => { supabase.removeChannel(subscription); };
@@ -158,7 +136,6 @@ export default function DetailZakazkyPage() {
       fetchWarehouseItems(),
       fetchSettings(),
       fetchCurrentOffer(),
-      fetchPhotos(),
       fetchFormTemplates(),
       fetchSavedForms(),
     ]);
@@ -319,14 +296,6 @@ export default function DetailZakazkyPage() {
   const fetchWarehouseItems = async () => {
     const { data } = await supabase.from('warehouse_items').select('id, name, part_number, sale_price, unit, quantity').order('name');
     if (data) setWarehouseItems(data);
-  };
-
-  const fetchPhotos = async () => {
-    try {
-      const { data, error } = await supabase.from('job_photos').select('*').eq('job_id', id).order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) setPhotos(data);
-    } catch (err) { console.error("Chyba fotiek:", err.message); }
   };
 
   const fetchFormTemplates = async () => {
@@ -591,61 +560,6 @@ export default function DetailZakazkyPage() {
     w.focus();
   };
 
-  const handleUploadPhoto = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${id}/${Math.random()}.${fileExt}`;
-      const filePath = fileName;
-
-      const { error: uploadError } = await supabase.storage
-        .from('service-images')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('service-images')
-        .getPublicUrl(filePath);
-
-      const { error: dbError } = await supabase.from('job_photos').insert([{
-        job_id: id,
-        url: publicUrl,
-        storage_path: filePath
-      }]);
-
-      if (dbError) throw dbError;
-      fetchPhotos();
-    } catch (err) {
-      alert("Chyba pri nahrávaní: " + err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const deletePhoto = async (photo) => {
-    if (!confirm("Naozaj chcete vymazať túto fotografiu?")) return;
-    try {
-      const { error: storageError } = await supabase.storage
-        .from('service-images')
-        .remove([photo.storage_path]);
-
-      if (storageError) throw storageError;
-
-      const { error: dbError } = await supabase
-        .from('job_photos')
-        .delete()
-        .eq('id', photo.id);
-
-      if (dbError) throw dbError;
-      fetchPhotos();
-    } catch (err) {
-      alert("Chyba pri mazaní fotky: " + err.message);
-    }
-  };
-
   const fetchCurrentOffer = async () => {
     const { data } = await supabase
       .from('price_offers')
@@ -761,123 +675,7 @@ export default function DetailZakazkyPage() {
     else alert("Chyba pri zmene stavu: " + error.message);
   };
 
-  const openCompleteModal = async () => {
-    const plate = zakazka.plate_number || '';
-    const name = zakazka.customer_name || 'klient';
-    const [tplRes, schedRes] = await Promise.all([
-      supabase.from('sms_templates').select('*').order('label'),
-      supabase.from('scheduled_sms').select('*').eq('plate_number', plate).eq('status', 'pending').order('scheduled_for', { ascending: true }),
-    ]);
-    setCompleteTemplates(tplRes.data || []);
-    setExistingScheduled(schedRes.data || []);
-    setCompleteMsg(`Dobry den p. ${name}, Vase vozidlo ${plate} je pripravene na vyzdvihnutie. Tesime sa na Vas! AutoAlma servis, tel: 0940 449 449.`);
-    setCompleteSubject(`Vaše vozidlo ${plate} je pripravené na vyzdvihnutie`);
-    setCompleteChannel('sms');
-    setCompleteSendMsg(true);
-    setScheduleNext(false);
-    setNextType(''); setNextDate(''); setNextNote('');
-    setShowAddReminder(false);
-    setReminderChannel('sms'); setReminderMsg(''); setReminderSubject('');
-    setReminderDate(''); setReminderTime('09:00');
-    setShowCompleteModal(true);
-  };
-
-  const addReminderToScheduled = async () => {
-    if (!reminderMsg.trim() || !reminderDate) return;
-    setReminderSaving(true);
-    const { data, error } = await supabase.from('scheduled_sms').insert([{
-      customer_phone: reminderChannel === 'sms' ? (zakazka.customer_phone || null) : null,
-      customer_email: reminderChannel === 'email' ? (zakazka.customer_email || null) : null,
-      customer_name: zakazka.customer_name,
-      plate_number: zakazka.plate_number,
-      message: reminderMsg,
-      subject: reminderChannel === 'email' ? reminderSubject : null,
-      type: reminderChannel,
-      scheduled_for: new Date(`${reminderDate}T${reminderTime}:00`).toISOString(),
-      status: 'pending',
-    }]).select().single();
-    if (!error && data) {
-      setExistingScheduled(prev => [...prev, data]);
-      setShowAddReminder(false);
-      setReminderMsg(''); setReminderSubject(''); setReminderDate(''); setReminderTime('09:00');
-    }
-    setReminderSaving(false);
-  };
-
-  const cancelReminder = async (remId) => {
-    await supabase.from('scheduled_sms').delete().eq('id', remId);
-    setExistingScheduled(prev => prev.filter(r => r.id !== remId));
-  };
-
-  const handleCompleteWithActions = async () => {
-    setCompleteSaving(true);
-    try {
-      if (completeSendMsg && completeMsg.trim()) {
-        if (completeChannel === 'sms' && zakazka.customer_phone) {
-          await fetch('/api/send-sms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: zakazka.customer_phone, message: completeMsg }),
-          });
-          await supabase.from('scheduled_sms').insert([{
-            customer_phone: zakazka.customer_phone,
-            customer_name: zakazka.customer_name,
-            plate_number: zakazka.plate_number,
-            message: completeMsg,
-            type: 'sms',
-            scheduled_for: new Date().toISOString(),
-            status: 'sent',
-          }]);
-          if (zakazka.customer_id) {
-            await supabase.from('notifications').insert([{
-              user_id: zakazka.customer_id,
-              title: '✅ Auto je pripravené',
-              content: completeMsg,
-              is_read: false,
-              type: 'success',
-            }]);
-          }
-        } else if (completeChannel === 'email' && zakazka.customer_email) {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: zakazka.customer_email, subject: completeSubject, message: completeMsg }),
-          });
-          await supabase.from('scheduled_sms').insert([{
-            customer_email: zakazka.customer_email,
-            customer_name: zakazka.customer_name,
-            plate_number: zakazka.plate_number,
-            message: completeMsg,
-            subject: completeSubject,
-            type: 'email',
-            scheduled_for: new Date().toISOString(),
-            status: 'sent',
-          }]);
-        }
-      }
-      if (scheduleNext && nextType && nextDate) {
-        await supabase.from('calendar_events').insert([{
-          title: nextType,
-          plate_number: zakazka.plate_number,
-          customer_name: zakazka.customer_name,
-          start_datetime: `${nextDate}T08:00:00`,
-          end_datetime: `${nextDate}T09:00:00`,
-          issue_description: nextNote || nextType,
-          customer_phone: zakazka.customer_phone || null,
-          customer_email: zakazka.customer_email || null,
-          status: 'Naplánované',
-          is_confirmed: true,
-          is_blocked: false,
-        }]);
-      }
-      await updateJobStatus('Dokončené');
-      setShowCompleteModal(false);
-    } catch (err) {
-      alert('Chyba: ' + err.message);
-    } finally {
-      setCompleteSaving(false);
-    }
-  };
+  const openCompleteModal = () => setShowCompleteModal(true);
 
   const updateMechanic = async (employeeId) => {
     const selectedEmp = employees.find(e => e.id === employeeId);
@@ -990,13 +788,6 @@ export default function DetailZakazkyPage() {
     }
   };
 
-  const addTask = async (e) => {
-    e.preventDefault();
-    if (!newTaskText.trim()) return;
-    const { error } = await supabase.from('job_tasks').insert([{ job_id: id, task_description: newTaskText, is_completed: false }]);
-    if (!error) { setNewTaskText(''); fetchTasks(); }
-  };
-
   const saveMechanicSplits = async (splits) => {
     setSavingSplits(true);
     await supabase.from('job_tickets').update({ mechanic_splits: splits }).eq('id', id);
@@ -1035,17 +826,6 @@ export default function DetailZakazkyPage() {
     } else {
       alert('Chyba: ' + error.message);
     }
-  };
-
-  const toggleTaskStatus = async (taskId, currentStatus) => {
-    const newStatus = !currentStatus;
-    setTasks(prevTasks => prevTasks.map(t => t.id === taskId ? { ...t, is_completed: newStatus } : t));
-    await supabase.from('job_tasks').update({ is_completed: newStatus }).eq('id', taskId);
-  };
-
-  const deleteTask = async (taskId) => {
-    const { error } = await supabase.from('job_tasks').delete().eq('id', taskId);
-    if (!error) fetchTasks();
   };
 
   const deleteWholeJob = async () => {
@@ -1344,32 +1124,7 @@ export default function DetailZakazkyPage() {
               </div>
           </div>
 
-          <div className="space-y-4 font-bold">
-            <div className="flex justify-between items-end">
-                <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] italic">1. Priebeh prác (Checklist)</h2>
-                <span className="text-[9px] font-black text-zinc-500 uppercase">{tasks.filter(t => t.is_completed === true).length} / {tasks.length} HOTOVO</span>
-            </div>
-            <div className="bg-black/30 p-6 rounded-3xl border border-zinc-800 space-y-3 min-h-[140px]">
-              {tasks.map((task) => {
-                const done = task.is_completed === true;
-                return (
-                  <div key={task.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${done ? 'bg-green-600/10 border-green-600 text-green-500 shadow-[0_0_15px_rgba(22,163,74,0.1)]' : 'bg-red-600/5 border-red-600/40 text-red-500 shadow-[0_0_10px_rgba(220,38,38,0.05)]'}`}>
-                    <div className="flex items-center gap-4 cursor-pointer flex-grow no-print" onClick={() => toggleTaskStatus(task.id, task.is_completed)}>
-                      <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${done ? 'bg-green-600 border-green-600 shadow-lg shadow-green-900/40' : 'bg-transparent border-red-600'}`}>
-                        {done ? <span className="text-white text-xs font-black">✓</span> : <span className="text-red-600 text-[10px] font-black uppercase tracking-tighter">X</span>}
-                      </div>
-                      <span className={`text-sm font-black uppercase tracking-tight italic ${done ? 'line-through opacity-50' : ''}`}>{task.task_description}</span>
-                    </div>
-                    <button onClick={() => deleteTask(task.id)} className="no-print text-zinc-800 hover:text-red-600 px-3 transition-colors text-lg font-bold">✕</button>
-                  </div>
-                );
-              })}
-              <form onSubmit={addTask} className="flex gap-2 mt-4 no-print">
-                <input type="text" value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} placeholder="+ Pridať ďalšiu úlohu..." className="flex-grow bg-black border border-zinc-800 p-3 rounded-xl text-[10px] font-bold uppercase outline-none focus:border-blue-600 transition-all font-black italic tracking-widest" />
-                <button type="submit" className="bg-zinc-800 px-4 rounded-xl hover:bg-blue-600 transition-all font-black text-lg">+</button>
-              </form>
-            </div>
-          </div>
+          <JobTasks tasks={tasks} jobId={id} onRefresh={fetchTasks} />
         </div>
 
         {/* ROZPIS POLOŽIEK */}
@@ -1689,38 +1444,7 @@ export default function DetailZakazkyPage() {
           </div>
         </div>
 
-        <div className="space-y-4 mb-12 no-print font-bold">
-          <div className="flex justify-between items-center">
-            <h2 className="text-red-600 font-black uppercase text-[10px] tracking-[0.3em] italic">3. Fotodokumentácia opravy</h2>
-            <label className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer inline-block shadow-lg">
-              {uploading ? 'Nahrávam...' : '📸 Pridať fotografiu'}
-              <input type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} disabled={uploading} />
-            </label>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {photos.map((photo) => (
-              <div key={photo.id} className="relative group aspect-square rounded-[2rem] overflow-hidden border border-zinc-800 bg-black shadow-xl">
-                <img src={photo.url} alt="Servisná fotka" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <button 
-                    onClick={() => deletePhoto(photo)}
-                    className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-500 transition-all shadow-2xl transform translate-y-4 group-hover:translate-y-0 duration-300"
-                  >
-                    🗑️ Vymazať
-                  </button>
-                </div>
-              </div>
-            ))}
-            
-            {photos.length === 0 && !uploading && (
-              <div className="col-span-full py-12 border-2 border-dashed border-zinc-800 rounded-[2.5rem] flex flex-col items-center justify-center text-zinc-600 opacity-50">
-                <span className="text-3xl mb-2">📸</span>
-                <p className="text-[10px] font-black uppercase tracking-widest italic">Zatiaľ neboli nahrané žiadne fotografie</p>
-              </div>
-            )}
-          </div>
-        </div>
+        <JobPhotos jobId={id} />
 
         {/* HODINY MECHANIKOV — no-print, nezobrazí sa na tlači */}
         <div className="mt-12 no-print font-bold">
@@ -1836,156 +1560,15 @@ export default function DetailZakazkyPage() {
       </div>
 
       {/* ===== ČISTÁ TLAČOVÁ FORMA ===== */}
-      <div className="zakazka-print-area">
-
-        {/* HLAVIČKA */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
-          <tbody><tr>
-            <td width="50%" valign="top">
-              <img src={myCompany.logo_url || "/autoalma logo.png"} alt="Logo" style={{ width: '100px', height: 'auto', marginBottom: '10pt' }} />
-              <div style={{ fontSize: '8.5pt', color: '#000', lineHeight: '1.4' }}>
-                <p style={{ margin: '0', color: '#666', fontWeight: '900' }}>DODÁVATEĽ:</p>
-                <p style={{ margin: '0' }}><strong>{myCompany.name}</strong></p>
-                <p style={{ margin: '0' }}>{myCompany.address}</p>
-                <p style={{ margin: '0' }}>{myCompany.zip} {myCompany.city}</p>
-                <p style={{ margin: '3pt 0 0 0' }}>IČO: {myCompany.ico} | DIČ: {myCompany.dic}</p>
-                <p style={{ margin: '0' }}>{myCompany.phone} | {myCompany.email}</p>
-                {myCompany.web && <p style={{ margin: '0' }}>{myCompany.web}</p>}
-              </div>
-            </td>
-            <td width="50%" valign="top" align="right">
-              <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>Servisný príkaz</h2>
-              <p style={{ fontSize: '22pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{zakazka.job_number || `#${zakazka.id.slice(0,8)}`}</p>
-              <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum príjmu: <strong>{new Date(zakazka.created_at).toLocaleDateString('sk-SK')}</strong></p>
-              <p style={{ margin: '2pt 0 0 0', fontSize: '9pt', color: '#000' }}>Stav: <strong style={{ color: zakazka.status === 'Dokončené' ? '#16a34a' : '#d97706' }}>{zakazka.status}</strong></p>
-            </td>
-          </tr></tbody>
-        </table>
-
-        {/* ADRESY */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15pt' }}>
-          <tbody><tr>
-            <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
-              <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>ODBERATEĽ / ZÁKAZNÍK:</p>
-              <p style={{ margin: '0', fontSize: '11pt', color: '#000', fontWeight: '900' }}>{zakazka.company_name || zakazka.customer_name}</p>
-              <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{zakazka.address || zakazka.customer_address || ''}</p>
-              <p style={{ margin: '0', fontSize: '9pt', color: '#000' }}>{zakazka.zip || ''} {zakazka.city || ''}</p>
-              {(zakazka.ico || zakazka.dic) && (
-                <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>IČO: {zakazka.ico || '---'} | DIČ: {zakazka.dic || '---'}</p>
-              )}
-              <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>Tel: {zakazka.customer_phone || '---'}</p>
-            </td>
-            <td width="50%" style={{ border: '1pt solid #000', padding: '8pt' }} valign="top">
-              <p style={{ margin: '0 0 3pt 0', fontSize: '8pt', color: '#666', fontWeight: '900' }}>VOZIDLO:</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3pt' }}>
-                <span style={{ border: '1.5pt solid #000', padding: '1pt 4pt', fontWeight: '900', fontSize: '11pt', color: '#000' }}>{zakazka.plate_number || '---'}</span>
-                <span style={{ fontSize: '10pt', fontWeight: '900', color: '#000' }}>{zakazka.car_brand_model || '---'}</span>
-              </div>
-              <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>VIN: {zakazka.vin_number || '---'}</p>
-              <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>Rok: {zakazka.year_produced || '---'} | {zakazka.engine_volume ? zakazka.engine_volume + ' cm³' : '---'} | {zakazka.engine_power ? zakazka.engine_power + ' kW' : '---'} | {zakazka.fuel_type || '---'}</p>
-              <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {zakazka.mileage || '---'} km | Mechanik: {zakazka.technician_name || '---'}</p>
-            </td>
-          </tr></tbody>
-        </table>
-
-        {/* ZÁVADY */}
-        {zakazka.complaints && (
-          <div style={{ border: '1pt solid #000', padding: '8pt', marginBottom: '12pt' }}>
-            <p style={{ margin: '0 0 4pt 0', fontSize: '8pt', color: '#dc2626', fontWeight: '900' }}>ZISTENÉ ZÁVADY / POŽIADAVKY ZÁKAZNÍKA:</p>
-            <p style={{ margin: '0', fontSize: '8.5pt', color: '#000', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>{zakazka.complaints}</p>
-          </div>
-        )}
-
-        {/* CHECKLIST ÚKONOV */}
-        {tasks.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12pt' }}>
-            <thead>
-              <tr style={{ background: '#f4f4f5' }}>
-                <th style={{ border: '1pt solid #000', padding: '4pt 6pt', fontSize: '8pt', fontWeight: '900', textAlign: 'left' }}>SERVISNÉ ÚKONY — CHECKLIST</th>
-                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'center', width: '60pt' }}>STAV</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={task.id}>
-                  <td style={{ border: '0.5pt solid #eee', padding: '4pt 6pt', fontSize: '8.5pt', color: '#000' }}>{task.task_description}</td>
-                  <td style={{ border: '0.5pt solid #eee', padding: '4pt', textAlign: 'center', fontSize: '8pt', fontWeight: '900', color: task.is_completed ? '#16a34a' : '#dc2626' }}>
-                    {task.is_completed ? '✓ HOTOVO' : '○ ČAKÁ'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        {/* MATERIÁL A PRÁCE */}
-        {items.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '8pt' }}>
-            <thead>
-              <tr style={{ background: '#f4f4f5' }}>
-                <th style={{ border: '1pt solid #000', padding: '4pt 6pt', fontSize: '8pt', fontWeight: '900', textAlign: 'left' }}>MATERIÁL A SERVISNÉ PRÁCE</th>
-                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'center', width: '40pt' }}>MNŽ.</th>
-                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'right', width: '55pt' }}>CENA/J</th>
-                <th style={{ border: '1pt solid #000', padding: '4pt', fontSize: '8pt', fontWeight: '900', textAlign: 'right', width: '60pt' }}>SPOLU</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td style={{ border: '0.5pt solid #eee', padding: '3pt 6pt', fontSize: '8.5pt', color: '#000' }}>
-                    <span style={{ fontSize: '7pt', color: item.type === 'Práca' ? '#2563eb' : '#ea580c', fontWeight: '900' }}>[{item.type.toUpperCase()}]</span>{' '}{item.name}
-                  </td>
-                  <td style={{ border: '0.5pt solid #eee', padding: '3pt', textAlign: 'center', fontSize: '8.5pt', color: '#000' }}>{item.quantity} {item.unit}</td>
-                  <td style={{ border: '0.5pt solid #eee', padding: '3pt', textAlign: 'right', fontSize: '8.5pt', color: '#000' }}>{parseFloat(item.unit_price).toFixed(2)} €</td>
-                  <td style={{ border: '0.5pt solid #eee', padding: '3pt', textAlign: 'right', fontWeight: '900', fontSize: '8.5pt', color: '#000' }}>{(item.quantity * item.unit_price).toFixed(2)} €</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        {/* SUMÁR */}
-        {items.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10pt' }}>
-            <tbody><tr>
-              <td></td>
-              <td width="200pt" style={{ border: '1.5pt solid #000', padding: '8pt' }}>
-                <table width="100%" style={{ borderCollapse: 'collapse' }}>
-                  <tbody>
-                    <tr style={{ fontSize: '9pt', color: '#000' }}>
-                      <td style={{ paddingBottom: '2pt' }}>Základ dane:</td>
-                      <td align="right">{subtotal.toFixed(2)} €</td>
-                    </tr>
-                    <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
-                      <td style={{ paddingBottom: '2pt' }}>DPH (23%):</td>
-                      <td align="right">{tax.toFixed(2)} €</td>
-                    </tr>
-                    <tr>
-                      <td style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '11pt', color: '#dc2626' }}>CELKOM:</td>
-                      <td align="right" style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '16pt' }}>{total.toFixed(2)} €</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </td>
-            </tr></tbody>
-          </table>
-        )}
-
-        {/* SPACER — podpisy na spodok */}
-        <div className="print-spacer" />
-
-        {/* PODPISY */}
-        <div className="print-signature-area">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody><tr>
-              <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>PODPIS PREVZAL (ZÁKAZNÍK)</td>
-              <td width="10%"></td>
-              <td width="45%" style={{ borderTop: '1pt solid #000', textAlign: 'center', paddingTop: '5pt', fontSize: '8pt', color: '#000' }}>PEČIATKA A PODPIS SERVISU</td>
-            </tr></tbody>
-          </table>
-        </div>
-
-      </div>
+      <PrintForm
+        zakazka={zakazka}
+        items={items}
+        tasks={tasks}
+        myCompany={myCompany}
+        subtotal={subtotal}
+        tax={tax}
+        total={total}
+      />
 
       {/* WAREHOUSE BROWSE MODAL */}
       {warehouseModalOpen && (
@@ -2089,287 +1672,11 @@ export default function DetailZakazkyPage() {
 
       {/* ===== MODÁL DOKONČENIA ZÁKAZKY ===== */}
       {showCompleteModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 no-print font-bold overflow-y-auto">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-[3rem] w-full max-w-3xl shadow-2xl my-auto">
-
-            {/* Header */}
-            <div className="p-8 border-b border-zinc-800 flex justify-between items-center">
-              <div>
-                <p className="text-[10px] text-green-500 font-black uppercase tracking-[0.4em] mb-1">Zákazka dokončená</p>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white">
-                  Informovať zákazníka <span className="text-green-500">+ naplánovať</span>
-                </h2>
-                <p className="text-zinc-500 text-xs font-bold mt-1">
-                  {zakazka.plate_number} · {zakazka.customer_name}
-                </p>
-              </div>
-              <button onClick={() => setShowCompleteModal(false)} className="bg-zinc-900 hover:bg-white hover:text-black p-3 rounded-full transition-all text-lg font-black">✕</button>
-            </div>
-
-            <div className="p-8 space-y-8">
-
-              {/* === SEKCIA 1: SPRÁVA ZÁKAZNÍKOVI === */}
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Správa zákazníkovi</h3>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={completeSendMsg} onChange={e => setCompleteSendMsg(e.target.checked)} className="w-4 h-4 accent-green-500" />
-                    <span className="text-[10px] font-black uppercase text-zinc-400">Odoslať správu</span>
-                  </label>
-                </div>
-
-                {completeSendMsg && (
-                  <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                    {/* Channel toggle */}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setCompleteChannel('sms');
-                          setCompleteMsg(`Dobry den p. ${zakazka.customer_name || 'klient'}, Vase vozidlo ${zakazka.plate_number || ''} je pripravene na vyzdvihnutie. Tesime sa na Vas! AutoAlma servis, tel: 0940 449 449.`);
-                        }}
-                        className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${completeChannel === 'sms' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}
-                      >
-                        📱 SMS {zakazka.customer_phone ? `· ${zakazka.customer_phone}` : '· (chýba číslo)'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCompleteChannel('email');
-                          setCompleteMsg(`Dobrý deň, ${zakazka.customer_name || 'vážený zákazník'}.\n\nVaše vozidlo ${zakazka.plate_number} – ${zakazka.car_brand_model || ''} je pripravené na vyzdvihnutie.\n\nTešíme sa na Vás!\n\nAutoAlma servis\nTel: 0940 449 449 | autoalma@autoalma.sk`);
-                        }}
-                        className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${completeChannel === 'email' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}
-                      >
-                        ✉️ Email {zakazka.customer_email ? `· ${zakazka.customer_email}` : '· (chýba email)'}
-                      </button>
-                    </div>
-
-                    {/* Template picker */}
-                    {completeTemplates.filter(t => (t.type || 'sms') === completeChannel).length > 0 && (
-                      <select
-                        onChange={e => {
-                          const t = completeTemplates.find(t => t.id.toString() === e.target.value);
-                          if (t) { setCompleteMsg(t.content); if (t.subject) setCompleteSubject(t.subject); }
-                        }}
-                        className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-black text-[10px] uppercase outline-none focus:border-red-500"
-                        defaultValue=""
-                      >
-                        <option value="">— Vybrať šablónu —</option>
-                        {completeTemplates.filter(t => (t.type || 'sms') === completeChannel).map(t => (
-                          <option key={t.id} value={t.id}>{t.label}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {/* Subject (email only) */}
-                    {completeChannel === 'email' && (
-                      <input type="text" value={completeSubject} onChange={e => setCompleteSubject(e.target.value)}
-                        placeholder="Predmet emailu"
-                        className="w-full bg-black border border-zinc-700 p-4 rounded-2xl text-white font-bold outline-none focus:border-purple-500" />
-                    )}
-
-                    {/* Message */}
-                    <textarea
-                      value={completeMsg}
-                      onChange={e => setCompleteMsg(e.target.value)}
-                      rows={completeChannel === 'email' ? 6 : 3}
-                      className="w-full bg-black border border-zinc-700 p-4 rounded-2xl text-white font-bold outline-none focus:border-green-500 resize-none text-sm"
-                    />
-                    {!zakazka.customer_phone && completeChannel === 'sms' && (
-                      <p className="text-amber-500 text-[10px] font-black uppercase tracking-widest">⚠️ Zákazník nemá zadané telefónne číslo</p>
-                    )}
-                    {!zakazka.customer_email && completeChannel === 'email' && (
-                      <p className="text-amber-500 text-[10px] font-black uppercase tracking-widest">⚠️ Zákazník nemá zadaný email</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* === SEKCIA 2: ĎALŠÍ SERVIS === */}
-              <div className="border-t border-zinc-800 pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Naplánovať ďalší servis</h3>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={scheduleNext} onChange={e => setScheduleNext(e.target.checked)} className="w-4 h-4 accent-green-500" />
-                    <span className="text-[10px] font-black uppercase text-zinc-400">Pridať do kalendára</span>
-                  </label>
-                </div>
-
-                {scheduleNext && (
-                  <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                    {/* Typ servisu */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {['STK / EK', 'Olej servis', 'Výmena pneumatík', 'Klimatizácia', 'Brzdová kvapalina', 'Vlastný servis'].map(type => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setNextType(type)}
-                          className={`py-3 px-4 rounded-2xl text-[10px] font-black uppercase tracking-wider transition-all border text-center ${nextType === type ? 'bg-green-600/20 border-green-500 text-green-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-white'}`}
-                        >
-                          {type}
-                        </button>
-                      ))}
-                    </div>
-
-                    {nextType === 'Vlastný servis' && (
-                      <input type="text" value={nextNote} onChange={e => setNextNote(e.target.value)}
-                        placeholder="Popis servisu..."
-                        className="w-full bg-black border border-zinc-700 p-4 rounded-2xl text-white font-bold outline-none focus:border-green-500" />
-                    )}
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Dátum servisu</label>
-                        <input
-                          type="date"
-                          value={nextDate}
-                          onChange={e => setNextDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
-                          className="w-full bg-black border border-zinc-700 p-4 rounded-2xl text-white font-bold outline-none focus:border-green-500"
-                          style={{ colorScheme: 'dark' }}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Poznámka</label>
-                        <input type="text" value={nextNote} onChange={e => setNextNote(e.target.value)}
-                          placeholder="Napr. každé 2 roky..."
-                          className="w-full bg-black border border-zinc-700 p-4 rounded-2xl text-white font-bold outline-none focus:border-green-500" />
-                      </div>
-                    </div>
-
-                    {nextType && nextDate && (
-                      <div className="bg-green-600/10 border border-green-600/30 rounded-2xl p-4">
-                        <p className="text-green-400 text-[10px] font-black uppercase tracking-widest">
-                          ✅ Vytvorí sa udalosť v kalendári: <span className="text-white">{nextType}</span> · {new Date(nextDate + 'T12:00:00').toLocaleDateString('sk-SK', { day: 'numeric', month: 'long', year: 'numeric' })} · {zakazka.plate_number}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* === SEKCIA 3: NAPLÁNOVANÉ UPOZORNENIA === */}
-              <div className="border-t border-zinc-800 pt-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                    Naplánované správy
-                    {existingScheduled.length > 0 && (
-                      <span className="ml-2 bg-blue-600/20 text-blue-400 border border-blue-600/30 text-[8px] font-black px-2 py-0.5 rounded-lg">{existingScheduled.length}</span>
-                    )}
-                  </h3>
-                  <button
-                    onClick={() => setShowAddReminder(p => !p)}
-                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800"
-                  >
-                    {showAddReminder ? '✕ Zrušiť' : '+ Pridať upozornenie'}
-                  </button>
-                </div>
-
-                {/* Zoznam existujúcich */}
-                {existingScheduled.length > 0 && (
-                  <div className="space-y-2">
-                    {existingScheduled.map(r => (
-                      <div key={r.id} className="flex items-start gap-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4">
-                        <span className={`text-[8px] font-black px-2 py-1 rounded shrink-0 mt-0.5 ${(!r.type || r.type === 'sms' || r.type === 'one-time') ? 'bg-blue-600/20 text-blue-400' : 'bg-purple-600/20 text-purple-400'}`}>
-                          {(!r.type || r.type === 'sms' || r.type === 'one-time') ? '📱 SMS' : '✉️ Email'}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[10px] font-black text-amber-400 uppercase mb-0.5">
-                            📅 {new Date(r.scheduled_for).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                          {r.subject && <p className="text-purple-300 text-[9px] font-bold mb-0.5">Predmet: {r.subject}</p>}
-                          <p className="text-zinc-400 text-xs font-bold truncate">{r.message}</p>
-                        </div>
-                        <button onClick={() => cancelReminder(r.id)} className="shrink-0 w-7 h-7 flex items-center justify-center bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white rounded-xl transition-all font-black text-xs">✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {existingScheduled.length === 0 && !showAddReminder && (
-                  <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest text-center py-2">Žiadne naplánované správy pre {zakazka.plate_number}</p>
-                )}
-
-                {/* Formulár pridania nového upozornenia */}
-                {showAddReminder && (
-                  <div className="bg-zinc-900/40 border border-zinc-700 rounded-2xl p-5 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                    {/* Channel toggle */}
-                    <div className="flex gap-2">
-                      <button onClick={() => setReminderChannel('sms')}
-                        className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${reminderChannel === 'sms' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}>
-                        📱 SMS
-                      </button>
-                      <button onClick={() => setReminderChannel('email')}
-                        className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${reminderChannel === 'email' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}>
-                        ✉️ Email
-                      </button>
-                    </div>
-
-                    {/* Template picker */}
-                    {completeTemplates.filter(t => (t.type || 'sms') === reminderChannel).length > 0 && (
-                      <select onChange={e => { const t = completeTemplates.find(t => t.id.toString() === e.target.value); if (t) { setReminderMsg(t.content); if (t.subject) setReminderSubject(t.subject); } }}
-                        className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-black text-[10px] uppercase outline-none focus:border-red-500" defaultValue="">
-                        <option value="">— Vybrať šablónu —</option>
-                        {completeTemplates.filter(t => (t.type || 'sms') === reminderChannel).map(t => (
-                          <option key={t.id} value={t.id}>{t.label}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {reminderChannel === 'email' && (
-                      <input type="text" placeholder="Predmet emailu" value={reminderSubject} onChange={e => setReminderSubject(e.target.value)}
-                        className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-purple-500" />
-                    )}
-
-                    <textarea placeholder="Text správy / upozornenia..." value={reminderMsg} onChange={e => setReminderMsg(e.target.value)} rows={3}
-                      className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-blue-500 resize-none text-sm" />
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Dátum odoslania</label>
-                        <input type="date" value={reminderDate} onChange={e => setReminderDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
-                          className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-blue-500"
-                          style={{ colorScheme: 'dark' }} />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">Čas</label>
-                        <input type="time" value={reminderTime} onChange={e => setReminderTime(e.target.value)}
-                          className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold outline-none focus:border-blue-500" />
-                      </div>
-                    </div>
-
-                    <button onClick={addReminderToScheduled} disabled={reminderSaving || !reminderMsg.trim() || !reminderDate}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all">
-                      {reminderSaving ? 'Ukladám...' : '📅 Naplánovať správu'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            {/* Akčné tlačidlá */}
-            <div className="p-8 border-t border-zinc-800 flex gap-4">
-              <button
-                onClick={() => setShowCompleteModal(false)}
-                className="flex-1 py-4 rounded-2xl text-zinc-500 font-black uppercase text-[10px] tracking-widest hover:text-white transition-all border border-zinc-800 hover:border-zinc-600"
-              >
-                Zrušiť
-              </button>
-              <button
-                onClick={handleCompleteWithActions}
-                disabled={completeSaving || (scheduleNext && (!nextType || !nextDate))}
-                className="flex-[3] py-5 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-black uppercase text-[11px] tracking-[0.3em] rounded-2xl transition-all shadow-xl shadow-green-900/30 flex items-center justify-center gap-3"
-              >
-                {completeSaving ? (
-                  <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Ukladám...</span>
-                ) : (
-                  <>✅ {completeSendMsg ? 'Odoslať správu + ' : ''}Označiť ako dokončené</>
-                )}
-              </button>
-            </div>
-
-          </div>
-        </div>
+        <CompletionModal
+          zakazka={zakazka}
+          onClose={() => setShowCompleteModal(false)}
+          onComplete={() => updateJobStatus('Dokončené')}
+        />
       )}
 
       {isDeleteModalOpen && (
