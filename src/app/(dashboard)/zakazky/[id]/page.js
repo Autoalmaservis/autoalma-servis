@@ -46,6 +46,12 @@ export default function DetailZakazkyPage() {
   const [complaintsText, setComplaintsText] = useState('');
   const [savingComplaints, setSavingComplaints] = useState(false);
 
+  // Editácia položiek
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks' });
+  const [editItemVatStr, setEditItemVatStr] = useState('');
+  const [newItemVatStr, setNewItemVatStr] = useState('');
+
   // Formuláre
   const [formTemplates, setFormTemplates] = useState([]);
   const [savedForms, setSavedForms] = useState([]);
@@ -722,6 +728,24 @@ export default function DetailZakazkyPage() {
     fetchCatalog();
   };
 
+  const openEditItem = (item) => {
+    setEditingItemId(item.id);
+    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit });
+    setEditItemVatStr((parseFloat(item.unit_price) * 1.23).toFixed(2));
+  };
+
+  const saveEditItem = async (itemId) => {
+    if (!await ensureAuth()) return;
+    const { error } = await supabase.from('job_items').update({
+      name: editItemForm.name,
+      quantity: parseFloat(editItemForm.quantity) || 1,
+      unit_price: parseFloat(editItemForm.unit_price) || 0,
+      unit: editItemForm.unit,
+    }).eq('id', itemId);
+    if (!error) { setEditingItemId(null); fetchItems(); }
+    else alert('Chyba pri ukladaní: ' + error.message);
+  };
+
   const updateJobStatus = async (newStatus) => {
     const { error } = await supabase.from('job_tickets').update({ status: newStatus, updated_at: new Date() }).eq('id', id);
     if (!error) setZakazka(prev => ({ ...prev, status: newStatus }));
@@ -989,13 +1013,17 @@ export default function DetailZakazkyPage() {
   };
 
   const selectWarehouseItem = (w) => {
-    setNewItem(prev => ({ ...prev, name: w.name, unit_price: parseFloat(w.sale_price) || 0, unit: w.unit || 'ks', type: 'Materiál' }));
+    const price = parseFloat(w.sale_price) || 0;
+    setNewItem(prev => ({ ...prev, name: w.name, unit_price: price, unit: w.unit || 'ks', type: 'Materiál' }));
+    setNewItemVatStr((price * 1.23).toFixed(2));
     setShowItemDropdown(false);
     setWarehouseModalOpen(false);
   };
 
   const selectCatalogItem = (c) => {
-    setNewItem(prev => ({ ...prev, name: c.name, unit_price: c.unit_price, unit: c.unit, type: c.type === 'práca' ? 'Práca' : 'Materiál' }));
+    const price = parseFloat(c.unit_price) || 0;
+    setNewItem(prev => ({ ...prev, name: c.name, unit_price: price, unit: c.unit, type: c.type === 'práca' ? 'Práca' : 'Materiál' }));
+    setNewItemVatStr((price * 1.23).toFixed(2));
     setShowItemDropdown(false);
   };
 
@@ -1347,21 +1375,75 @@ export default function DetailZakazkyPage() {
                   <th className="p-4 w-32">Typ</th>
                   <th className="p-4">Položka</th>
                   <th className="p-4 text-center w-24">Množ.</th>
-                  <th className="p-4 text-right">Cena/J</th>
+                  <th className="p-4 text-right w-44">Cena/J</th>
                   <th className="p-4 text-right">Spolu</th>
-                  <th className="p-4 text-center no-print w-10"></th>
+                  <th className="p-4 text-center no-print w-24"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800 font-black italic uppercase">
                 {items.map((item) => (
-                  <tr key={item.id} className="hover:bg-white/5 transition-all">
-                    <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
-                    <td className="p-4 font-black uppercase text-xs tracking-tight">{item.name}</td>
-                    <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
-                    <td className="p-4 text-right font-mono text-xs">{parseFloat(item.unit_price).toFixed(2)} €</td>
-                    <td className="p-4 text-right font-black text-xs">{(item.quantity * item.unit_price).toFixed(2)} €</td>
-                    <td className="p-4 text-center no-print"><button onClick={() => deleteItem(item.id)} className="text-zinc-800 hover:text-red-600 transition-colors">✕</button></td>
-                  </tr>
+                  editingItemId === item.id ? (
+                    <tr key={item.id} className="bg-zinc-900/60 border-l-2 border-blue-500">
+                      <td className="p-3"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'}`}>{item.type}</span></td>
+                      <td className="p-3">
+                        <input type="text" value={editItemForm.name}
+                          onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
+                          className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs font-black uppercase italic outline-none focus:border-blue-500" />
+                      </td>
+                      <td className="p-3">
+                        <input type="number" value={editItemForm.quantity}
+                          onChange={e => setEditItemForm(p => ({...p, quantity: e.target.value}))}
+                          onFocus={e => e.target.select()}
+                          className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs text-center font-bold outline-none focus:border-blue-500" />
+                      </td>
+                      <td className="p-3">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] text-zinc-500 font-black shrink-0 w-11">bez DPH</span>
+                            <input type="number" step="any" value={editItemForm.unit_price}
+                              onChange={e => { const v = parseFloat(e.target.value) || 0; setEditItemForm(p => ({...p, unit_price: v})); setEditItemVatStr((v * 1.23).toFixed(2)); }}
+                              onFocus={e => e.target.select()}
+                              className="flex-1 bg-black border border-zinc-700 p-1.5 rounded-lg text-white text-xs text-right font-black outline-none focus:border-blue-500" />
+                            <span className="text-[8px] text-zinc-600 shrink-0">€</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[8px] text-amber-500 font-black shrink-0 w-11">s DPH</span>
+                            <input type="number" step="any" value={editItemVatStr}
+                              onChange={e => { setEditItemVatStr(e.target.value); setEditItemForm(p => ({...p, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0})); }}
+                              onFocus={e => e.target.select()}
+                              className="flex-1 bg-black border border-amber-600/30 p-1.5 rounded-lg text-amber-300 text-xs text-right font-black outline-none focus:border-amber-500" />
+                            <span className="text-[8px] text-zinc-600 shrink-0">€</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3 text-right font-mono text-xs text-zinc-400">
+                        {(parseFloat(editItemForm.quantity || 0) * parseFloat(editItemForm.unit_price || 0)).toFixed(2)} €
+                      </td>
+                      <td className="p-3 no-print">
+                        <div className="flex gap-1 justify-center">
+                          <button onClick={() => saveEditItem(item.id)} className="w-8 h-8 flex items-center justify-center bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white rounded-xl transition-all font-black text-sm">✓</button>
+                          <button onClick={() => setEditingItemId(null)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl transition-all font-black text-sm">✕</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={item.id} className="hover:bg-white/5 transition-all">
+                      <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
+                      <td className="p-4 font-black uppercase text-xs tracking-tight">{item.name}</td>
+                      <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
+                      <td className="p-4 text-right">
+                        <p className="font-mono text-xs text-white">{parseFloat(item.unit_price).toFixed(2)} €</p>
+                        <p className="font-mono text-[9px] text-amber-500/60">{(parseFloat(item.unit_price) * 1.23).toFixed(2)} € s DPH</p>
+                      </td>
+                      <td className="p-4 text-right font-black text-xs">{(item.quantity * item.unit_price).toFixed(2)} €</td>
+                      <td className="p-4 text-center no-print">
+                        <div className="flex gap-1.5 justify-center">
+                          <button onClick={() => openEditItem(item)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-blue-600/20 text-zinc-500 hover:text-blue-400 rounded-xl transition-all text-sm">✏️</button>
+                          <button onClick={() => deleteItem(item.id)} className="w-8 h-8 flex items-center justify-center bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white rounded-xl transition-all font-black text-base">✕</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
                 ))}
                 
                 <tr className="no-print bg-black/50 border-t-2 border-red-600/20">
@@ -1484,17 +1566,36 @@ export default function DetailZakazkyPage() {
                   <td className="p-3">
                     <input type="number" min="0" step="any" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: e.target.value})} onFocus={e => e.target.select()} />
                   </td>
-                  <td className="p-3 w-32">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-right text-xs font-black outline-none disabled:opacity-40"
-                      value={newItem.unit_price ?? ''}
-                      disabled={newItem.type === 'Práca'}
-                      onChange={(e) => setNewItem({...newItem, unit_price: e.target.value})}
-                      onFocus={e => e.target.select()}
-                    />
+                  <td className="p-3 w-48">
+                    {newItem.type === 'Práca' ? (
+                      <div className="text-right pr-1">
+                        <p className="font-mono text-xs text-white">{parseFloat(newItem.unit_price || 0).toFixed(2)} €</p>
+                        <p className="font-mono text-[9px] text-amber-500/60">{(parseFloat(newItem.unit_price || 0) * 1.23).toFixed(2)} € s DPH</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px] text-zinc-500 font-black shrink-0 w-11">bez DPH</span>
+                          <input type="number" step="any" min="0"
+                            value={newItem.unit_price || ''}
+                            placeholder="0.00"
+                            onChange={e => { const v = parseFloat(e.target.value) || 0; setNewItem({...newItem, unit_price: v}); setNewItemVatStr((v * 1.23).toFixed(2)); }}
+                            onFocus={e => e.target.select()}
+                            className="flex-1 bg-zinc-900 border border-zinc-800 p-2 rounded-lg text-white text-xs text-right font-black outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px] text-amber-500 font-black shrink-0 w-11">s DPH</span>
+                          <input type="number" step="any" min="0"
+                            value={newItemVatStr}
+                            placeholder="0.00"
+                            onChange={e => { setNewItemVatStr(e.target.value); setNewItem({...newItem, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0}); }}
+                            onFocus={e => e.target.select()}
+                            className="flex-1 bg-zinc-900 border border-amber-600/30 p-2 rounded-lg text-amber-300 text-xs text-right font-black outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </td>
                   <td className="p-3"><button onClick={addItem} className="w-full bg-red-600 text-white font-black py-3 rounded-xl hover:bg-red-500 transition-all shadow-xl text-lg">+</button></td>
                   <td className="p-3"></td>
