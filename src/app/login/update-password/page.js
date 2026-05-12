@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
 
@@ -8,7 +8,25 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      const params = new URLSearchParams(hash.substring(1));
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      const type = params.get('type');
+      if (type === 'recovery' && access_token && refresh_token) {
+        supabase.auth.setSession({ access_token, refresh_token }).then(() => {
+          setSessionReady(true);
+        });
+        return;
+      }
+    }
+    setSessionReady(true);
+  }, []);
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
@@ -68,10 +86,10 @@ export default function UpdatePasswordPage() {
           {error && <p className="text-[10px] text-red-500 text-center bg-red-500/10 p-3 rounded-xl border border-red-500/20 uppercase">{error}</p>}
           {message && <p className="text-[10px] text-green-500 text-center bg-green-500/10 p-3 rounded-xl border border-green-500/20 uppercase">{message}</p>}
 
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-6 rounded-2xl uppercase text-xs tracking-[0.3em] transition-all shadow-xl"
+          <button
+            type="submit"
+            disabled={loading || !sessionReady}
+            className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-6 rounded-2xl uppercase text-xs tracking-[0.3em] transition-all shadow-xl disabled:opacity-50"
           >
             {loading ? 'Aktualizujem...' : 'Uložiť nové heslo'}
           </button>

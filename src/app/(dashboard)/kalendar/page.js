@@ -568,6 +568,7 @@ export default function KalendarPage() {
             ref={calendarRef}
             plugins={[timeGridPlugin, interactionPlugin]}
             initialView="timeGridWeek"
+            initialDate={new Date()}
             headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek' }}
             locale="sk"
             firstDay={1}

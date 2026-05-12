@@ -5,10 +5,6 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { usePathname } from 'next/navigation';
 
-const PRIORITY_ICON  = { red: '🔴', yellow: '🟡', green: '🟢' };
-const PRIORITY_LABEL = { red: 'Naliehavé', yellow: 'Stredné', green: 'Nízka priorita' };
-const PRIORITY_BORDER = { red: 'border-red-900/60', yellow: 'border-yellow-900/60', green: 'border-green-900/60' };
-const PRIORITY_HEADER = { red: 'text-red-400', yellow: 'text-yellow-400', green: 'text-green-400' };
 
 export default function DashboardLayout({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -17,34 +13,24 @@ export default function DashboardLayout({ children }) {
   const [jobUpdateCount, setJobUpdateCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [findingJobs, setFindingJobs] = useState([]);
-  const [todoModalOpen, setTodoModalOpen] = useState(false);
-  const [addingTodo, setAddingTodo] = useState(false);
   const [todos, setTodos] = useState([]);
-  const [newTodo, setNewTodo] = useState('');
-  const [newPriority, setNewPriority] = useState('red');
   const jobStatusRef = useRef({});
   const pathname = usePathname();
 
-  useEffect(() => {
+  const loadTodos = () => {
     const saved = localStorage.getItem('autoalma_todos');
     if (saved) try {
       const parsed = JSON.parse(saved);
       setTodos(parsed.map(t => ({ ...t, priority: t.priority === 'orange' ? 'yellow' : t.priority })));
     } catch {}
-  }, []);
+  };
 
   useEffect(() => {
-    localStorage.setItem('autoalma_todos', JSON.stringify(todos));
-  }, [todos]);
+    loadTodos();
+    window.addEventListener('autoalma_todos_changed', loadTodos);
+    return () => window.removeEventListener('autoalma_todos_changed', loadTodos);
+  }, []);
 
-  const addTodo = () => {
-    if (!newTodo.trim()) return;
-    setTodos(prev => [...prev, { id: Date.now(), text: newTodo.trim(), priority: newPriority, done: false }]);
-    setNewTodo('');
-    setAddingTodo(false);
-  };
-  const toggleTodo = (id) => setTodos(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  const deleteTodo = (id) => setTodos(prev => prev.filter(t => t.id !== id));
   const undoneTodos = todos.filter(t => !t.done);
 
   const addStatusNotification = (notif) => {
@@ -206,23 +192,9 @@ export default function DashboardLayout({ children }) {
               <MenuLink href="/kasa" icon="💵" label="Kasa" collapsed={isCollapsed} active={pathname === '/kasa'} />
             </div>
 
-            {/* TO-DO — otvára modal */}
+            {/* TO-DO — stránka */}
             <div className="pt-3 mt-3 border-t border-zinc-900">
-              <button
-                onClick={() => setTodoModalOpen(true)}
-                className={`relative w-full flex items-center justify-between p-3 rounded-xl transition-all group hover:bg-zinc-900 ${isCollapsed ? 'px-0 justify-center' : ''}`}
-              >
-                <div className={`flex items-center gap-4 ${isCollapsed ? 'justify-center' : ''}`}>
-                  <span className="text-xl group-hover:scale-110 transition-transform shrink-0">📋</span>
-                  {!isCollapsed && <span className="font-bold text-sm text-zinc-400 group-hover:text-white tracking-tight">To-Do zoznam</span>}
-                </div>
-                {!isCollapsed && undoneTodos.length > 0 && (
-                  <span className="text-[10px] font-black bg-zinc-700 text-white px-1.5 py-0.5 rounded-md min-w-[18px] text-center">{undoneTodos.length}</span>
-                )}
-                {isCollapsed && undoneTodos.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-                )}
-              </button>
+              <MenuLink href="/todo" icon="📋" label="To-Do zoznam" collapsed={isCollapsed} active={pathname === '/todo'} badge={undoneTodos.length} />
             </div>
           </nav>
 
@@ -261,130 +233,6 @@ export default function DashboardLayout({ children }) {
         </div>
       </main>
 
-      {/* TO-DO MODAL */}
-      {todoModalOpen && (
-        <div className="fixed inset-0 z-[300] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setTodoModalOpen(false); setAddingTodo(false); }}>
-          <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-7 py-5 border-b border-zinc-900 shrink-0">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">📋</span>
-                <div>
-                  <h2 className="text-lg font-black uppercase italic tracking-tighter text-white leading-none">To-Do zoznam</h2>
-                  <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest mt-0.5">{undoneTodos.length} nevybavených</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {!addingTodo && (
-                  <button
-                    onClick={() => setAddingTodo(true)}
-                    className="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-xl font-black uppercase text-xs tracking-widest transition-all shadow-lg shadow-red-600/20"
-                  >
-                    + Pridať úlohu
-                  </button>
-                )}
-                <button onClick={() => { setTodoModalOpen(false); setAddingTodo(false); }} className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 hover:text-white transition-all text-sm">✕</button>
-              </div>
-            </div>
-
-            {/* Formulár pridania */}
-            {addingTodo && (
-              <div className="px-7 pt-5 pb-1 border-b border-zinc-900 shrink-0">
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                  <input
-                    autoFocus
-                    value={newTodo}
-                    onChange={e => setNewTodo(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addTodo()}
-                    placeholder="Čo treba vyriešiť alebo vybaviť..."
-                    className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 font-bold"
-                  />
-                  <div className="flex items-center gap-3">
-                    <p className="text-[10px] font-black uppercase text-zinc-600 tracking-widest">Priorita:</p>
-                    <div className="flex gap-2">
-                      {['red', 'yellow', 'green'].map(p => (
-                        <button
-                          key={p}
-                          onClick={() => setNewPriority(p)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all border ${newPriority === p ? 'border-zinc-500 bg-zinc-700 text-white scale-105' : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700'}`}
-                        >
-                          {PRIORITY_ICON[p]} {PRIORITY_LABEL[p]}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="ml-auto flex gap-2">
-                      <button onClick={() => { setAddingTodo(false); setNewTodo(''); }} className="px-4 py-1.5 rounded-xl text-xs font-black text-zinc-600 hover:text-white transition-all border border-zinc-800 hover:border-zinc-700">Zrušiť</button>
-                      <button onClick={addTodo} className="px-5 py-1.5 rounded-xl text-xs font-black bg-red-600 hover:bg-red-500 text-white transition-all">Pridať</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tri stĺpce */}
-            <div className="flex-1 overflow-y-auto p-7">
-              <div className="grid grid-cols-3 gap-4">
-                {['red', 'yellow', 'green'].map(priority => {
-                  const columnTodos = todos.filter(t => t.priority === priority && !t.done);
-                  return (
-                    <div key={priority} className={`bg-black border ${PRIORITY_BORDER[priority]} rounded-2xl overflow-hidden`}>
-                      {/* Stĺpec header */}
-                      <div className="px-4 py-3 border-b border-zinc-900 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{PRIORITY_ICON[priority]}</span>
-                          <span className={`text-[11px] font-black uppercase tracking-widest ${PRIORITY_HEADER[priority]}`}>{PRIORITY_LABEL[priority]}</span>
-                        </div>
-                        {columnTodos.length > 0 && (
-                          <span className="text-[10px] font-black bg-zinc-900 text-zinc-500 px-1.5 py-0.5 rounded-md">{columnTodos.length}</span>
-                        )}
-                      </div>
-
-                      {/* Úlohy */}
-                      <div className="p-3 space-y-2 min-h-[120px]">
-                        {columnTodos.length === 0 && (
-                          <p className="text-center text-zinc-800 text-[10px] font-black uppercase tracking-widest pt-6 italic">Prázdne</p>
-                        )}
-                        {columnTodos.map(todo => (
-                          <div key={todo.id} className="bg-zinc-950 border border-zinc-900 hover:border-zinc-700 rounded-xl p-3 group transition-all">
-                            <div className="flex items-start gap-2">
-                              <p className="flex-1 text-sm font-bold text-white leading-snug">{todo.text}</p>
-                              <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
-                                <button onClick={() => toggleTodo(todo.id)} title="Označiť ako vybavené" className="w-6 h-6 rounded-lg bg-green-900/40 hover:bg-green-800/60 flex items-center justify-center text-green-500 text-xs transition-all">✓</button>
-                                <button onClick={() => deleteTodo(todo.id)} title="Vymazať" className="w-6 h-6 rounded-lg bg-zinc-900 hover:bg-red-900/40 flex items-center justify-center text-zinc-600 hover:text-red-500 text-xs transition-all">✕</button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Vybavené */}
-              {todos.some(t => t.done) && (
-                <div className="mt-6 border-t border-zinc-900 pt-5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-700 mb-3">✓ Vybavené</p>
-                  <div className="space-y-1.5">
-                    {todos.filter(t => t.done).map(todo => (
-                      <div key={todo.id} className="flex items-center gap-3 px-3 py-2 bg-zinc-950 border border-zinc-900 rounded-xl group opacity-40 hover:opacity-60 transition-all">
-                        <span className="text-sm">{PRIORITY_ICON[todo.priority]}</span>
-                        <p className="flex-1 text-xs font-bold text-zinc-500 line-through">{todo.text}</p>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                          <button onClick={() => toggleTodo(todo.id)} title="Obnoviť" className="text-[10px] font-black text-zinc-600 hover:text-white transition-all px-2 py-1 rounded-lg hover:bg-zinc-900">↩</button>
-                          <button onClick={() => deleteTodo(todo.id)} className="text-[10px] font-black text-zinc-700 hover:text-red-500 transition-all px-2 py-1 rounded-lg hover:bg-zinc-900">✕</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
 
       <style jsx global>{`
         @media print {

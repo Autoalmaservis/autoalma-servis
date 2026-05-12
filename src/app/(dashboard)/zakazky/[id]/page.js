@@ -1303,6 +1303,13 @@ export default function DetailZakazkyPage() {
                 <div className="pt-4 border-t border-zinc-800/50">
                   <p className="text-lg font-black uppercase text-zinc-300 italic tracking-tight leading-none">{zakazka.car_brand_model}</p>
                   <p className="font-mono text-[10px] text-zinc-500 tracking-widest uppercase mt-1">VIN: {zakazka.vin_number || '---'}</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
+                    {zakazka.year_produced && <p className="text-[10px] text-zinc-400 font-bold">Rok: <span className="text-zinc-200">{zakazka.year_produced}</span></p>}
+                    {zakazka.engine_volume && <p className="text-[10px] text-zinc-400 font-bold">Objem: <span className="text-zinc-200">{zakazka.engine_volume} cm³</span></p>}
+                    {zakazka.engine_power && <p className="text-[10px] text-zinc-400 font-bold">Výkon: <span className="text-zinc-200">{zakazka.engine_power} kW</span></p>}
+                    {zakazka.mileage && <p className="text-[10px] text-zinc-400 font-bold">KM: <span className="text-zinc-200">{zakazka.mileage} km</span></p>}
+                    {zakazka.fuel_type && <p className="text-[10px] text-zinc-400 font-bold">Palivo: <span className="text-zinc-200">{zakazka.fuel_type}</span></p>}
+                  </div>
                 </div>
               </div>
               
@@ -1875,6 +1882,7 @@ export default function DetailZakazkyPage() {
                 <span style={{ fontSize: '10pt', fontWeight: '900', color: '#000' }}>{zakazka.car_brand_model || '---'}</span>
               </div>
               <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>VIN: {zakazka.vin_number || '---'}</p>
+              <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>Rok: {zakazka.year_produced || '---'} | {zakazka.engine_volume ? zakazka.engine_volume + ' cm³' : '---'} | {zakazka.engine_power ? zakazka.engine_power + ' kW' : '---'} | {zakazka.fuel_type || '---'}</p>
               <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {zakazka.mileage || '---'} km | Mechanik: {zakazka.technician_name || '---'}</p>
             </td>
           </tr></tbody>
