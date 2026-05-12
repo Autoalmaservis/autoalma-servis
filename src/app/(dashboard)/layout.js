@@ -3,10 +3,11 @@ import '../globals.css';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 
 export default function DashboardLayout({ children }) {
+  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -208,7 +209,7 @@ export default function DashboardLayout({ children }) {
               )}
             </div>
             <button
-              onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }}
+              onClick={async () => { await supabase.auth.signOut(); router.push('/'); }}
               className={`w-full flex items-center gap-4 p-3 rounded-xl text-zinc-600 hover:text-white hover:bg-zinc-900 transition-all group ${isCollapsed ? 'px-0 justify-center' : ''}`}
             >
               <span className="text-xl group-hover:scale-110 transition-transform shrink-0">🚪</span>

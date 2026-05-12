@@ -102,7 +102,7 @@ function PrijemForm() {
         // 1. Hľadáme auto v tabuľke vehicles
         const { data: vData } = await supabase
           .from('vehicles')
-          .select('*')
+          .select('id, license_plate, brand_model, vin_number, mileage, engine_volume, engine_power, year_produced, fuel_type, owner_id, owner_name, owner_email, owner_phone')
           .eq('license_plate', spzToQuery.toUpperCase())
           .maybeSingle();
         
@@ -112,7 +112,7 @@ function PrijemForm() {
           if (vData.owner_id) {
             const { data: profile } = await supabase
               .from('user_profiles')
-              .select('*')
+              .select('id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph, client_type')
               .eq('id', vData.owner_id)
               .maybeSingle();
             pData = profile;
