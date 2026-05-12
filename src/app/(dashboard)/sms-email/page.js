@@ -49,6 +49,7 @@ export default function SmsEmailPage() {
   // --- Plánované ---
   const [scheduled, setScheduled] = useState([]);
   const [loadingSched, setLoadingSched] = useState(false);
+  const [schedError, setSchedError] = useState(null);
 
   // --- Hromadné ---
   const [customers, setCustomers] = useState([]);
@@ -85,11 +86,17 @@ export default function SmsEmailPage() {
 
   const fetchScheduled = async () => {
     setLoadingSched(true);
-    const { data } = await supabase
+    setSchedError(null);
+    const { data, error } = await supabase
       .from('scheduled_sms').select('*').eq('status', 'pending')
       .order('scheduled_for', { ascending: true });
-    // Filtrovanie podľa kanála client-side — robustné aj bez type stĺpca (NULL = sms)
-    if (data) setScheduled(data.filter(s => (s.type || 'sms') === channel));
+    if (error) {
+      setSchedError(error.message);
+      setScheduled([]);
+    } else {
+      // Filtrovanie podľa kanála client-side — NULL = sms (spätná kompatibilita)
+      setScheduled((data || []).filter(s => (s.type || 'sms') === channel));
+    }
     setLoadingSched(false);
   };
 
@@ -317,9 +324,20 @@ export default function SmsEmailPage() {
           <div className="space-y-4">
             <ChannelToggle channel={channel} onChange={setChannel} />
 
+            {schedError && (
+              <div className="bg-red-600/10 border border-red-600/30 rounded-2xl p-5 mb-4">
+                <p className="text-red-400 font-black text-xs uppercase tracking-widest mb-2">Chyba načítania tabuľky scheduled_sms</p>
+                <p className="text-zinc-400 text-xs font-mono mb-3">{schedError}</p>
+                <p className="text-zinc-500 text-[10px] font-bold">Pravdepodobne chýba prístup (RLS). Spusti v Supabase SQL editore:</p>
+                <code className="block bg-black text-green-400 text-[10px] font-mono p-3 rounded-xl mt-2 select-all">
+                  ALTER TABLE scheduled_sms DISABLE ROW LEVEL SECURITY;
+                </code>
+              </div>
+            )}
+
             {loadingSched ? (
               <div className="text-center text-zinc-600 animate-pulse py-12 font-black uppercase text-xs">Načítavam...</div>
-            ) : scheduled.length === 0 ? (
+            ) : scheduled.length === 0 && !schedError ? (
               <div className="text-center text-zinc-700 font-black uppercase text-xs tracking-widest py-16 border-2 border-dashed border-zinc-900 rounded-[2rem]">
                 Žiadne naplánované {channel === 'sms' ? 'SMS' : 'emaily'}
               </div>
