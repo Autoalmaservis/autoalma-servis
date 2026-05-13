@@ -59,7 +59,7 @@ Interný servisný systém pre autoservis AutoAlma s.r.o., Bratislava, Svornosti
   - `assigned_worker_id` → FK na `employees.id` (**DÔLEŽITÉ**: nie `employee_id`!)
 - **`job_items`**: Položky zákazky. Stĺpce: `id, job_id, name, quantity, unit, unit_price, type`
   - `type`: `'Práca'` (unit=hod, quantity=hodiny) alebo `'Materiál'`
-- **`job_tasks`**: Úkony/tasky zákazky. Stĺpce: `id, job_id, description, is_completed`
+- **`job_tasks`**: Úkony/tasky zákazky. Stĺpce: `id, job_id, task_description, is_completed`
 - **`job_photos`**: Fotky zákazky. Stĺpce: `id, job_id, url, storage_path`
 
 ### Faktúry a doklady
