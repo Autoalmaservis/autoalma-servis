@@ -102,7 +102,7 @@ function PrijemForm() {
       if (calData.user_id) {
         const { data: profile } = await supabase
           .from('user_profiles')
-          .select('id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph, client_type')
+          .select('id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph')
           .eq('id', calData.user_id)
           .maybeSingle();
 
@@ -144,7 +144,7 @@ function PrijemForm() {
         if (vData) {
           // 2. Hľadáme profil v user_profiles — najprv podľa owner_id, fallback podľa emailu
           let pData = null;
-          const profileSelect = 'id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph, client_type';
+          const profileSelect = 'id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph';
           if (vData.owner_id) {
             const { data: profile } = await supabase
               .from('user_profiles')
