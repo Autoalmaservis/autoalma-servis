@@ -92,26 +92,13 @@ export default function DetailFakturyPage() {
   useEffect(() => {
     if (!inv || !myCompany.bank || !inv.is_official) return;
     const iban = myCompany.bank.replace(/\s/g, '').toUpperCase();
-    const amount = parseFloat(inv.total_amount);
+    const amount = parseFloat(inv.total_amount).toFixed(2);
     const vs = String(inv.invoice_number).replace(/\D/g, '').substring(0, 10);
-    import('bysquare/pay').then(({ encode, PaymentOptions, CurrencyCode }) => {
-      try {
-        const str = encode({
-          payments: [{
-            type: PaymentOptions.PaymentOrder,
-            amount,
-            currencyCode: CurrencyCode.EUR,
-            variableSymbol: vs || undefined,
-            paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim() || undefined,
-            beneficiary: { name: myCompany.name.substring(0, 70) },
-            bankAccounts: [{ iban }],
-          }],
-        });
-        setQrValue(str);
-      } catch (e) {
-        console.error('bysquare chyba:', e.message, '| IBAN:', iban);
-      }
-    });
+    const name = (myCompany.name || 'AutoAlma Servis').substring(0, 70);
+    const bic = (myCompany.swift || '').replace(/\s/g, '').toUpperCase();
+    const remittance = (`VS${vs} Oprava vozidla ${inv.car_details?.plate || ''}`).trim().substring(0, 140);
+    const epc = ['BCD', '002', '1', 'SCT', bic, name, iban, `EUR${amount}`, '', '', remittance].join('\n');
+    setQrValue(epc);
   }, [inv, myCompany.bank]);
 
   const handlePrint = () => window.print();
@@ -319,7 +306,12 @@ export default function DetailFakturyPage() {
         {/* WEB SUMÁR */}
         <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 border-t border-zinc-800 pt-10 no-print">
           <div className="flex gap-8 items-center">
-             {myCompany.bank && inv.is_official && qrValue && <div className="bg-white p-3 rounded-2xl shadow-2xl"><QRCodeSVG value={qrValue} size={150} level="M" /></div>}
+             {myCompany.bank && inv.is_official && qrValue && (
+               <div className="flex flex-col items-center gap-2">
+                 <div className="bg-white p-3 rounded-2xl shadow-2xl"><QRCodeSVG value={qrValue} size={150} level="M" /></div>
+                 <p className="text-[8px] text-zinc-700 font-mono break-all max-w-[160px] text-center">{qrValue.substring(0, 60)}…</p>
+               </div>
+             )}
              <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold">
                 <p className="text-zinc-400">Platobné informácie:</p>
                 <p className="text-white font-black mt-1 uppercase text-sm">{myCompany.bank || 'Platba v hotovosti'}</p>
