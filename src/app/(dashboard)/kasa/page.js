@@ -120,6 +120,7 @@ export default function KasaPage() {
   };
 
   const handleDelete = async (id) => {
+    if (!confirm('Naozaj chceš zmazať tento záznam?')) return;
     await supabase.from('kasa_entries').delete().eq('id', id);
     setEditId(null);
     fetchEntries();
