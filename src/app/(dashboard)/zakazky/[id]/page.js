@@ -50,6 +50,8 @@ export default function DetailZakazkyPage() {
   const [newItemVatStr, setNewItemVatStr] = useState('');
 
   const [showFormSelector, setShowFormSelector] = useState(false);
+  const [editingMileage, setEditingMileage] = useState(false);
+  const [mileageInput, setMileageInput] = useState('');
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -379,6 +381,13 @@ export default function DetailZakazkyPage() {
     else alert('Chyba pri ukladaní: ' + error.message);
   };
 
+  const saveMileage = async () => {
+    const val = mileageInput === '' ? null : parseInt(mileageInput);
+    const { error } = await supabase.from('job_tickets').update({ mileage: val }).eq('id', id);
+    if (!error) { setZakazka(prev => ({ ...prev, mileage: val })); setEditingMileage(false); }
+    else alert('Chyba pri ukladaní km: ' + error.message);
+  };
+
   const updateJobStatus = async (newStatus) => {
     const { error } = await supabase.from('job_tickets').update({ status: newStatus, updated_at: new Date() }).eq('id', id);
     if (!error) setZakazka(prev => ({ ...prev, status: newStatus }));
@@ -704,7 +713,27 @@ export default function DetailZakazkyPage() {
             </div>
             <p className="hidden print-block text-red-600 uppercase italic font-black text-sm">{zakazka.technician_name || 'Pridelený tím'}</p>
           </div>
-          <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 italic">KM</p><p className="font-bold">{zakazka.mileage || '---'} km</p></div>
+          <div>
+            <p className="text-[9px] font-black text-zinc-500 uppercase mb-1 italic">KM</p>
+            {editingMileage ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number" min="0" autoFocus
+                  className="w-24 bg-zinc-900 border border-red-600 rounded-lg px-2 py-1 text-white font-bold text-sm outline-none"
+                  value={mileageInput}
+                  onChange={e => setMileageInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveMileage(); if (e.key === 'Escape') setEditingMileage(false); }}
+                />
+                <button onClick={saveMileage} className="text-green-500 text-xs font-black px-1">✓</button>
+                <button onClick={() => setEditingMileage(false)} className="text-zinc-500 text-xs font-black px-1">✕</button>
+              </div>
+            ) : (
+              <p className="font-bold cursor-pointer hover:text-red-500 transition-colors" onClick={() => { setMileageInput(zakazka.mileage ?? ''); setEditingMileage(true); }}>
+                {zakazka.mileage != null ? Number(zakazka.mileage).toLocaleString('sk-SK') + ' km' : '--- km'}
+                <span className="ml-1 text-zinc-600 text-[10px]">✎</span>
+              </p>
+            )}
+          </div>
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 italic text-red-600">ŠPZ</p><p className="text-xl tracking-widest italic font-black uppercase text-red-600">{zakazka.plate_number}</p></div>
         </div>
 

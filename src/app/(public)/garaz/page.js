@@ -50,6 +50,9 @@ export default function GarazPage() {
   const [dayEvents, setDayEvents] = useState([]);
   const [workHours, setWorkHours] = useState({ start: '07', end: '17' });
 
+  const [editingMileageVehicleId, setEditingMileageVehicleId] = useState(null);
+  const [mileageQuickInput, setMileageQuickInput] = useState('');
+
   // --- STAVY PRE EDITÁCIU VOZIDLA (ZACHOVANÉ) ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState(null);
@@ -455,6 +458,15 @@ export default function GarazPage() {
     setIsEditModalOpen(true);
   };
 
+  const quickUpdateMileage = async (vehicleId) => {
+    const val = mileageQuickInput === '' ? null : parseInt(mileageQuickInput);
+    const { error } = await supabase.from('vehicles').update({ mileage: val }).eq('id', vehicleId);
+    if (!error) {
+      setVehicles(prev => prev.map(v => v.id === vehicleId ? { ...v, mileage: val } : v));
+      setEditingMileageVehicleId(null);
+    } else { alert('Chyba pri ukladaní: ' + error.message); }
+  };
+
   const handleUpdateVehicle = async (e) => {
     e.preventDefault();
     try {
@@ -637,7 +649,25 @@ export default function GarazPage() {
                   </div>
                   <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10">
                     <p className="text-blue-500/60 text-[9px] uppercase font-black mb-1">Stav Tachometra</p>
-                    <p className="text-xl font-black text-blue-400">{vehicle.mileage || 0} KM</p>
+                    {editingMileageVehicleId === vehicle.id ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <input
+                          type="number" min="0" autoFocus
+                          className="w-full bg-black border border-blue-500 rounded-lg px-2 py-1 text-white font-bold text-sm outline-none"
+                          value={mileageQuickInput}
+                          onChange={e => setMileageQuickInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') quickUpdateMileage(vehicle.id); if (e.key === 'Escape') setEditingMileageVehicleId(null); }}
+                          placeholder="Zadajte KM"
+                        />
+                        <button onClick={() => quickUpdateMileage(vehicle.id)} className="text-green-400 font-black text-sm px-1">✓</button>
+                        <button onClick={() => setEditingMileageVehicleId(null)} className="text-zinc-500 font-black text-sm px-1">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-end gap-2">
+                        <p className="text-xl font-black text-blue-400">{vehicle.mileage != null ? Number(vehicle.mileage).toLocaleString('sk-SK') : '---'} KM</p>
+                        <button onClick={() => { setMileageQuickInput(vehicle.mileage ?? ''); setEditingMileageVehicleId(vehicle.id); }} className="text-blue-600 text-[10px] font-black mb-1 hover:text-blue-400 transition-colors">✎</button>
+                      </div>
+                    )}
                   </div>
                   <div className="bg-zinc-800/30 p-4 rounded-3xl flex flex-col justify-center items-center">
                     <button onClick={() => openInvoiceModal(vehicle.license_plate)} className="text-red-600 hover:text-red-500 transition-all">
