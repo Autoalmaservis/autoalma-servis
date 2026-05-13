@@ -713,26 +713,33 @@ export default function DetailZakazkyPage() {
             </div>
             <p className="hidden print-block text-red-600 uppercase italic font-black text-sm">{zakazka.technician_name || 'Pridelený tím'}</p>
           </div>
-          <div>
-            <p className="text-[9px] font-black text-zinc-500 uppercase mb-1 italic">KM</p>
-            {editingMileage ? (
-              <div className="flex items-center gap-1">
-                <input
-                  type="number" min="0" autoFocus
-                  className="w-24 bg-zinc-900 border border-red-600 rounded-lg px-2 py-1 text-white font-bold text-sm outline-none"
-                  value={mileageInput}
-                  onChange={e => setMileageInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') saveMileage(); if (e.key === 'Escape') setEditingMileage(false); }}
-                />
-                <button onClick={saveMileage} className="text-green-500 text-xs font-black px-1">✓</button>
-                <button onClick={() => setEditingMileage(false)} className="text-zinc-500 text-xs font-black px-1">✕</button>
-              </div>
-            ) : (
-              <p className="font-bold cursor-pointer hover:text-red-500 transition-colors" onClick={() => { setMileageInput(zakazka.mileage ?? ''); setEditingMileage(true); }}>
-                {zakazka.mileage != null ? Number(zakazka.mileage).toLocaleString('sk-SK') + ' km' : '--- km'}
-                <span className="ml-1 text-zinc-600 text-[10px]">✎</span>
-              </p>
-            )}
+          <div className="relative group">
+            <p className="text-[9px] font-black text-zinc-500 uppercase mb-1 tracking-widest italic">KM</p>
+            <div className="relative no-print">
+              {editingMileage ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number" min="0" autoFocus
+                    className="bg-black/40 border-2 border-red-600 rounded-xl px-3 py-2 text-[11px] font-black uppercase text-red-600 outline-none w-28"
+                    value={mileageInput}
+                    onChange={e => setMileageInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveMileage(); if (e.key === 'Escape') setEditingMileage(false); }}
+                  />
+                  <button onClick={saveMileage} className="text-green-500 text-xs font-black px-1">✓</button>
+                  <button onClick={() => setEditingMileage(false)} className="text-zinc-500 text-xs font-black px-1">✕</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setMileageInput(zakazka.mileage ?? ''); setEditingMileage(true); }}
+                  className="bg-black/40 border-2 border-zinc-700 hover:border-red-600 rounded-xl px-3 py-2 text-[11px] font-black uppercase text-red-600 outline-none cursor-pointer w-full text-left transition-colors"
+                >
+                  {zakazka.mileage != null ? Number(zakazka.mileage).toLocaleString('sk-SK') + ' km' : '– – – km'}
+                </button>
+              )}
+            </div>
+            <p className="hidden print-block text-red-600 uppercase italic font-black text-sm">
+              {zakazka.mileage != null ? Number(zakazka.mileage).toLocaleString('sk-SK') + ' km' : '---'}
+            </p>
           </div>
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 italic text-red-600">ŠPZ</p><p className="text-xl tracking-widest italic font-black uppercase text-red-600">{zakazka.plate_number}</p></div>
         </div>
