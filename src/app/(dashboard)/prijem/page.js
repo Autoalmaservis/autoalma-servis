@@ -142,13 +142,22 @@ function PrijemForm() {
           .maybeSingle();
         
         if (vData) {
-          // 2. Hľadáme profil (pre Osobu aj Firmu) podľa ID majiteľa z tabuľky user_profiles
+          // 2. Hľadáme profil v user_profiles — najprv podľa owner_id, fallback podľa emailu
           let pData = null;
+          const profileSelect = 'id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph, client_type';
           if (vData.owner_id) {
             const { data: profile } = await supabase
               .from('user_profiles')
-              .select('id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph, client_type')
+              .select(profileSelect)
               .eq('id', vData.owner_id)
+              .maybeSingle();
+            pData = profile;
+          }
+          if (!pData && vData.owner_email) {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select(profileSelect)
+              .eq('email', vData.owner_email)
               .maybeSingle();
             pData = profile;
           }
