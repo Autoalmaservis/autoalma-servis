@@ -861,7 +861,7 @@ export default function DetailZakazkyPage() {
               </div>
           </div>
 
-          <JobTasks tasks={tasks} jobId={id} onRefresh={fetchTasks} />
+          <JobTasks jobId={id} onRefresh={fetchTasks} />
         </div>
 
         {/* ROZPIS POLOŽIEK */}
