@@ -241,7 +241,7 @@ export default function DetailZakazkyPage() {
 
   const fetchTasks = async () => {
     try {
-      const { data, error } = await supabase.from('job_tasks').select('id, job_id, description, is_completed').eq('job_id', id).order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('job_tasks').select('id, job_id, task_description, is_completed').eq('job_id', id).order('created_at', { ascending: true });
       if (error) throw error;
       if (data) {
         const formattedTasks = data.map(t => ({
