@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
-export default function CompletionModal({ zakazka, onClose, onComplete }) {
+export default function CompletionModal({ zakazka, items = [], employees = [], onClose, onComplete }) {
   const [completeChannel, setCompleteChannel] = useState('sms');
   const [completeMsg, setCompleteMsg] = useState('');
   const [completeSubject, setCompleteSubject] = useState('');
@@ -13,6 +13,7 @@ export default function CompletionModal({ zakazka, onClose, onComplete }) {
   const [nextDate, setNextDate] = useState('');
   const [nextNote, setNextNote] = useState('');
   const [completeSaving, setCompleteSaving] = useState(false);
+  const [hoursConfirmed, setHoursConfirmed] = useState(false);
   const [existingScheduled, setExistingScheduled] = useState([]);
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [reminderChannel, setReminderChannel] = useState('sms');
@@ -63,9 +64,22 @@ export default function CompletionModal({ zakazka, onClose, onComplete }) {
     setExistingScheduled(prev => prev.filter(r => r.id !== remId));
   };
 
+  const totalWorkHours = items.filter(i => i.type === 'Práca').reduce((a, i) => a + Number(i.quantity), 0);
+  const existingSplits = zakazka.mechanic_splits || [];
+  const splitTotal = existingSplits.reduce((a, s) => a + Number(s.hours), 0);
+  const hoursBalanced = totalWorkHours === 0 || Math.abs(totalWorkHours - splitTotal) <= 0.001;
+
   const handleCompleteWithActions = async () => {
+    if (!hoursBalanced && !hoursConfirmed) { setHoursConfirmed(true); return; }
     setCompleteSaving(true);
     try {
+      if (totalWorkHours > 0 && existingSplits.length === 0 && zakazka.assigned_worker_id) {
+        const emp = employees.find(e => e.id === zakazka.assigned_worker_id);
+        if (emp) {
+          const autoSplit = [{ employee_id: emp.id, name: emp.name, hours: totalWorkHours }];
+          await supabase.from('job_tickets').update({ mechanic_splits: autoSplit }).eq('id', zakazka.id);
+        }
+      }
       if (completeSendMsg && completeMsg.trim()) {
         if (completeChannel === 'sms' && zakazka.customer_phone) {
           await fetch('/api/send-sms', {
@@ -392,6 +406,47 @@ export default function CompletionModal({ zakazka, onClose, onComplete }) {
 
         </div>
 
+        {/* === SEKCIA: HODINY MECHANIKOV === */}
+        {totalWorkHours > 0 && (
+          <div className="border-t border-zinc-800 pt-6 mx-8 mb-2 space-y-3">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Hodiny zo zákazky</h3>
+            <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-2">
+              {existingSplits.length > 0 ? (
+                existingSplits.map(s => (
+                  <div key={s.employee_id} className="flex justify-between items-center text-sm">
+                    <span className="font-black uppercase italic">{s.name}</span>
+                    <span className="font-black text-yellow-400">{Number(s.hours).toFixed(2)} hod</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="font-black uppercase italic text-zinc-300">
+                    {zakazka.technician_name || 'Priradený mechanik'}
+                  </span>
+                  <span className="font-black text-green-400">{totalWorkHours.toFixed(2)} hod</span>
+                </div>
+              )}
+              <div className="border-t border-zinc-700 pt-2 flex justify-between items-center text-[10px] font-black uppercase">
+                <span className="text-zinc-500">Spolu zo zákazky</span>
+                <span className={hoursBalanced ? 'text-green-400' : 'text-orange-400'}>
+                  {existingSplits.length > 0 ? splitTotal.toFixed(2) : totalWorkHours.toFixed(2)} / {totalWorkHours.toFixed(2)} hod
+                  {hoursBalanced ? ' ✓' : ' ⚠'}
+                </span>
+              </div>
+            </div>
+            {existingSplits.length === 0 && (
+              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Hodiny sa automaticky priradia mechanikovi zákazky</p>
+            )}
+            {hoursConfirmed && !hoursBalanced && (
+              <div className="bg-orange-500/10 border border-orange-500/40 rounded-2xl p-4">
+                <p className="text-orange-400 font-black text-[10px] uppercase tracking-widest">
+                  ⚠ Hodiny nie sú správne rozdelené ({splitTotal.toFixed(2)} hod ≠ {totalWorkHours.toFixed(2)} hod). Naozaj chcete uzavrieť zákazku?
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Akčné tlačidlá */}
         <div className="p-8 border-t border-zinc-800 flex gap-4">
           <button
@@ -403,10 +458,12 @@ export default function CompletionModal({ zakazka, onClose, onComplete }) {
           <button
             onClick={handleCompleteWithActions}
             disabled={completeSaving || (scheduleNext && (!nextType || !nextDate))}
-            className="flex-[3] py-5 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-black uppercase text-[11px] tracking-[0.3em] rounded-2xl transition-all shadow-xl shadow-green-900/30 flex items-center justify-center gap-3"
+            className={`flex-[3] py-5 disabled:opacity-40 text-white font-black uppercase text-[11px] tracking-[0.3em] rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 ${hoursConfirmed && !hoursBalanced ? 'bg-orange-600 hover:bg-orange-500 shadow-orange-900/30' : 'bg-green-600 hover:bg-green-500 shadow-green-900/30'}`}
           >
             {completeSaving ? (
               <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Ukladám...</span>
+            ) : hoursConfirmed && !hoursBalanced ? (
+              <>⚠ Uzavrieť napriek nesprávnym hodinám</>
             ) : (
               <>✅ {completeSendMsg ? 'Odoslať správu + ' : ''}Označiť ako dokončené</>
             )}

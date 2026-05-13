@@ -384,8 +384,15 @@ export default function DetailZakazkyPage() {
   const saveMileage = async () => {
     const val = mileageInput === '' ? null : parseInt(mileageInput);
     const { error } = await supabase.from('job_tickets').update({ mileage: val }).eq('id', id);
-    if (!error) { setZakazka(prev => ({ ...prev, mileage: val })); setEditingMileage(false); }
-    else alert('Chyba pri ukladaní km: ' + error.message);
+    if (error) { alert('Chyba pri ukladaní km: ' + error.message); return; }
+    setZakazka(prev => ({ ...prev, mileage: val }));
+    setEditingMileage(false);
+    if (val != null && zakazka.plate_number) {
+      const { data: veh } = await supabase.from('vehicles').select('id, mileage').eq('license_plate', zakazka.plate_number.toUpperCase()).maybeSingle();
+      if (veh && (veh.mileage == null || val > veh.mileage)) {
+        await supabase.from('vehicles').update({ mileage: val }).eq('id', veh.id);
+      }
+    }
   };
 
   const updateJobStatus = async (newStatus) => {
@@ -1226,6 +1233,8 @@ export default function DetailZakazkyPage() {
       {showCompleteModal && (
         <CompletionModal
           zakazka={zakazka}
+          items={items}
+          employees={employees}
           onClose={() => setShowCompleteModal(false)}
           onComplete={() => updateJobStatus('Dokončené')}
         />
