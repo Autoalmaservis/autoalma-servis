@@ -92,13 +92,26 @@ export default function DetailFakturyPage() {
   useEffect(() => {
     if (!inv || !myCompany.bank || !inv.is_official) return;
     const iban = myCompany.bank.replace(/\s/g, '').toUpperCase();
-    const amount = parseFloat(inv.total_amount).toFixed(2);
+    const amount = parseFloat(inv.total_amount);
     const vs = String(inv.invoice_number).replace(/\D/g, '').substring(0, 10);
-    const name = (myCompany.name || 'AutoAlma Servis').substring(0, 70);
-    const bic = (myCompany.swift || '').replace(/\s/g, '').toUpperCase();
-    const remittance = (`VS${vs} Oprava vozidla ${inv.car_details?.plate || ''}`).trim().substring(0, 140);
-    const epc = ['BCD', '002', '1', 'SCT', bic, name, iban, `EUR${amount}`, '', '', remittance].join('\n');
-    setQrValue(epc);
+    import('bysquare/pay').then(({ encode, PaymentOptions, CurrencyCode }) => {
+      try {
+        const str = encode({
+          payments: [{
+            type: PaymentOptions.PaymentOrder,
+            amount,
+            currencyCode: CurrencyCode.EUR,
+            variableSymbol: vs || undefined,
+            paymentNote: (`Oprava vozidla ${inv.car_details?.plate || ''}`).trim() || undefined,
+            beneficiary: { name: (myCompany.name || 'AutoAlma Servis').substring(0, 70) },
+            bankAccounts: [{ iban }],
+          }],
+        });
+        setQrValue(str);
+      } catch (e) {
+        console.error('bysquare chyba:', e.message, '| IBAN:', iban);
+      }
+    });
   }, [inv, myCompany.bank]);
 
   const handlePrint = () => window.print();
