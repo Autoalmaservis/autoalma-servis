@@ -11,9 +11,10 @@ export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinaliz
         <p className="text-zinc-500 text-[10px] uppercase tracking-widest mb-8">{zakazka.customer_name} — {zakazka.plate_number} — {total.toFixed(2)} €</p>
 
         <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Spôsob úhrady</p>
-        <div className="grid grid-cols-2 gap-3 mb-8">
+        <div className="grid grid-cols-3 gap-3 mb-8">
           <button onClick={() => setPaymentMethod('card')} className={`py-5 rounded-[2rem] font-black uppercase text-sm tracking-widest transition-all border-2 ${paymentMethod === 'card' ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}>💳 Kartou</button>
           <button onClick={() => setPaymentMethod('cash')} className={`py-5 rounded-[2rem] font-black uppercase text-sm tracking-widest transition-all border-2 ${paymentMethod === 'cash' ? 'bg-green-600 border-green-500 text-white shadow-lg shadow-green-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}>💵 Hotovosť</button>
+          <button onClick={() => setPaymentMethod('transfer')} className={`py-5 rounded-[2rem] font-black uppercase text-sm tracking-widest transition-all border-2 ${paymentMethod === 'transfer' ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}>🏦 Prevodom</button>
         </div>
 
         {paymentMethod === 'cash' && (
