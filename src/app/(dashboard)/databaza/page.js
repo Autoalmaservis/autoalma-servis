@@ -18,6 +18,13 @@ export default function DatabazaPage() {
   const [showCatPanel, setShowCatPanel] = useState(false);
   const [editNorm, setEditNorm] = useState(null);
 
+  // --- ÚKONY ---
+  const [ukonActions, setUkonActions] = useState([]);
+  const [ukonLoading, setUkonLoading] = useState(false);
+  const [ukonSearch, setUkonSearch] = useState('');
+  const [newUkon, setNewUkon] = useState({ name: '', unit_price: '', unit: 'ks' });
+  const [editUkon, setEditUkon] = useState(null);
+
   // --- SKLAD ---
   const [warehouseItems, setWarehouseItems] = useState([]);
   const [warehouseLoading, setWarehouseLoading] = useState(false);
@@ -40,9 +47,47 @@ export default function DatabazaPage() {
   useEffect(() => {
     fetchNorms();
     fetchWarehouse();
+    fetchUkony();
   }, []);
 
   const nd = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  // ---- ÚKONY ----
+  const fetchUkony = async () => {
+    setUkonLoading(true);
+    const { data } = await supabase.from('service_actions').select('*').order('name');
+    if (data) setUkonActions(data);
+    setUkonLoading(false);
+  };
+
+  const addUkon = async (e) => {
+    e.preventDefault();
+    if (!newUkon.name.trim() || !newUkon.unit_price) return;
+    await supabase.from('service_actions').insert([{
+      name: newUkon.name.trim(),
+      unit_price: parseFloat(newUkon.unit_price),
+      unit: newUkon.unit || 'ks',
+    }]);
+    setNewUkon({ name: '', unit_price: '', unit: 'ks' });
+    fetchUkony();
+  };
+
+  const saveEditUkon = async (e) => {
+    e.preventDefault();
+    await supabase.from('service_actions').update({
+      name: editUkon.name.trim(),
+      unit_price: parseFloat(editUkon.unit_price),
+      unit: editUkon.unit || 'ks',
+    }).eq('id', editUkon.id);
+    setEditUkon(null);
+    fetchUkony();
+  };
+
+  const deleteUkon = async (id) => {
+    if (!confirm('Naozaj vymazať tento úkon?')) return;
+    await supabase.from('service_actions').delete().eq('id', id);
+    fetchUkony();
+  };
 
   // ---- PRÁCA / NORMY ----
   const fetchNorms = async () => {
@@ -315,6 +360,8 @@ export default function DatabazaPage() {
     (w.part_number && nd(w.part_number).includes(nd(warehouseSearch)))
   );
 
+  const filteredUkony = ukonActions.filter(u => nd(u.name).includes(nd(ukonSearch)));
+
   const qtyColor = (qty) => {
     if (qty <= 0) return 'text-red-500 bg-red-500/10 border-red-500/30';
     if (qty <= 3) return 'text-orange-400 bg-orange-500/10 border-orange-500/30';
@@ -334,6 +381,11 @@ export default function DatabazaPage() {
             + Pridať na sklad
           </button>
         )}
+        {activeTab === 'ukon' && (
+          <button onClick={() => document.getElementById('ukon-form-name')?.focus()} className="bg-purple-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs hover:bg-purple-500 transition-all shadow-xl tracking-widest">
+            + Pridať úkon
+          </button>
+        )}
       </header>
 
       {/* ZÁLOŽKY */}
@@ -341,6 +393,7 @@ export default function DatabazaPage() {
         {[
           { key: 'sklad', label: '🏭 Sklad' },
           { key: 'práca', label: '🛠️ Práce' },
+          { key: 'ukon', label: '⚡ Úkony' },
         ].map(tab => (
           <button key={tab.key}
             onClick={() => handleTabSwitch(tab.key)}
@@ -700,6 +753,121 @@ export default function DatabazaPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== TAB: ÚKONY ===== */}
+      {activeTab === 'ukon' && (
+        <div className="space-y-6">
+
+          {/* Formulár: nový úkon */}
+          <div className="bg-zinc-950 border border-purple-600/20 rounded-[2rem] p-6">
+            <p className="text-[10px] font-black uppercase tracking-widest text-purple-400 mb-4">Nový úkon</p>
+            <form onSubmit={addUkon} className="flex flex-col md:flex-row gap-3 items-end">
+              <div className="flex-grow">
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Názov úkonu</label>
+                <input id="ukon-form-name" required type="text"
+                  value={newUkon.name}
+                  onChange={e => setNewUkon({ ...newUkon, name: e.target.value })}
+                  placeholder="napr. Čistenie DPF filtra v stroji"
+                  className="w-full bg-black border border-zinc-800 focus:border-purple-600 p-3 rounded-xl text-white font-black outline-none transition-all italic" />
+              </div>
+              <div className="w-32">
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Cena bez DPH (€)</label>
+                <input required type="number" min="0" step="0.01"
+                  value={newUkon.unit_price}
+                  onChange={e => setNewUkon({ ...newUkon, unit_price: e.target.value })}
+                  onFocus={e => e.target.select()}
+                  placeholder="0.00"
+                  className="w-full bg-black border border-zinc-800 focus:border-purple-600 p-3 rounded-xl text-white font-black text-center outline-none transition-all" />
+              </div>
+              <div className="w-24">
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Jednotka</label>
+                <input type="text"
+                  value={newUkon.unit}
+                  onChange={e => setNewUkon({ ...newUkon, unit: e.target.value })}
+                  placeholder="ks"
+                  className="w-full bg-black border border-zinc-800 focus:border-purple-600 p-3 rounded-xl text-white font-black text-center outline-none transition-all" />
+              </div>
+              <button type="submit" className="bg-purple-600 hover:bg-purple-500 text-white font-black py-3 px-6 rounded-xl uppercase text-[10px] tracking-widest transition-all whitespace-nowrap">
+                + Pridať
+              </button>
+            </form>
+          </div>
+
+          {/* Vyhľadávanie */}
+          <div className="relative w-full md:w-96">
+            <input type="text" placeholder="Hľadať úkon..." value={ukonSearch} onChange={e => setUkonSearch(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 p-4 px-6 rounded-2xl text-[10px] uppercase font-black outline-none focus:border-purple-600 transition-all italic tracking-widest" />
+            <span className="absolute right-5 top-1/2 -translate-y-1/2 opacity-20">🔍</span>
+          </div>
+
+          {/* Zoznam */}
+          {ukonLoading ? (
+            <div className="py-20 text-center text-zinc-600 animate-pulse font-black uppercase text-xs tracking-widest">Načítavam...</div>
+          ) : filteredUkony.length === 0 ? (
+            <div className="py-20 text-center border-2 border-dashed border-zinc-900 rounded-[3rem] opacity-30 uppercase font-black tracking-[0.5em] text-sm italic">Žiadne úkony</div>
+          ) : (
+            <div className="space-y-2">
+              {filteredUkony.map(u => (
+                <div key={u.id} className="bg-zinc-950 border border-zinc-900 hover:border-zinc-700 p-4 md:px-6 rounded-2xl flex items-center gap-4 group transition-all">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg shrink-0">ÚKON</span>
+                  <span className="flex-grow text-sm font-black uppercase italic text-zinc-300 truncate">{u.name}</span>
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="text-right">
+                      <span className="text-[8px] text-zinc-600 block uppercase font-black">bez DPH</span>
+                      <span className="text-white font-black text-sm">{parseFloat(u.unit_price).toFixed(2)} €</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[8px] text-amber-500 block uppercase font-black">s DPH</span>
+                      <span className="text-amber-300 font-black text-sm">{(parseFloat(u.unit_price) * VAT).toFixed(2)} €</span>
+                    </div>
+                    <span className="text-zinc-500 font-black text-sm uppercase">{u.unit}</span>
+                    <button onClick={() => setEditUkon({ ...u, unit_price: String(u.unit_price) })}
+                      className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
+                    <button onClick={() => deleteUkon(u.id)}
+                      className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL EDIT ÚKONU */}
+      {editUkon && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+          <div className="bg-zinc-950 border border-zinc-800 p-8 md:p-12 rounded-[3rem] max-w-lg w-full shadow-2xl">
+            <h2 className="text-2xl font-black uppercase italic mb-8 tracking-tighter text-center">Upraviť <span className="text-purple-500">úkon</span></h2>
+            <form onSubmit={saveEditUkon} className="space-y-5">
+              <div>
+                <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Názov úkonu</label>
+                <input required type="text" value={editUkon.name} onChange={e => setEditUkon({ ...editUkon, name: e.target.value })}
+                  className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-600 italic transition-all" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Cena bez DPH (€)</label>
+                  <input required type="number" min="0" step="0.01" value={editUkon.unit_price}
+                    onChange={e => setEditUkon({ ...editUkon, unit_price: e.target.value })}
+                    onFocus={e => e.target.select()}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-600 text-center text-xl transition-all" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Jednotka</label>
+                  <input type="text" value={editUkon.unit} onChange={e => setEditUkon({ ...editUkon, unit: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-600 text-center text-xl transition-all" />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setEditUkon(null)}
+                  className="flex-1 bg-zinc-800 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">Zrušiť</button>
+                <button type="submit"
+                  className="flex-[2] bg-purple-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-purple-500 transition-all shadow-xl">Uložiť zmeny</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -26,6 +26,8 @@ export default function DetailZakazkyPage() {
   // --- NOVÉ STAVY PRE KATALÓG, SADZBY A CENOVÉ PONUKY ZACHOVANÉ ---
   const [catalog, setCatalog] = useState([]);
   const [warehouseItems, setWarehouseItems] = useState([]);
+  const [serviceActions, setServiceActions] = useState([]);
+  const [ukonSearch, setUkonSearch] = useState('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -121,6 +123,7 @@ export default function DetailZakazkyPage() {
       fetchWarehouseItems(),
       fetchSettings(),
       fetchCurrentOffer(),
+      fetchServiceActions(),
     ]);
 
     // Ak máme ŠPZ, vyhľadáme históriu ponúk
@@ -260,6 +263,11 @@ export default function DetailZakazkyPage() {
       const { data } = await supabase.from('employees').select('id, name').eq('active', true);
       if (data) setEmployees(data);
     } catch (err) { console.error("Chyba zamestnancov:", err.message); }
+  };
+
+  const fetchServiceActions = async () => {
+    const { data } = await supabase.from('service_actions').select('*').order('name');
+    if (data) setServiceActions(data);
   };
 
   const fetchCatalog = async () => {
@@ -575,21 +583,23 @@ export default function DetailZakazkyPage() {
     if (!await ensureAuth()) return;
 
     const isPraca = newItem.type === 'Práca';
+    const isUkon = newItem.type === 'Úkon';
     const itemToSave = {
       ...newItem,
-      type: isPraca ? 'Práca' : 'Materiál',
+      type: isPraca ? 'Práca' : isUkon ? 'Úkon' : 'Materiál',
       quantity: parseFloat(newItem.quantity) || 1,
       unit_price: parseFloat(newItem.unit_price) || 0,
       unit: isPraca ? 'hod' : newItem.unit,
     };
 
-    if (!isPraca) syncToCatalog(itemToSave);
+    if (!isPraca && !isUkon) syncToCatalog(itemToSave);
 
     const { rateType: _rt, ...itemForDb } = itemToSave;
     const { error } = await supabase.from('job_items').insert([{ ...itemForDb, job_id: id }]);
     if (!error) {
-      if (!isPraca) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
+      if (!isPraca && !isUkon) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
       setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType });
+      setUkonSearch('');
       fetchItems();
     }
   };
@@ -603,7 +613,8 @@ export default function DetailZakazkyPage() {
   const calculateTotal = () => {
     const subtotalMaterial = items.filter(i => i.type === 'Materiál').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
     const subtotalWork = items.filter(i => i.type === 'Práca').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
-    const subtotal = subtotalMaterial + subtotalWork;
+    const subtotalUkon = items.filter(i => i.type === 'Úkon').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
+    const subtotal = subtotalMaterial + subtotalWork + subtotalUkon;
     const tax = subtotal * 0.23;
     const totalBefore = subtotal + tax;
     const discNum = parseFloat(discountValue) || 0;
@@ -913,7 +924,7 @@ export default function DetailZakazkyPage() {
                 {items.map((item) => (
                   editingItemId === item.id ? (
                     <tr key={item.id} className="bg-zinc-900/60 border-l-2 border-blue-500">
-                      <td className="p-3"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'}`}>{item.type}</span></td>
+                      <td className="p-3"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800' : 'text-orange-400 border-orange-800'}`}>{item.type}</span></td>
                       <td className="p-3">
                         <input type="text" value={editItemForm.name}
                           onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
@@ -957,7 +968,7 @@ export default function DetailZakazkyPage() {
                     </tr>
                   ) : (
                     <tr key={item.id} className="hover:bg-white/5 transition-all">
-                      <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
+                      <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
                       <td className="p-4 font-black uppercase text-xs tracking-tight">{item.name}</td>
                       <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
                       <td className="p-4 text-right">
@@ -984,6 +995,7 @@ export default function DetailZakazkyPage() {
                       onChange={(e) => {
                         const t = e.target.value;
                         const isPraca = t === 'Práca';
+                        const isUkon = t === 'Úkon';
                         setNewItem({
                           ...newItem,
                           type: t,
@@ -992,10 +1004,12 @@ export default function DetailZakazkyPage() {
                           name: isPraca ? `Servisná práca ${newItem.rateType}` : '',
                         });
                         setNewItemVatStr(isPraca ? (getRateValue(newItem.rateType) * 1.23).toFixed(2) : '');
+                        if (isUkon) setUkonSearch('');
                       }}
                     >
                       <option value="Materiál">MATERIÁL</option>
                       <option value="Práca">PRÁCA</option>
+                      <option value="Úkon">ÚKON</option>
                     </select>
                     {newItem.type === 'Práca' && (
                       <select
@@ -1079,6 +1093,40 @@ export default function DetailZakazkyPage() {
                                   {wFiltered.length === 0 && cFiltered.length === 0 && newItem.name && (
                                     <div className="px-4 py-4 text-zinc-600 font-black text-xs uppercase italic text-center">Žiadne výsledky — zadaj manuálne</div>
                                   )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        {/* Úkon dropdown */}
+                        {newItem.type === 'Úkon' && showItemDropdown && (
+                          <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-zinc-950 border border-purple-600/40 rounded-2xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
+                            {(() => {
+                              const q = nd(newItem.name);
+                              const filtered = serviceActions.filter(u => nd(u.name).includes(q)).slice(0, 10);
+                              return filtered.length === 0 ? (
+                                <div className="px-4 py-4 text-zinc-600 font-black text-xs uppercase italic text-center">
+                                  {serviceActions.length === 0 ? 'Žiadne úkony — pridaj ich v Databáze' : 'Žiadne výsledky'}
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-purple-500 bg-black/60 sticky top-0">⚡ Úkony</div>
+                                  {filtered.map(u => (
+                                    <button key={u.id} type="button"
+                                      onMouseDown={() => {
+                                        setNewItem(prev => ({ ...prev, name: u.name, unit_price: parseFloat(u.unit_price), unit: u.unit || 'ks' }));
+                                        setNewItemVatStr((parseFloat(u.unit_price) * 1.23).toFixed(2));
+                                        setUkonSearch(u.name);
+                                        setShowItemDropdown(false);
+                                      }}
+                                      className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40 last:border-0">
+                                      <span className="text-purple-200 font-black text-xs uppercase italic truncate">{u.name}</span>
+                                      <div className="shrink-0 text-right">
+                                        <span className="text-white font-black text-xs block">{parseFloat(u.unit_price).toFixed(2)} €</span>
+                                        <span className="text-zinc-500 text-[9px]">{u.unit}</span>
+                                      </div>
+                                    </button>
+                                  ))}
                                 </>
                               );
                             })()}
