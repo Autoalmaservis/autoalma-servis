@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
-import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 
 export default function DetailFakturyPage() {
   const { id } = useParams();
@@ -25,7 +24,7 @@ export default function DetailFakturyPage() {
     web: '',
     logo_url: ''
   });
-  const [qrValue, setQrValue] = useState('');
+  const [qrDataUrl, setQrDataUrl] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -91,27 +90,20 @@ export default function DetailFakturyPage() {
 
   useEffect(() => {
     if (!inv || !myCompany.bank || !inv.is_official) return;
-    const iban = myCompany.bank.replace(/\s/g, '').toUpperCase();
-    const amount = Math.round(parseFloat(inv.total_amount) * 100) / 100;
-    const vs = String(inv.invoice_number).replace(/\D/g, '').substring(0, 10);
-    import('bysquare/pay').then(({ encode, PaymentOptions, CurrencyCode }) => {
-      try {
-        const str = encode({
-          payments: [{
-            type: PaymentOptions.PaymentOrder,
-            amount,
-            currencyCode: CurrencyCode.EUR,
-            variableSymbol: vs || undefined,
-            paymentNote: (`Oprava vozidla ${inv.car_details?.plate || ''}`).trim() || undefined,
-            beneficiary: { name: (myCompany.name || 'AutoAlma Servis').substring(0, 70) },
-            bankAccounts: [{ iban }],
-          }],
-        });
-        setQrValue(str);
-      } catch (e) {
-        console.error('bysquare chyba:', e.message, '| IBAN:', iban);
-      }
-    });
+    fetch('/api/generate-qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        iban: myCompany.bank,
+        amount: inv.total_amount,
+        variableSymbol: String(inv.invoice_number).replace(/\D/g, ''),
+        beneficiaryName: myCompany.name,
+        paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim(),
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.qrDataUrl) setQrDataUrl(d.qrDataUrl); else console.error('QR chyba:', d.error); })
+      .catch(e => console.error('QR fetch chyba:', e));
   }, [inv, myCompany.bank]);
 
   const handlePrint = () => window.print();
@@ -262,7 +254,7 @@ export default function DetailFakturyPage() {
               <tr>
                 <td width="60%" valign="top">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15pt' }}>
-                    {myCompany.bank && inv.is_official && qrValue && <QRCodeSVG value={qrValue} size={110} level="L" />}
+                    {myCompany.bank && inv.is_official && qrDataUrl && <img src={qrDataUrl} alt="QR platba" style={{ width: '110pt', height: '110pt' }} />}
                     <div style={{ fontSize: '9pt', color: '#000', lineHeight: '1.2' }}>
                       <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
@@ -321,16 +313,10 @@ export default function DetailFakturyPage() {
           <div className="flex gap-8 items-center">
              {myCompany.bank && inv.is_official && (
                <div className="flex flex-col items-center gap-2">
-                 {qrValue
-                   ? <div className="bg-white p-4 rounded-2xl shadow-2xl"><QRCodeCanvas value={qrValue} size={200} level="L" /></div>
+                 {qrDataUrl
+                   ? <div className="bg-white p-4 rounded-2xl shadow-2xl"><img src={qrDataUrl} alt="QR platba" width={200} height={200} /></div>
                    : <div className="bg-zinc-900 border border-red-600 rounded-2xl p-4 text-red-500 text-[10px] font-black uppercase">QR sa negeneruje</div>
                  }
-                 <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-2 max-w-[220px] w-full">
-                   <p className="text-[9px] text-zinc-500 font-black uppercase mb-1">IBAN:</p>
-                   <p className="text-[9px] text-white font-mono break-all">{myCompany.bank || '(prázdny)'}</p>
-                   <p className="text-[9px] text-zinc-500 font-black uppercase mt-2 mb-1">QR dáta:</p>
-                   <p className="text-[8px] text-zinc-400 font-mono break-all">{qrValue ? qrValue.substring(0, 80) + '…' : '(prázdne — bysquare zlyhalo alebo neplatný IBAN)'}</p>
-                 </div>
                </div>
              )}
              <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold">
