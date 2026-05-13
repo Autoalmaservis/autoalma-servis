@@ -13,10 +13,16 @@ export default function TodoPage() {
   const [newPriority, setNewPriority] = useState('red');
   const [addingTodo, setAddingTodo] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmId, setConfirmId] = useState(null);
 
   const fetchTodos = async () => {
     const { data } = await supabase.from('todos').select('*').order('created_at', { ascending: true });
-    setTodos(data || []);
+    setTodos(prev => {
+      const temps = prev.filter(t => String(t.id).startsWith('temp-'));
+      const realIds = new Set((data || []).map(t => t.id));
+      const stillPending = temps.filter(t => !realIds.has(t.id));
+      return [...(data || []), ...stillPending];
+    });
     setLoading(false);
   };
 
@@ -29,18 +35,36 @@ export default function TodoPage() {
   }, []);
 
   const addTodo = async () => {
-    if (!newTodo.trim()) return;
-    await supabase.from('todos').insert([{ text: newTodo.trim(), priority: newPriority, done: false }]);
+    const text = newTodo.trim();
+    if (!text) return;
+    const tempId = `temp-${Date.now()}`;
+    setTodos(prev => [...prev, { id: tempId, text, priority: newPriority, done: false }]);
     setNewTodo('');
     setAddingTodo(false);
+    const { data } = await supabase
+      .from('todos')
+      .insert([{ text, priority: newPriority, done: false }])
+      .select()
+      .single();
+    if (data) {
+      setTodos(prev => prev.map(t => t.id === tempId ? data : t));
+    }
   };
 
-  const toggleTodo = async (todo) => {
-    await supabase.from('todos').update({ done: !todo.done }).eq('id', todo.id);
+  const confirmDone = async (id) => {
+    setConfirmId(null);
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, done: true } : t));
+    await supabase.from('todos').update({ done: true }).eq('id', id);
   };
 
   const deleteTodo = async (id) => {
+    setTodos(prev => prev.filter(t => t.id !== id));
     await supabase.from('todos').delete().eq('id', id);
+  };
+
+  const restoreTodo = async (todo) => {
+    setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, done: false } : t));
+    await supabase.from('todos').update({ done: false }).eq('id', todo.id);
   };
 
   const undoneTodos = todos.filter(t => !t.done);
@@ -95,6 +119,34 @@ export default function TodoPage() {
         </div>
       )}
 
+      {/* POTVRDENIE HOTOVOSTI */}
+      {confirmId && (() => {
+        const todo = todos.find(t => t.id === confirmId);
+        if (!todo) return null;
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+            <div className="bg-zinc-900 border border-green-600/40 rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl space-y-5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-green-400">Máš túto úlohu hotovú?</p>
+              <p className="text-xl font-black uppercase italic text-white leading-tight">{todo.text}</p>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => confirmDone(confirmId)}
+                  className="flex-1 bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest transition-all shadow-lg"
+                >
+                  ✓ Áno, hotovo
+                </button>
+                <button
+                  onClick={() => setConfirmId(null)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest transition-all"
+                >
+                  Nie
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* TRI STĹPCE */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
         {['red', 'yellow', 'green'].map(priority => {
@@ -114,17 +166,30 @@ export default function TodoPage() {
                 {columnTodos.length === 0 && (
                   <p className="text-center text-zinc-700 text-[10px] font-black uppercase tracking-widest pt-8 italic">Prázdne</p>
                 )}
-                {columnTodos.map(todo => (
-                  <div key={todo.id} className="bg-black border border-zinc-800 hover:border-zinc-600 rounded-2xl p-4 group transition-all">
-                    <div className="flex items-start gap-3">
-                      <p className="flex-1 text-sm font-bold text-white leading-snug">{todo.text}</p>
-                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={() => toggleTodo(todo)} title="Označiť ako vybavené" className="w-7 h-7 rounded-xl bg-green-900/40 hover:bg-green-800/60 flex items-center justify-center text-green-500 text-xs transition-all">✓</button>
-                        <button onClick={() => deleteTodo(todo.id)} title="Vymazať" className="w-7 h-7 rounded-xl bg-zinc-900 hover:bg-red-900/40 flex items-center justify-center text-zinc-600 hover:text-red-500 text-xs transition-all">✕</button>
+                {columnTodos.map(todo => {
+                  const isTemp = String(todo.id).startsWith('temp-');
+                  return (
+                    <div key={todo.id} className={`bg-black border border-zinc-800 hover:border-zinc-600 rounded-2xl p-4 group transition-all ${isTemp ? 'opacity-50' : ''}`}>
+                      <div className="flex items-start gap-3">
+                        <p className="flex-1 text-sm font-bold text-white leading-snug">{todo.text}</p>
+                        {!isTemp && (
+                          <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                            <button
+                              onClick={() => setConfirmId(todo.id)}
+                              title="Označiť ako vybavené"
+                              className="w-7 h-7 rounded-xl bg-green-900/40 hover:bg-green-800/60 flex items-center justify-center text-green-500 text-xs transition-all"
+                            >✓</button>
+                            <button
+                              onClick={() => deleteTodo(todo.id)}
+                              title="Vymazať"
+                              className="w-7 h-7 rounded-xl bg-zinc-900 hover:bg-red-900/40 flex items-center justify-center text-zinc-600 hover:text-red-500 text-xs transition-all"
+                            >✕</button>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
@@ -141,7 +206,7 @@ export default function TodoPage() {
                 <span className="text-sm">{PRIORITY_ICON[todo.priority]}</span>
                 <p className="flex-1 text-sm font-bold text-zinc-500 line-through">{todo.text}</p>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                  <button onClick={() => toggleTodo(todo)} title="Obnoviť" className="text-[10px] font-black text-zinc-600 hover:text-white transition-all px-3 py-1.5 rounded-xl hover:bg-zinc-800">↩ Obnoviť</button>
+                  <button onClick={() => restoreTodo(todo)} className="text-[10px] font-black text-zinc-600 hover:text-white transition-all px-3 py-1.5 rounded-xl hover:bg-zinc-800">↩ Obnoviť</button>
                   <button onClick={() => deleteTodo(todo.id)} className="text-[10px] font-black text-zinc-700 hover:text-red-500 transition-all px-3 py-1.5 rounded-xl hover:bg-zinc-900">✕</button>
                 </div>
               </div>
