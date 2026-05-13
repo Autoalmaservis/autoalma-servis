@@ -71,6 +71,18 @@ function PrijemForm() {
       const spz = searchParams.get('spz');
       if (!spz) return;
 
+      // Úkony — primárne z URL param ?popis= (priamo zo zvoleného eventu)
+      const popisFromUrl = searchParams.get('popis');
+      const parseLines = (text) => text
+        .split('\n')
+        .map(line => line.replace(/^\d+\.\s*/, '').trim())
+        .filter(line => line !== '' && !line.endsWith(':'));
+
+      if (popisFromUrl) {
+        const lines = parseLines(popisFromUrl);
+        if (lines.length > 0) setTasks(lines.map(l => ({ description: l })));
+      }
+
       const { data: calData } = await supabase
         .from('calendar_events')
         .select('issue_description, customer_phone, customer_email, customer_name, user_id')
@@ -81,12 +93,9 @@ function PrijemForm() {
 
       if (!calData) return;
 
-      // Servisné úkony z popisu
-      if (calData.issue_description) {
-        const lines = calData.issue_description
-          .split('\n')
-          .map(line => line.replace(/^\d+\.\s*/, '').trim())
-          .filter(line => line !== '' && !line.endsWith(':'));
+      // Úkony z DB — len ak URL param nebol k dispozícii
+      if (!popisFromUrl && calData.issue_description) {
+        const lines = parseLines(calData.issue_description);
         if (lines.length > 0) setTasks(lines.map(l => ({ description: l })));
       }
 
