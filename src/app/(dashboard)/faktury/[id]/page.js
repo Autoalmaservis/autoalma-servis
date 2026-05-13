@@ -91,20 +91,27 @@ export default function DetailFakturyPage() {
 
   useEffect(() => {
     if (!inv || !myCompany.bank || !inv.is_official) return;
-    fetch('/api/generate-qr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        iban: myCompany.bank,
-        amount: inv.total_amount,
-        variableSymbol: String(inv.invoice_number).replace(/\D/g, ''),
-        beneficiaryName: myCompany.name,
-        paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim(),
-      }),
-    })
-      .then(r => r.json())
-      .then(d => { if (d.qrValue) setQrValue(d.qrValue); })
-      .catch(() => {});
+    const iban = myCompany.bank.replace(/\s/g, '').toUpperCase();
+    const amount = parseFloat(inv.total_amount);
+    const vs = String(inv.invoice_number).replace(/\D/g, '').substring(0, 10);
+    import('bysquare/pay').then(({ encode, PaymentOptions, CurrencyCode }) => {
+      try {
+        const str = encode({
+          payments: [{
+            type: PaymentOptions.PaymentOrder,
+            amount,
+            currencyCode: CurrencyCode.EUR,
+            variableSymbol: vs || undefined,
+            paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim() || undefined,
+            beneficiary: { name: myCompany.name.substring(0, 70) },
+            bankAccounts: [{ iban }],
+          }],
+        });
+        setQrValue(str);
+      } catch (e) {
+        console.error('bysquare chyba:', e.message, '| IBAN:', iban);
+      }
+    });
   }, [inv, myCompany.bank]);
 
   const handlePrint = () => window.print();
