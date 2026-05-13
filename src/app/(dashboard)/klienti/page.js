@@ -260,9 +260,10 @@ export default function KlientiPage() {
     setIsCarModalOpen(true);
   };
 
+  const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const filteredKlienti = klienti.filter(k => {
-    const s = searchTerm.toLowerCase();
-    return (k.customer_name || '').toLowerCase().includes(s) || (k.db_full_name || '').toLowerCase().includes(s) || (k.all_plates || []).some(p => p.toLowerCase().includes(s));
+    const s = nd(searchTerm);
+    return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
   });
 
   return (
