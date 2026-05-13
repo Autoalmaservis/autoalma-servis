@@ -171,7 +171,7 @@ export default function DetailFakturyPage() {
                   <span style={{ fontSize: '10pt', fontWeight: '900', color: '#000' }}>{inv.car_details?.brand || 'Vozidlo'}</span>
                 </div>
                 <p style={{ margin: '3pt 0 0 0', fontSize: '8pt', color: '#000' }}>VIN: {inv.car_details?.vin || '---'}</p>
-                <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {inv.car_details?.mileage || '---'}</p>
+                <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {inv.car_details?.mileage != null && inv.car_details?.mileage !== '' ? Number(inv.car_details.mileage).toLocaleString('sk-SK') + ' km' : '---'}</p>
               </td>
             </tr>
           </tbody>

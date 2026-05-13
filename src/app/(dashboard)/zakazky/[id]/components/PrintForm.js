@@ -47,7 +47,7 @@ export default function PrintForm({ zakazka, items, tasks, myCompany, subtotal, 
             </div>
             <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>VIN: {zakazka.vin_number || '---'}</p>
             <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>Rok: {zakazka.year_produced || '---'} | {zakazka.engine_volume ? zakazka.engine_volume + ' cm³' : '---'} | {zakazka.engine_power ? zakazka.engine_power + ' kW' : '---'} | {zakazka.fuel_type || '---'}</p>
-            <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {zakazka.mileage || '---'} km | Mechanik: {zakazka.technician_name || '---'}</p>
+            <p style={{ margin: '0', fontSize: '8pt', color: '#000' }}>KM: {zakazka.mileage != null && zakazka.mileage !== '' ? Number(zakazka.mileage).toLocaleString('sk-SK') + ' km' : '---'} | Mechanik: {zakazka.technician_name || '---'}</p>
           </td>
         </tr></tbody>
       </table>
