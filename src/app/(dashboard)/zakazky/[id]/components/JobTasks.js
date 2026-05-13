@@ -1,24 +1,32 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
 export default function JobTasks({ tasks, jobId, onRefresh }) {
   const [newTaskText, setNewTaskText] = useState('');
+  const [localTasks, setLocalTasks] = useState(tasks);
+
+  useEffect(() => { setLocalTasks(tasks); }, [tasks]);
 
   const addTask = async (e) => {
     e.preventDefault();
     if (!newTaskText.trim()) return;
-    const { error } = await supabase.from('job_tasks').insert([{ job_id: jobId, task_description: newTaskText, is_completed: false }]);
-    if (!error) { setNewTaskText(''); onRefresh(); }
+    const tempTask = { id: `temp-${Date.now()}`, job_id: jobId, task_description: newTaskText, is_completed: false };
+    setLocalTasks(prev => [...prev, tempTask]);
+    setNewTaskText('');
+    const { error } = await supabase.from('job_tasks').insert([{ job_id: jobId, task_description: tempTask.task_description, is_completed: false }]);
+    if (!error) { onRefresh(); } else { setLocalTasks(tasks); }
   };
 
   const toggleTaskStatus = async (taskId, currentStatus) => {
     const newStatus = !currentStatus;
+    setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, is_completed: newStatus } : t));
     await supabase.from('job_tasks').update({ is_completed: newStatus }).eq('id', taskId);
     onRefresh();
   };
 
   const deleteTask = async (taskId) => {
+    setLocalTasks(prev => prev.filter(t => t.id !== taskId));
     const { error } = await supabase.from('job_tasks').delete().eq('id', taskId);
     if (!error) onRefresh();
   };
@@ -27,10 +35,10 @@ export default function JobTasks({ tasks, jobId, onRefresh }) {
     <div className="space-y-4 font-bold">
       <div className="flex justify-between items-end">
         <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] italic">1. Priebeh prác (Checklist)</h2>
-        <span className="text-[9px] font-black text-zinc-500 uppercase">{tasks.filter(t => t.is_completed === true).length} / {tasks.length} HOTOVO</span>
+        <span className="text-[9px] font-black text-zinc-500 uppercase">{localTasks.filter(t => t.is_completed === true).length} / {localTasks.length} HOTOVO</span>
       </div>
       <div className="bg-black/30 p-6 rounded-3xl border border-zinc-800 space-y-3 min-h-[140px]">
-        {tasks.map((task) => {
+        {localTasks.map((task) => {
           const done = task.is_completed === true;
           return (
             <div key={task.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${done ? 'bg-green-600/10 border-green-600 text-green-500 shadow-[0_0_15px_rgba(22,163,74,0.1)]' : 'bg-red-600/5 border-red-600/40 text-red-500 shadow-[0_0_10px_rgba(220,38,38,0.05)]'}`}>

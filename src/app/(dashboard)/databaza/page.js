@@ -23,7 +23,9 @@ export default function DatabazaPage() {
   const [ukonLoading, setUkonLoading] = useState(false);
   const [ukonSearch, setUkonSearch] = useState('');
   const [newUkon, setNewUkon] = useState({ name: '', unit_price: '', unit: 'ks' });
+  const [newUkonVatStr, setNewUkonVatStr] = useState('');
   const [editUkon, setEditUkon] = useState(null);
+  const [editUkonVatStr, setEditUkonVatStr] = useState('');
 
   // --- SKLAD ---
   const [warehouseItems, setWarehouseItems] = useState([]);
@@ -69,6 +71,7 @@ export default function DatabazaPage() {
       unit: newUkon.unit || 'ks',
     }]);
     setNewUkon({ name: '', unit_price: '', unit: 'ks' });
+    setNewUkonVatStr('');
     fetchUkony();
   };
 
@@ -772,14 +775,29 @@ export default function DatabazaPage() {
                   placeholder="napr. Čistenie DPF filtra v stroji"
                   className="w-full bg-black border border-zinc-800 focus:border-purple-600 p-3 rounded-xl text-white font-black outline-none transition-all italic" />
               </div>
-              <div className="w-32">
+              <div className="w-36">
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Cena bez DPH (€)</label>
                 <input required type="number" min="0" step="0.01"
                   value={newUkon.unit_price}
-                  onChange={e => setNewUkon({ ...newUkon, unit_price: e.target.value })}
+                  onChange={e => {
+                    setNewUkon({ ...newUkon, unit_price: e.target.value });
+                    setNewUkonVatStr(e.target.value ? (parseFloat(e.target.value) * VAT).toFixed(2) : '');
+                  }}
                   onFocus={e => e.target.select()}
                   placeholder="0.00"
                   className="w-full bg-black border border-zinc-800 focus:border-purple-600 p-3 rounded-xl text-white font-black text-center outline-none transition-all" />
+              </div>
+              <div className="w-36">
+                <label className="text-[9px] font-black uppercase tracking-widest text-amber-600 block mb-2">Cena s DPH (€)</label>
+                <input type="number" min="0" step="0.01"
+                  value={newUkonVatStr}
+                  onChange={e => {
+                    setNewUkonVatStr(e.target.value);
+                    setNewUkon({ ...newUkon, unit_price: e.target.value ? String(Math.round(parseFloat(e.target.value) / VAT * 100) / 100) : '' });
+                  }}
+                  onFocus={e => e.target.select()}
+                  placeholder="0.00"
+                  className="w-full bg-black border border-amber-800/50 focus:border-amber-500 p-3 rounded-xl text-amber-300 font-black text-center outline-none transition-all" />
               </div>
               <div className="w-24">
                 <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Jednotka</label>
@@ -823,7 +841,7 @@ export default function DatabazaPage() {
                       <span className="text-amber-300 font-black text-sm">{(parseFloat(u.unit_price) * VAT).toFixed(2)} €</span>
                     </div>
                     <span className="text-zinc-500 font-black text-sm uppercase">{u.unit}</span>
-                    <button onClick={() => setEditUkon({ ...u, unit_price: String(u.unit_price) })}
+                    <button onClick={() => { setEditUkon({ ...u, unit_price: String(u.unit_price) }); setEditUkonVatStr((parseFloat(u.unit_price) * VAT).toFixed(2)); }}
                       className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
                     <button onClick={() => deleteUkon(u.id)}
                       className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">🗑️</button>
@@ -846,13 +864,26 @@ export default function DatabazaPage() {
                 <input required type="text" value={editUkon.name} onChange={e => setEditUkon({ ...editUkon, name: e.target.value })}
                   className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-600 italic transition-all" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Cena bez DPH (€)</label>
                   <input required type="number" min="0" step="0.01" value={editUkon.unit_price}
-                    onChange={e => setEditUkon({ ...editUkon, unit_price: e.target.value })}
+                    onChange={e => {
+                      setEditUkon({ ...editUkon, unit_price: e.target.value });
+                      setEditUkonVatStr(e.target.value ? (parseFloat(e.target.value) * VAT).toFixed(2) : '');
+                    }}
                     onFocus={e => e.target.select()}
                     className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-600 text-center text-xl transition-all" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase text-amber-500 ml-2 tracking-widest block mb-2">Cena s DPH (€)</label>
+                  <input type="number" min="0" step="0.01" value={editUkonVatStr}
+                    onChange={e => {
+                      setEditUkonVatStr(e.target.value);
+                      setEditUkon({ ...editUkon, unit_price: e.target.value ? String(Math.round(parseFloat(e.target.value) / VAT * 100) / 100) : '' });
+                    }}
+                    onFocus={e => e.target.select()}
+                    className="w-full bg-zinc-900 border border-amber-800/50 p-4 rounded-2xl text-amber-300 font-black outline-none focus:border-amber-500 text-center text-xl transition-all" />
                 </div>
                 <div>
                   <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Jednotka</label>
@@ -861,7 +892,7 @@ export default function DatabazaPage() {
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setEditUkon(null)}
+                <button type="button" onClick={() => { setEditUkon(null); setEditUkonVatStr(''); }}
                   className="flex-1 bg-zinc-800 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">Zrušiť</button>
                 <button type="submit"
                   className="flex-[2] bg-purple-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-purple-500 transition-all shadow-xl">Uložiť zmeny</button>
