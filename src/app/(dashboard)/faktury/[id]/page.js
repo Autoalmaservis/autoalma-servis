@@ -25,6 +25,7 @@ export default function DetailFakturyPage() {
     web: '',
     logo_url: ''
   });
+  const [qrValue, setQrValue] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -88,10 +89,23 @@ export default function DetailFakturyPage() {
     }
   };
 
-  const generateQRValue = () => {
-    if (!inv || !myCompany.bank) return '';
-    return `SPD*1.0*ACC:${myCompany.bank.replace(/\s/g, '')}*AM:${inv.total_amount}*CUR:EUR*VS:${String(inv.invoice_number).replace(/\D/g, '')}*MSG:Oprava vozidla ${inv.car_details?.plate || ''}`;
-  };
+  useEffect(() => {
+    if (!inv || !myCompany.bank || !inv.is_official) return;
+    fetch('/api/generate-qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        iban: myCompany.bank,
+        amount: inv.total_amount,
+        variableSymbol: String(inv.invoice_number).replace(/\D/g, ''),
+        beneficiaryName: myCompany.name,
+        paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim(),
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.qrValue) setQrValue(d.qrValue); })
+      .catch(() => {});
+  }, [inv, myCompany.bank]);
 
   const handlePrint = () => window.print();
 
@@ -241,7 +255,7 @@ export default function DetailFakturyPage() {
               <tr>
                 <td width="60%" valign="top">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15pt' }}>
-                    {myCompany.bank && inv.is_official && <QRCodeSVG value={generateQRValue()} size={85} level="H" />}
+                    {myCompany.bank && inv.is_official && qrValue && <QRCodeSVG value={qrValue} size={85} level="H" />}
                     <div style={{ fontSize: '9pt', color: '#000', lineHeight: '1.2' }}>
                       <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
@@ -298,7 +312,7 @@ export default function DetailFakturyPage() {
         {/* WEB SUMÁR */}
         <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 border-t border-zinc-800 pt-10 no-print">
           <div className="flex gap-8 items-center">
-             {myCompany.bank && inv.is_official && <div className="bg-white p-3 rounded-2xl shadow-2xl"><QRCodeSVG value={generateQRValue()} size={120} level="H" /></div>}
+             {myCompany.bank && inv.is_official && qrValue && <div className="bg-white p-3 rounded-2xl shadow-2xl"><QRCodeSVG value={qrValue} size={120} level="H" /></div>}
              <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold">
                 <p className="text-zinc-400">Platobné informácie:</p>
                 <p className="text-white font-black mt-1 uppercase text-sm">{myCompany.bank || 'Platba v hotovosti'}</p>
