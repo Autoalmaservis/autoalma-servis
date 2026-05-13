@@ -5,8 +5,15 @@ import { supabase } from '@/app/lib/supabase';
 export default function JobTasks({ tasks, jobId, onRefresh }) {
   const [newTaskText, setNewTaskText] = useState('');
   const [localTasks, setLocalTasks] = useState(tasks);
+  const [confirmTaskId, setConfirmTaskId] = useState(null);
 
-  useEffect(() => { setLocalTasks(tasks); }, [tasks]);
+  useEffect(() => {
+    setLocalTasks(prev => {
+      const realIds = new Set(tasks.map(t => t.id));
+      const temps = prev.filter(t => String(t.id).startsWith('temp-') && !realIds.has(t.id));
+      return [...tasks, ...temps];
+    });
+  }, [tasks]);
 
   const addTask = async (e) => {
     e.preventDefault();
@@ -15,13 +22,13 @@ export default function JobTasks({ tasks, jobId, onRefresh }) {
     setLocalTasks(prev => [...prev, tempTask]);
     setNewTaskText('');
     const { error } = await supabase.from('job_tasks').insert([{ job_id: jobId, task_description: tempTask.task_description, is_completed: false }]);
-    if (!error) { onRefresh(); } else { setLocalTasks(tasks); }
+    if (!error) { onRefresh(); }
   };
 
-  const toggleTaskStatus = async (taskId, currentStatus) => {
-    const newStatus = !currentStatus;
-    setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, is_completed: newStatus } : t));
-    await supabase.from('job_tasks').update({ is_completed: newStatus }).eq('id', taskId);
+  const confirmDone = async (taskId) => {
+    setConfirmTaskId(null);
+    setLocalTasks(prev => prev.map(t => t.id === taskId ? { ...t, is_completed: true } : t));
+    await supabase.from('job_tasks').update({ is_completed: true }).eq('id', taskId);
     onRefresh();
   };
 
@@ -40,15 +47,56 @@ export default function JobTasks({ tasks, jobId, onRefresh }) {
       <div className="bg-black/30 p-6 rounded-3xl border border-zinc-800 space-y-3 min-h-[140px]">
         {localTasks.map((task) => {
           const done = task.is_completed === true;
-          return (
-            <div key={task.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${done ? 'bg-green-600/10 border-green-600 text-green-500 shadow-[0_0_15px_rgba(22,163,74,0.1)]' : 'bg-red-600/5 border-red-600/40 text-red-500 shadow-[0_0_10px_rgba(220,38,38,0.05)]'}`}>
-              <div className="flex items-center gap-4 cursor-pointer flex-grow no-print" onClick={() => toggleTaskStatus(task.id, task.is_completed)}>
-                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${done ? 'bg-green-600 border-green-600 shadow-lg shadow-green-900/40' : 'bg-transparent border-red-600'}`}>
-                  {done ? <span className="text-white text-xs font-black">✓</span> : <span className="text-red-600 text-[10px] font-black uppercase tracking-tighter">X</span>}
+          const isTemp = String(task.id).startsWith('temp-');
+          const isConfirming = confirmTaskId === task.id;
+
+          if (isConfirming) {
+            return (
+              <div key={task.id} className="flex flex-col gap-3 p-4 rounded-2xl border border-green-600 bg-green-600/10 shadow-[0_0_15px_rgba(22,163,74,0.15)]">
+                <span className="text-green-300 text-xs font-black uppercase italic tracking-tight">
+                  Máš túto úlohu hotovú?
+                </span>
+                <span className="text-white text-sm font-black uppercase italic tracking-tight">
+                  {task.task_description}
+                </span>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => confirmDone(task.id)}
+                    className="flex-1 bg-green-600 hover:bg-green-500 text-white font-black py-2.5 rounded-xl uppercase text-[10px] tracking-widest transition-all shadow-lg"
+                  >
+                    ✓ Áno, hotovo
+                  </button>
+                  <button
+                    onClick={() => setConfirmTaskId(null)}
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-black py-2.5 rounded-xl uppercase text-[10px] tracking-widest transition-all"
+                  >
+                    Nie
+                  </button>
                 </div>
-                <span className={`text-sm font-black uppercase tracking-tight italic ${done ? 'line-through opacity-50' : ''}`}>{task.task_description}</span>
               </div>
-              <button onClick={() => deleteTask(task.id)} className="no-print text-zinc-800 hover:text-red-600 px-3 transition-colors text-lg font-bold">✕</button>
+            );
+          }
+
+          return (
+            <div key={task.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 ${done ? 'bg-green-600/10 border-green-600/40 text-green-500' : 'bg-red-600/5 border-red-600/30 text-red-400'} ${isTemp ? 'opacity-60' : ''}`}>
+              <div className="flex items-center gap-4 flex-grow">
+                <button
+                  type="button"
+                  onClick={() => !done && !isTemp && setConfirmTaskId(task.id)}
+                  className={`no-print w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${done ? 'bg-green-600 border-green-600 cursor-default' : 'bg-transparent border-red-600 hover:border-green-500 hover:bg-green-600/20 cursor-pointer'}`}
+                >
+                  {done
+                    ? <span className="text-white text-xs font-black">✓</span>
+                    : <span className="text-zinc-600 text-xs font-black">✓</span>
+                  }
+                </button>
+                <span className={`text-sm font-black uppercase tracking-tight italic ${done ? 'line-through opacity-50' : ''}`}>
+                  {task.task_description}
+                </span>
+              </div>
+              {!done && (
+                <button onClick={() => deleteTask(task.id)} className="no-print text-zinc-800 hover:text-red-600 px-3 transition-colors text-lg font-bold shrink-0">✕</button>
+              )}
             </div>
           );
         })}
