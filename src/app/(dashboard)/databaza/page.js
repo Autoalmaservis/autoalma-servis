@@ -87,7 +87,7 @@ export default function DatabazaPage() {
   };
 
   const deleteUkon = async (id) => {
-    if (!confirm('Naozaj vymazať tento úkon?')) return;
+    if (!confirm('Naozaj vymazať tento úkon?\n\nPOZOR: Úkon zmizne z katalógu, ale v zákazkách kde bol použitý zostane zachovaný.')) return;
     await supabase.from('service_actions').delete().eq('id', id);
     fetchUkony();
   };
@@ -136,10 +136,9 @@ export default function DatabazaPage() {
   };
 
   const deleteNorm = async (id) => {
-    if (confirm('Naozaj vymazať túto prácu?')) {
-      await supabase.from('service_norms').delete().eq('id', id);
-      fetchNorms();
-    }
+    if (!confirm('Naozaj vymazať túto normu práce?')) return;
+    await supabase.from('service_norms').delete().eq('id', id);
+    fetchNorms();
   };
 
   const filteredNorms = norms.filter(n =>
@@ -218,10 +217,9 @@ export default function DatabazaPage() {
   };
 
   const deleteSkladItem = async (id) => {
-    if (confirm('Naozaj vymazať položku zo skladu? Zmažú sa aj všetky pohyby.')) {
-      await supabase.from('warehouse_items').delete().eq('id', id);
-      fetchWarehouse();
-    }
+    if (!confirm('Naozaj vymazať túto položku zo skladu?\n\nPOZOR: Položka zmizne z katalógu, ale v zákazkách kde bola použitá zostane zachovaná. Zmažú sa aj všetky skladové pohyby.')) return;
+    await supabase.from('warehouse_items').delete().eq('id', id);
+    fetchWarehouse();
   };
 
   const addImportLine = () => setImportLines(l => [...l, emptyImportLine()]);
