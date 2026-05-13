@@ -1,4 +1,5 @@
 import { encode, PaymentOptions, CurrencyCode } from 'bysquare/pay';
+import { Version } from 'bysquare';
 import QRCode from 'qrcode';
 import { NextResponse } from 'next/server';
 
@@ -27,7 +28,7 @@ export async function POST(req) {
         beneficiary: { name: beneficiaryName.substring(0, 70) },
         bankAccounts: [{ iban: cleanIban }],
       }],
-    });
+    }, { version: Version['1.1.0'] });
 
     // Byte mode — vyžaduje by square štandard, ALPHANUMERIC mode VÚB odmieta
     const pngDataUrl = await QRCode.toDataURL(bySquareStr, {
