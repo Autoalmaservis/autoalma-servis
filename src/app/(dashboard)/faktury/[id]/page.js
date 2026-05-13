@@ -319,10 +319,18 @@ export default function DetailFakturyPage() {
         {/* WEB SUMÁR */}
         <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-12 border-t border-zinc-800 pt-10 no-print">
           <div className="flex gap-8 items-center">
-             {myCompany.bank && inv.is_official && qrValue && (
+             {myCompany.bank && inv.is_official && (
                <div className="flex flex-col items-center gap-2">
-                 <div className="bg-white p-4 rounded-2xl shadow-2xl"><QRCodeCanvas value={qrValue} size={200} level="L" /></div>
-                 <p className="text-[8px] text-zinc-600 font-mono break-all max-w-[210px] text-center">{qrValue.substring(0, 60)}…</p>
+                 {qrValue
+                   ? <div className="bg-white p-4 rounded-2xl shadow-2xl"><QRCodeCanvas value={qrValue} size={200} level="L" /></div>
+                   : <div className="bg-zinc-900 border border-red-600 rounded-2xl p-4 text-red-500 text-[10px] font-black uppercase">QR sa negeneruje</div>
+                 }
+                 <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-2 max-w-[220px] w-full">
+                   <p className="text-[9px] text-zinc-500 font-black uppercase mb-1">IBAN:</p>
+                   <p className="text-[9px] text-white font-mono break-all">{myCompany.bank || '(prázdny)'}</p>
+                   <p className="text-[9px] text-zinc-500 font-black uppercase mt-2 mb-1">QR dáta:</p>
+                   <p className="text-[8px] text-zinc-400 font-mono break-all">{qrValue ? qrValue.substring(0, 80) + '…' : '(prázdne — bysquare zlyhalo alebo neplatný IBAN)'}</p>
+                 </div>
                </div>
              )}
              <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold">
