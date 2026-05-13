@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 
 export default function DetailFakturyPage() {
   const { id } = useParams();
@@ -262,7 +262,7 @@ export default function DetailFakturyPage() {
               <tr>
                 <td width="60%" valign="top">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15pt' }}>
-                    {myCompany.bank && inv.is_official && qrValue && <QRCodeSVG value={qrValue} size={110} level="M" />}
+                    {myCompany.bank && inv.is_official && qrValue && <QRCodeSVG value={qrValue} size={110} level="L" />}
                     <div style={{ fontSize: '9pt', color: '#000', lineHeight: '1.2' }}>
                       <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
@@ -321,8 +321,8 @@ export default function DetailFakturyPage() {
           <div className="flex gap-8 items-center">
              {myCompany.bank && inv.is_official && qrValue && (
                <div className="flex flex-col items-center gap-2">
-                 <div className="bg-white p-3 rounded-2xl shadow-2xl"><QRCodeSVG value={qrValue} size={150} level="M" /></div>
-                 <p className="text-[8px] text-zinc-700 font-mono break-all max-w-[160px] text-center">{qrValue.substring(0, 60)}…</p>
+                 <div className="bg-white p-4 rounded-2xl shadow-2xl"><QRCodeCanvas value={qrValue} size={200} level="L" /></div>
+                 <p className="text-[8px] text-zinc-600 font-mono break-all max-w-[210px] text-center">{qrValue.substring(0, 60)}…</p>
                </div>
              )}
              <div className="text-[10px] text-zinc-600 uppercase tracking-widest max-w-xs italic font-bold">
