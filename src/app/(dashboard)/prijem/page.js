@@ -167,15 +167,15 @@ function PrijemForm() {
             customer_name: pData?.company_name || pData?.full_name || menoFromUrl || vData.owner_name || prev.customer_name,
             customer_email: pData?.email || vData.owner_email || prev.customer_email,
             customer_phone: pData?.phone || vData.owner_phone || prev.customer_phone,
-            address: pData?.address || '',
-            city: pData?.city || '',
-            zip: pData?.zip || '',
-            company_name: pData?.company_name || '',
-            ico: pData?.ico || '',
-            dic: pData?.dic || '',
-            ic_dph: pData?.ic_dph || '',
-            client_type: pData?.company_name ? 'Firma' : 'Osoba',
-            customer_id: vData.owner_id || null 
+            address: pData?.address || prev.address || '',
+            city: pData?.city || prev.city || '',
+            zip: pData?.zip || prev.zip || '',
+            company_name: pData?.company_name || prev.company_name || '',
+            ico: pData?.ico || prev.ico || '',
+            dic: pData?.dic || prev.dic || '',
+            ic_dph: pData?.ic_dph || prev.ic_dph || '',
+            client_type: pData ? (pData.company_name ? 'Firma' : 'Osoba') : prev.client_type,
+            customer_id: vData.owner_id || prev.customer_id || null
           }));
         }
       }
