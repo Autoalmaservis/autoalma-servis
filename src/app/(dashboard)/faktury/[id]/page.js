@@ -92,7 +92,7 @@ export default function DetailFakturyPage() {
   useEffect(() => {
     if (!inv || !myCompany.bank || !inv.is_official) return;
     const iban = myCompany.bank.replace(/\s/g, '').toUpperCase();
-    const amount = parseFloat(inv.total_amount);
+    const amount = Math.round(parseFloat(inv.total_amount) * 100) / 100;
     const vs = String(inv.invoice_number).replace(/\D/g, '').substring(0, 10);
     import('bysquare/pay').then(({ encode, PaymentOptions, CurrencyCode }) => {
       try {
