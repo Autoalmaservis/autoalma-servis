@@ -65,7 +65,7 @@ function PrijemForm() {
     fetchEmployees();
   }, []);
 
-  // --- NOVÁ LOGIKA: PREVZATIE ZÁVAD Z KALENDÁRA ---
+  // --- PREVZATIE ÚDAJOV Z KALENDÁRA ---
   useEffect(() => {
     const fetchCalendarInfo = async () => {
       const spz = searchParams.get('spz');
@@ -73,20 +73,55 @@ function PrijemForm() {
 
       const { data: calData } = await supabase
         .from('calendar_events')
-        .select('issue_description')
+        .select('issue_description, customer_phone, customer_email, customer_name, user_id')
         .eq('plate_number', spz.toUpperCase())
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (calData?.issue_description) {
+      if (!calData) return;
+
+      // Servisné úkony z popisu
+      if (calData.issue_description) {
         const lines = calData.issue_description
           .split('\n')
           .map(line => line.replace(/^\d+\.\s*/, '').trim())
           .filter(line => line !== '' && !line.endsWith(':'));
+        if (lines.length > 0) setTasks(lines.map(l => ({ description: l })));
+      }
 
-        if (lines.length > 0) {
-          setTasks(lines.map(l => ({ description: l })));
+      // Kontaktné údaje z kalendárnej udalosti (fallback ak autoDoplnenie nenašlo vozidlo)
+      setFormData(prev => ({
+        ...prev,
+        customer_name: prev.customer_name || calData.customer_name || '',
+        customer_phone: prev.customer_phone || calData.customer_phone || '',
+        customer_email: prev.customer_email || calData.customer_email || '',
+      }));
+
+      // Ak má zákazník účet (user_id), načítame profil pre adresu/mesto/PSČ
+      if (calData.user_id) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, company_name, email, phone, address, city, zip, ico, dic, ic_dph, client_type')
+          .eq('id', calData.user_id)
+          .maybeSingle();
+
+        if (profile) {
+          setFormData(prev => ({
+            ...prev,
+            customer_name: prev.customer_name || profile.company_name || profile.full_name || '',
+            customer_phone: prev.customer_phone || profile.phone || '',
+            customer_email: prev.customer_email || profile.email || '',
+            address: prev.address || profile.address || '',
+            city: prev.city || profile.city || '',
+            zip: prev.zip || profile.zip || '',
+            company_name: prev.company_name || profile.company_name || '',
+            ico: prev.ico || profile.ico || '',
+            dic: prev.dic || profile.dic || '',
+            ic_dph: prev.ic_dph || profile.ic_dph || '',
+            client_type: prev.client_type || (profile.company_name ? 'Firma' : 'Osoba'),
+            customer_id: prev.customer_id || calData.user_id,
+          }));
         }
       }
     };
