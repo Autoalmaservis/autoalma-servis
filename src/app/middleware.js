@@ -1,11 +1,28 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 
 export async function middleware(req) {
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
+  let res = NextResponse.next({ request: { headers: req.headers } });
 
-  // 1. Overíme, či je používateľ vôbec prihlásený (má session)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+          res = NextResponse.next({ request: req });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
   const { data: { session } } = await supabase.auth.getSession();
 
   const url = req.nextUrl.clone();
@@ -16,11 +33,10 @@ export async function middleware(req) {
     '/faktury', '/nastavenia', '/databaza', '/spravovat-web',
     '/statistiky', '/prijem', '/historia',
   ];
-  const isAdminRoute   = ADMIN_ROUTES.some(r => path === r || path.startsWith(r + '/'));
+  const isAdminRoute    = ADMIN_ROUTES.some(r => path === r || path.startsWith(r + '/'));
   const isMechanikRoute = path.startsWith('/mechanik');
-  const isGarazRoute   = path.startsWith('/garaz');
+  const isGarazRoute    = path.startsWith('/garaz');
 
-  // Ak nie je prihlásený — presmeruj na login
   if (!session) {
     if (isAdminRoute || isMechanikRoute || isGarazRoute) {
       url.pathname = '/login';
@@ -29,7 +45,6 @@ export async function middleware(req) {
     return res;
   }
 
-  // 2. Ak je prihlásený, vytiahneme jeho rolu z tabuľky user_profiles
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('role')
@@ -38,21 +53,16 @@ export async function middleware(req) {
 
   const role = profile?.role;
 
-  // 3. LOGIKA BLOKOVANIA (Smerovanie podľa oprávnenia)
-
-  // Mechanik nemôže do admin sekcie
   if (isAdminRoute && role !== 'admin') {
     url.pathname = '/unauthorized';
     return NextResponse.redirect(url);
   }
 
-  // Admin nemôže do sekcie mechanika
   if (isMechanikRoute && role !== 'mechanik') {
     url.pathname = '/unauthorized';
     return NextResponse.redirect(url);
   }
 
-  // Zákazník patrí do garáže
   if ((isAdminRoute || isMechanikRoute) && role === 'zakaznik') {
     url.pathname = '/garaz';
     return NextResponse.redirect(url);
