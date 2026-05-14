@@ -434,18 +434,17 @@ export default function DetailZakazkyPage() {
       const rr = String(teraz.getFullYear()).slice(-2);
       const dnesnyDátum = `${dd}${mm}${rr}`;
 
-      let query = supabase.from('invoices').select('*', { count: 'exact', head: true });
+      // Poradové číslo sa počíta globálne (nie denne) — stále rastie
+      const { count: countOfficial } = await supabase
+        .from('invoices').select('*', { count: 'exact', head: true })
+        .not('invoice_number', 'ilike', 'A%');
+      const { count: countOdlozene } = await supabase
+        .from('invoices').select('*', { count: 'exact', head: true })
+        .ilike('invoice_number', 'A%');
 
-      if (isOfficial) {
-          query = query.like('invoice_number', `${dnesnyDátum}%`).not('invoice_number', 'ilike', 'A%');
-      } else {
-          query = query.like('invoice_number', `A${dnesnyDátum}%`);
-      }
-
-      const { count, error: countError } = await query;
-      if (countError) throw countError;
-
-      const poradie = String((count || 0) + 1).padStart(3, '0');
+      const poradie = isOfficial
+        ? String((countOfficial || 0) + 1).padStart(3, '0')
+        : String((countOdlozene || 0) + 1).padStart(3, '0');
       const konecneCislo = isOfficial ? `${dnesnyDátum}${poradie}` : `A${dnesnyDátum}${poradie}`;
       
       const invoicePayload = {
