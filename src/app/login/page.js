@@ -23,7 +23,7 @@ function LoginFormContent() {
 
     // 1. Prihlásenie do Supabase Auth
     const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: email.trim().toLowerCase(),
       password: password,
     });
 
@@ -78,7 +78,7 @@ function LoginFormContent() {
     setError(null);
     setMessage(null);
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: `${window.location.origin}/login/update-password`,
     });
 
