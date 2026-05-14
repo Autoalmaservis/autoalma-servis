@@ -6,10 +6,17 @@ export async function GET(request) {
 
   if (!ecv) return NextResponse.json({ error: 'Chýba EČV' }, { status: 400 });
 
-  console.log(`--- SKÚŠAM DOTAZ PRE: ${ecv} ---`);
+  const cleaned = ecv.replace(/\s+/g, '').toUpperCase();
+  if (!/^[A-Z0-9]{2,10}$/.test(cleaned)) {
+    return NextResponse.json({ error: 'Neplatný formát EČV' }, { status: 400 });
+  }
+
+  if (!process.env.DATABAZA_VOZIDIEL_API_KEY) {
+    return NextResponse.json({ error: 'Vyhľadávanie vozidiel nie je nakonfigurované' }, { status: 503 });
+  }
 
   try {
-    const response = await fetch(`https://www.databazavozidiel.sk/api/vehicles?ecv=${ecv}`, {
+    const response = await fetch(`https://www.databazavozidiel.sk/api/vehicles?ecv=${cleaned}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -20,21 +27,18 @@ export async function GET(request) {
       cache: 'no-store'
     });
 
-    // POZOR: Najprv načítame odpoveď ako text, aby sme videli, či to nie je náhodou chyba 403 alebo 404
     const rawText = await response.text();
-    console.log("SUROVÁ ODPOVEĎ ZO SERVERA:", rawText);
 
-    // Ak je to prázdne alebo to nie je JSON, tu to uvidíme
     try {
       const data = JSON.parse(rawText);
       return NextResponse.json(data);
-    } catch (parseError) {
-      console.error("CHYBA: Server neposlal JSON, ale niečo iné (napr. HTML chybu)");
-      return NextResponse.json({ error: "Neplatný formát dát", raw: rawText }, { status: 500 });
+    } catch {
+      console.error('vehicle-lookup: unexpected response format for EČV', cleaned);
+      return NextResponse.json({ error: 'Vozidlo sa nenašlo alebo externá služba nedostupná' }, { status: 502 });
     }
 
   } catch (error) {
-    console.error("CHYBA SPOJENIA:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('vehicle-lookup connection error:', error.message);
+    return NextResponse.json({ error: 'Chyba spojenia s databázou vozidiel' }, { status: 500 });
   }
 }

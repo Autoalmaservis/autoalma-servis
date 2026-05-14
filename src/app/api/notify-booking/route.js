@@ -4,6 +4,16 @@ export async function POST(request) {
   try {
     const { customerName, plateNumber, carModel, date, time, services, source, phone, email } = await request.json();
 
+    if (!customerName?.trim() || !plateNumber?.trim()) {
+      return Response.json({ error: 'Chýba meno zákazníka alebo ŠPZ' }, { status: 400 });
+    }
+    if (plateNumber.length > 20) {
+      return Response.json({ error: 'Neplatné ŠPZ' }, { status: 400 });
+    }
+    if (services && services.length > 2000) {
+      return Response.json({ error: 'Popis úkonov je príliš dlhý' }, { status: 400 });
+    }
+
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
       console.warn('SMTP not configured — booking email not sent');
       return Response.json({ ok: true, emailSent: false });
@@ -65,6 +75,6 @@ export async function POST(request) {
     return Response.json({ ok: true, emailSent: true });
   } catch (e) {
     console.error('booking email error:', e.message);
-    return Response.json({ ok: false, error: e.message }, { status: 500 });
+    return Response.json({ ok: false, error: 'Notifikácia sa neodoslala' }, { status: 500 });
   }
 }

@@ -29,12 +29,12 @@ export async function POST(request) {
     const garageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/garaz`;
     const loginUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/login`;
 
-    const credentialsBlock = createdByAdmin && password
+    const credentialsBlock = createdByAdmin
       ? `<div style="margin-top:20px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px">
           <p style="color:#856404;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px;font-weight:bold">Vaše prihlasovacie údaje</p>
           <p style="margin:4px 0;font-size:13px;color:#333"><strong>E-mail:</strong> ${email}</p>
-          <p style="margin:4px 0;font-size:13px;color:#333"><strong>Heslo:</strong> <span style="font-family:monospace;background:#f5f5f5;padding:2px 6px;border-radius:4px">${password}</span></p>
-          <p style="margin:12px 0 0;font-size:11px;color:#856404;font-weight:bold">⚠️ Odporúčame zmeniť heslo po prvom prihlásení.</p>
+          <p style="margin:8px 0 0;font-size:12px;color:#856404;">Heslo vám bolo odovzdané osobne alebo telefonicky recepciou servisu.</p>
+          <p style="margin:8px 0 0;font-size:11px;color:#856404;font-weight:bold">⚠️ Odporúčame zmeniť heslo po prvom prihlásení.</p>
         </div>`
       : '';
 

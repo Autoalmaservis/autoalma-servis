@@ -1,16 +1,36 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await supabase.auth.getUser(token);
+  return !!user;
+}
 
 export async function POST(request) {
+  if (!await isAuthenticated(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return Response.json({ error: 'PDF parsing nie je nakonfigurovaný' }, { status: 503 });
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('pdf');
     if (!file) return Response.json({ error: 'Žiadny súbor' }, { status: 400 });
 
+    if (file.size > 20 * 1024 * 1024) {
+      return Response.json({ error: 'Súbor je príliš veľký (max 20 MB)' }, { status: 413 });
+    }
+
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const arrayBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString('base64');
 
@@ -79,7 +99,6 @@ Dôležité pravidlá:
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      // Response got cut off — find the last complete item and close the JSON
       const lastComma = cleaned.lastIndexOf('},');
       const lastClose = cleaned.lastIndexOf('}');
       const cutAt = lastComma > 0 ? lastComma + 1 : lastClose > 0 ? lastClose + 1 : -1;
@@ -98,6 +117,6 @@ Dôležité pravidlá:
     return Response.json(parsed);
   } catch (e) {
     console.error('parse-supplier-pdf error:', e.message);
-    return Response.json({ error: e.message }, { status: 500 });
+    return Response.json({ error: 'Interná chyba pri spracovaní PDF' }, { status: 500 });
   }
 }

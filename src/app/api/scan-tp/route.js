@@ -1,25 +1,30 @@
-export const maxDuration = 30; // Sekundy na spracovanie (Vercel)
+export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req) {
-  try {
-    const apiKey = process.env.GOOGLE_AI_KEY;
-    if (!apiKey) throw new Error("API kľúč chýba!");
+  const apiKey = process.env.GOOGLE_AI_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'Skenovanie TP nie je nakonfigurované' }, { status: 503 });
+  }
 
+  try {
     const formData = await req.formData();
     const file = formData.get('image');
 
     if (!file || typeof file === 'string') {
-      return NextResponse.json({ error: "Súbor nebol nájdený." }, { status: 400 });
+      return NextResponse.json({ error: 'Súbor nebol nájdený.' }, { status: 400 });
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Obrázok je príliš veľký (max 10 MB)' }, { status: 413 });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Čítanie dát bezpečným spôsobom
     const buffer = await file.arrayBuffer();
     const base64String = Buffer.from(buffer).toString('base64');
 
@@ -35,11 +40,19 @@ export async function POST(req) {
 
     const response = await result.response;
     const text = response.text().replace(/```json|```/g, "").trim();
-    
-    return NextResponse.json({ status: true, data: JSON.parse(text) });
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error('scan-tp: AI returned invalid JSON');
+      return NextResponse.json({ error: 'AI nevrátila platné dáta. Skús odfotiť TP znova.' }, { status: 422 });
+    }
+
+    return NextResponse.json({ status: true, data });
 
   } catch (err) {
-    console.error("DETEKCIA CHYBY:", err); // Sleduj toto v TERMINÁLI
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('scan-tp error:', err.message);
+    return NextResponse.json({ error: 'Chyba pri skenovaní TP' }, { status: 500 });
   }
 }

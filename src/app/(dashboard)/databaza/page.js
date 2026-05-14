@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 
 const VAT = 1.23;
 
@@ -317,7 +318,7 @@ export default function DatabazaPage() {
     try {
       const formData = new FormData();
       formData.append('pdf', file);
-      const res = await fetch('/api/parse-supplier-pdf', { method: 'POST', body: formData });
+      const res = await fetchWithAuth('/api/parse-supplier-pdf', { method: 'POST', body: formData });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Chyba parsovanie');
       if (json.items && json.items.length > 0) {

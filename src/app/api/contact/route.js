@@ -4,6 +4,16 @@ export async function POST(request) {
   try {
     const { name, email, phone, plate, vehicle, year, message } = await request.json();
 
+    if (!name?.trim() || !message?.trim()) {
+      return Response.json({ error: 'Chýba meno alebo správa' }, { status: 400 });
+    }
+    if (message.length > 5000) {
+      return Response.json({ error: 'Správa je príliš dlhá' }, { status: 400 });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return Response.json({ error: 'Neplatná emailová adresa' }, { status: 400 });
+    }
+
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
       console.warn('SMTP not configured');
       return Response.json({ ok: true, emailSent: false });
@@ -54,6 +64,6 @@ export async function POST(request) {
     return Response.json({ ok: true, emailSent: true });
   } catch (e) {
     console.error('contact email error:', e.message);
-    return Response.json({ ok: true, emailSent: false });
+    return Response.json({ ok: false, error: 'Email sa nepodarilo odoslať' }, { status: 500 });
   }
 }
