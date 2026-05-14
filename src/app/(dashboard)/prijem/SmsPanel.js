@@ -3,38 +3,41 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { fetchWithAuth } from '@/app/lib/apiHelpers';
 
+const DEFAULT_INTRO  = 'Vazeny zakaznik p. {meno}, Vase vozidlo {spz}:';
+const DEFAULT_FOOTER = 'S pozdravom Autoalma - spolahlivy servis pre Vase vozidlo.';
+
 export default function SmsPanel({ phone, plate, customerName, userId }) {
   const [loading, setLoading] = useState(false);
   const [customText, setCustomText] = useState('');
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('09:00');
-  
-  // Stav pre šablóny z databázy
   const [templates, setTemplates] = useState([]);
+  const [smsIntro, setSmsIntro] = useState(DEFAULT_INTRO);
+  const [smsFooter, setSmsFooter] = useState(DEFAULT_FOOTER);
 
-  // --- NAČÍTANIE ŠABLÓN Z DB ---
   useEffect(() => {
-    const fetchTemplates = async () => {
-      const { data, error } = await supabase
-        .from('sms_templates') // Ak máš názov s pomlčkou, zmeň na 'sms-templates'
-        .select('*')
-        .order('label', { ascending: true });
-
-      if (!error && data) {
-        // Vložíme prázdnu možnosť na začiatok pre vlastný text
-        setTemplates([{ id: 'custom', label: '--- VLASTNÝ TEXT ---', content: '' }, ...data]);
+    const load = async () => {
+      const [tplRes, settRes] = await Promise.all([
+        supabase.from('sms_templates').select('*').order('label', { ascending: true }),
+        supabase.from('business_settings').select('id, value').in('id', ['sms_intro', 'sms_footer']),
+      ]);
+      if (tplRes.data) {
+        setTemplates([{ id: 'custom', label: '--- VLASTNÝ TEXT ---', content: '' }, ...tplRes.data]);
+      }
+      if (settRes.data) {
+        const intro  = settRes.data.find(r => r.id === 'sms_intro')?.value;
+        const footer = settRes.data.find(r => r.id === 'sms_footer')?.value;
+        if (intro)  setSmsIntro(intro);
+        if (footer) setSmsFooter(footer);
       }
     };
-
-    fetchTemplates();
+    load();
   }, []);
 
-  // 1. FIXNÝ ÚVOD
-  const baseMessage = `Vazeny zakaznik p. ${customerName || 'klient'}, Vase vozidlo ${plate || '---'}: `;
-  
-  // 2. FIXNÝ KONIEC
-  const footerMessage = `\nS pozdravom Autoalma - spolahlivy servis pre Vase vozidlo.`;
+  // Úvod s dosadením mena a ŠPZ
+  const baseMessage   = smsIntro.replace('{meno}', customerName || 'klient').replace('{spz}', plate || '---') + ' ';
+  const footerMessage = '\n' + smsFooter;
 
   const handleTemplateChange = (e) => {
     const selected = templates.find(t => t.id.toString() === e.target.value.toString());

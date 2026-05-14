@@ -72,7 +72,15 @@ export default function SmsEmailPage() {
   const [historyType, setHistoryType] = useState('all');
   const [historySearch, setHistorySearch] = useState('');
 
-  useEffect(() => { fetchTemplates(); fetchCustomers(); }, []);
+  // --- SMS rámec (úvod + záver) ---
+  const DEFAULT_INTRO = 'Vazeny zakaznik p. {meno}, Vase vozidlo {spz}:';
+  const DEFAULT_FOOTER = 'S pozdravom Autoalma - spolahlivy servis pre Vase vozidlo.';
+  const [smsIntro, setSmsIntro] = useState('');
+  const [smsFooter, setSmsFooter] = useState('');
+  const [savingFrame, setSavingFrame] = useState(false);
+  const [frameSaved, setFrameSaved] = useState(false);
+
+  useEffect(() => { fetchTemplates(); fetchCustomers(); fetchSmsFrame(); }, []);
 
   useEffect(() => {
     if (activeTab === 'planovane') fetchScheduled();
@@ -93,6 +101,28 @@ export default function SmsEmailPage() {
   const fetchTemplates = async () => {
     const { data } = await supabase.from('sms_templates').select('*').order('label', { ascending: true });
     if (data) setTemplates(data);
+  };
+
+  const fetchSmsFrame = async () => {
+    const { data } = await supabase
+      .from('business_settings')
+      .select('id, value')
+      .in('id', ['sms_intro', 'sms_footer']);
+    const introRow = data?.find(r => r.id === 'sms_intro');
+    const footerRow = data?.find(r => r.id === 'sms_footer');
+    setSmsIntro(introRow?.value ?? DEFAULT_INTRO);
+    setSmsFooter(footerRow?.value ?? DEFAULT_FOOTER);
+  };
+
+  const saveSmsFrame = async () => {
+    setSavingFrame(true);
+    await supabase.from('business_settings').upsert([
+      { id: 'sms_intro', value: smsIntro },
+      { id: 'sms_footer', value: smsFooter },
+    ]);
+    setSavingFrame(false);
+    setFrameSaved(true);
+    setTimeout(() => setFrameSaved(false), 2000);
   };
 
   // SMS kanál: type='sms', type='one-time', type=NULL → všetko čo nie je 'email'
@@ -316,6 +346,62 @@ export default function SmsEmailPage() {
         {activeTab === 'sablony' && (
           <div className="space-y-6">
             <ChannelToggle channel={channel} onChange={setChannel} />
+
+            {/* SMS rámec — úvod a záver */}
+            {channel === 'sms' && (
+              <div className="bg-zinc-900/40 border-2 border-blue-600/30 rounded-[2rem] p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-zinc-800">
+                  <span className="text-xl">📱</span>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Štruktúra SMS správy</p>
+                    <p className="text-[9px] text-zinc-500 font-bold mt-0.5">Úvod a záver sú spoločné pre všetky SMS. Použite <span className="text-blue-300 font-black">{'{meno}'}</span> a <span className="text-blue-300 font-black">{'{spz}'}</span> ako zástupné symboly.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Úvod správy</label>
+                  <textarea
+                    value={smsIntro}
+                    onChange={e => setSmsIntro(e.target.value)}
+                    rows={2}
+                    className="w-full bg-black border border-blue-600/30 focus:border-blue-500 p-4 rounded-2xl text-white font-bold outline-none resize-none text-sm"
+                  />
+                  <p className="text-[9px] text-zinc-600 font-bold ml-1">→ Zobrazí sa ako: <span className="text-zinc-400">{smsIntro.replace('{meno}', 'Ján Novák').replace('{spz}', 'BA123AB')}</span></p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-400 block">Záver správy</label>
+                  <textarea
+                    value={smsFooter}
+                    onChange={e => setSmsFooter(e.target.value)}
+                    rows={2}
+                    className="w-full bg-black border border-blue-600/30 focus:border-blue-500 p-4 rounded-2xl text-white font-bold outline-none resize-none text-sm"
+                  />
+                </div>
+
+                {/* Náhľad celej správy */}
+                <div className="bg-black/60 border border-zinc-800 rounded-2xl p-4">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Náhľad celej správy</p>
+                  <p className="text-xs text-zinc-300 font-bold leading-relaxed whitespace-pre-line">
+                    <span className="text-blue-400">{smsIntro.replace('{meno}', 'Ján Novák').replace('{spz}', 'BA123AB')}</span>
+                    {' '}[text šablóny]{'\n'}
+                    <span className="text-blue-400">{smsFooter}</span>
+                  </p>
+                </div>
+
+                <button
+                  onClick={saveSmsFrame}
+                  disabled={savingFrame}
+                  className={`px-8 py-3 font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all ${
+                    frameSaved ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white'
+                  }`}
+                >
+                  {frameSaved ? '✓ Uložené' : savingFrame ? 'Ukladám...' : '💾 Uložiť úvod a záver'}
+                </button>
+              </div>
+            )}
+
+            <div className="border-t border-zinc-800/50 pt-2" />
 
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-6 space-y-4">
               <h3 className={`text-[10px] font-black uppercase tracking-widest ${channelAccent}`}>
