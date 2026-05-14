@@ -204,8 +204,13 @@ export default function KlientiPage() {
         ic_dph: clientForm.ic_dph, role: 'zakaznik'
       };
       let res;
-      if (editMode) { res = await supabase.from('user_profiles').update(profilePayload).eq('email', clientForm.customer_email); }
-      else { res = await supabase.from('user_profiles').insert([profilePayload]); }
+      if (editMode) {
+        const { id: _id, ...updatePayload } = profilePayload;
+        res = await supabase.from('user_profiles').update(updatePayload).eq('id', clientForm.id);
+        if (!res.error && res.count === 0) {
+          res = await supabase.from('user_profiles').update(updatePayload).eq('email', clientForm.customer_email);
+        }
+      } else { res = await supabase.from('user_profiles').insert([profilePayload]); }
       if (res.error) throw res.error;
 
       if (!editMode && clientForm.customer_email) {
