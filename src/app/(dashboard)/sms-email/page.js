@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 
 const TABS = [
   { key: 'sablony',   label: 'Šablóny',  icon: '📋' },
@@ -176,7 +177,7 @@ export default function SmsEmailPage() {
   const sendNow = async (item) => {
     try {
       if (channel === 'sms') {
-        await fetch('/api/send-sms', {
+        await fetchWithAuth('/api/send-sms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: item.customer_phone, message: item.message }),
@@ -222,7 +223,7 @@ export default function SmsEmailPage() {
       const c = targets[i];
       try {
         if (channel === 'sms') {
-          await fetch('/api/send-sms', {
+          await fetchWithAuth('/api/send-sms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: c.phone, message: bulkMessage }),

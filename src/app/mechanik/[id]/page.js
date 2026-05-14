@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 import { useParams, useRouter } from 'next/navigation';
 
 export default function PracovnyList() {
@@ -157,7 +158,7 @@ export default function PracovnyList() {
       const { data: phoneSetting } = await supabase.from('business_settings').select('value').eq('id', 'company_phone').maybeSingle();
       const receptionPhone = phoneSetting?.value || '0940449449';
 
-      await fetch('/api/send-sms', {
+      await fetchWithAuth('/api/send-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: receptionPhone, message: smsMsg }),

@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 
 export default function CompletionModal({ zakazka, items = [], employees = [], onClose, onComplete }) {
   const [completeChannel, setCompleteChannel] = useState('sms');
@@ -82,7 +83,7 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
       }
       if (completeSendMsg && completeMsg.trim()) {
         if (completeChannel === 'sms' && zakazka.customer_phone) {
-          await fetch('/api/send-sms', {
+          await fetchWithAuth('/api/send-sms', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone: zakazka.customer_phone, message: completeMsg }),

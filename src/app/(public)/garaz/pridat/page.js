@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default function PridatAutoPage() {
   const router = useRouter();
@@ -63,48 +62,30 @@ export default function PridatAutoPage() {
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
     setApiLoading(true);
     try {
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GOOGLE_AI_KEY); 
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      reader.onloadend = async () => {
-        const bytes = reader.result;
-        const base64Data = Buffer.from(bytes).toString('base64');
-
-        const prompt = `Z tejto fotky technického preukazu vytiahni JSON: brand, model, vin, engine_volume, engine_power, fuel_type, year. Vráť len čistý JSON bez rečí okolo.`;
-
-        const result = await model.generateContent([
-          prompt,
-          { inlineData: { data: base64Data, mimeType: file.type } }
-        ]);
-
-        const response = await result.response;
-        const text = response.text().replace(/```json|```/g, "").trim();
-        const carData = JSON.parse(text);
-
-        setFormData(prev => ({ 
-          ...prev, 
-          brand: carData.brand || prev.brand,
-          model: carData.model || prev.model,
-          vin: carData.vin || prev.vin,
-          year: carData.year || prev.year,
-          engine_volume: carData.engine_volume || prev.engine_volume,
-          engine_power: carData.engine_power || prev.engine_power,
-          fuel_type: carData.fuel_type || prev.fuel_type,
-        }));
-
-        alert("Údaje z TP načítané pomocou AI!");
-        setApiLoading(false);
-      };
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/scan-tp', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (!res.ok || !json.data) throw new Error(json.error || 'Chyba AI');
+      const carData = json.data;
+      setFormData(prev => ({
+        ...prev,
+        brand: carData.brand || prev.brand,
+        model: carData.model || prev.model,
+        vin: carData.vin || prev.vin,
+        year: carData.year || prev.year,
+        engine_volume: carData.engine_volume || prev.engine_volume,
+        engine_power: carData.engine_power || prev.engine_power,
+        fuel_type: carData.fuel_type || prev.fuel_type,
+      }));
+      alert("Údaje z TP načítané pomocou AI!");
     } catch (err) {
       console.error("AI Error:", err);
       alert("Chyba pri skenovaní TP AI modelom.");
-      setApiLoading(false);
     }
+    setApiLoading(false);
   };
 
   // --- FUNKCIA 3: ZÁPIS DO SUPABASE - MAPOVANIE NA TVOJU TABUĽKU ---

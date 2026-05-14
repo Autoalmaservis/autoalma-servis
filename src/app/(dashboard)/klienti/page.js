@@ -1,9 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default function KlientiPage() {
   const [klienti, setKlienti] = useState([]);
@@ -130,27 +130,20 @@ export default function KlientiPage() {
     if (!file) return;
     setApiLoading(true);
     try {
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GOOGLE_AI_KEY); 
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-      const reader = new FileReader();
-      reader.readAsArrayBuffer(file);
-      reader.onloadend = async () => {
-        const bytes = reader.result;
-        const base64Data = btoa(new Uint8Array(bytes).reduce((data, byte) => data + String.fromCharCode(byte), ''));
-        const prompt = `Z tejto fotky technického preukazu vytiahni JSON: brand, model, vin, engine_volume, engine_power, fuel_type, year. Vráť len čistý JSON bez rečí okolo.`;
-        const result = await model.generateContent([prompt, { inlineData: { data: base64Data, mimeType: file.type } }]);
-        const response = await result.response;
-        const text = response.text().replace(/```json|```/g, "").trim();
-        const carData = JSON.parse(text);
-        setCarForm(prev => ({ 
-          ...prev, 
-          brand: carData.brand || prev.brand, model: carData.model || prev.model, vin_number: carData.vin || prev.vin_number,
-          year_produced: carData.year || prev.year_produced, engine_volume: carData.engine_volume || prev.engine_volume,
-          engine_power: carData.engine_power || prev.engine_power, fuel_type: carData.fuel_type || prev.fuel_type,
-        }));
-        setApiLoading(false);
-      };
-    } catch (err) { alert("Chyba pri AI skenovaní."); setApiLoading(false); }
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await fetch('/api/scan-tp', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (!res.ok || !json.data) throw new Error(json.error || 'Chyba AI');
+      const carData = json.data;
+      setCarForm(prev => ({
+        ...prev,
+        brand: carData.brand || prev.brand, model: carData.model || prev.model, vin_number: carData.vin || prev.vin_number,
+        year_produced: carData.year || prev.year_produced, engine_volume: carData.engine_volume || prev.engine_volume,
+        engine_power: carData.engine_power || prev.engine_power, fuel_type: carData.fuel_type || prev.fuel_type,
+      }));
+    } catch (err) { alert("Chyba pri AI skenovaní: " + err.message); }
+    setApiLoading(false);
   };
 
   // --- 5. UKLADANIE VOZIDLA DO SUPABASE ---
@@ -214,7 +207,7 @@ export default function KlientiPage() {
       if (res.error) throw res.error;
 
       if (!editMode && clientForm.customer_email) {
-        fetch('/api/send-welcome-email', {
+        fetchWithAuth('/api/send-welcome-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

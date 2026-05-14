@@ -1,4 +1,17 @@
+import { createClient } from '@supabase/supabase-js';
+
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await supabase.auth.getUser(token);
+  return !!user;
+}
+
 export async function POST(request) {
+  if (!await isAuthenticated(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { phone, message } = await request.json();
     if (!phone || !message) return Response.json({ error: 'Chýba číslo alebo správa' }, { status: 400 });

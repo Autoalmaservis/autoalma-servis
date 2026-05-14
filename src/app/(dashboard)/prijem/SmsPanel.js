@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 
 export default function SmsPanel({ phone, plate, customerName, userId }) {
   const [loading, setLoading] = useState(false);
@@ -83,7 +84,7 @@ export default function SmsPanel({ phone, plate, customerName, userId }) {
           }]);
         }
 
-        const smsRes = await fetch('/api/send-sms', {
+        const smsRes = await fetchWithAuth('/api/send-sms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone, message: finalMessage }),

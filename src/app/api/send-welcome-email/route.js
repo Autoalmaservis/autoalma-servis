@@ -1,8 +1,23 @@
 import { createMailTransport } from '@/app/lib/mailer';
+import { createClient } from '@supabase/supabase-js';
+
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await supabase.auth.getUser(token);
+  return !!user;
+}
 
 export async function POST(request) {
   try {
-    const { email, name, password, createdByAdmin } = await request.json();
+    const body = await request.json();
+    const { email, name, password, createdByAdmin } = body;
+
+    // Admin-created accounts (with credentials) require authentication
+    if (createdByAdmin && !await isAuthenticated(request)) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     if (!email) return Response.json({ error: 'Chýba e-mail' }, { status: 400 });
 

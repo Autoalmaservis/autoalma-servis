@@ -6,6 +6,7 @@ import daygridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SmsPanel from '../prijem/SmsPanel'; // Import SMS panela
@@ -472,7 +473,7 @@ export default function KalendarPage() {
         }]);
       }
 
-      fetch('/api/send-welcome-email', {
+      fetchWithAuth('/api/send-welcome-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: clientForm.email.trim(), name: clientForm.full_name, password: clientForm.password, createdByAdmin: true }),

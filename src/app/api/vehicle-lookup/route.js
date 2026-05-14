@@ -14,7 +14,7 @@ export async function GET(request) {
       headers: {
         'Accept': 'application/json',
         'Version': '2',
-        'Authorization': 'Bearer JeEwhfoFooklmPqc0brJY5cByzZy0gfEV22QFbCVThlrniGhgJMMIB1egtXh5Rud',
+        'Authorization': `Bearer ${process.env.DATABAZA_VOZIDIEL_API_KEY}`,
         'User-Agent': 'Mozilla/5.0'
       },
       cache: 'no-store'

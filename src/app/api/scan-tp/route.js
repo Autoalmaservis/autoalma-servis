@@ -1,8 +1,7 @@
 export const maxDuration = 30; // Sekundy na spracovanie (Vercel)
 export const dynamic = 'force-dynamic';
 
-// Toto povie Next.js, aby neobmedzoval veľkosť spracovania (len pre určité verzie, ale je dobré to mať)
-// import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req) {
