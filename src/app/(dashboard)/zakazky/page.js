@@ -78,7 +78,7 @@ export default function ZakazkyZoznamPage() {
 
       const jobsWithPrices = data.map(job => {
         const materialSubtotal = job.job_items?.filter(i => i.type === 'Materiál').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
-        const workSubtotal = job.job_items?.filter(i => i.type === 'Práca').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
+        const workSubtotal = job.job_items?.filter(i => i.type === 'Práca' || i.type === 'Úkon').reduce((acc, item) => acc + (item.quantity * item.unit_price), 0) || 0;
         const subtotal = materialSubtotal + workSubtotal;
         
         const offerStatus = job.price_offers && job.price_offers.length > 0 
