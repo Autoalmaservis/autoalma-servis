@@ -217,7 +217,9 @@ export default function NovaPonukaPage() {
 
             if (sendSms && zakazka?.customer_phone) {
                 const ponukaUrl = `${window.location.origin}/ponuka/${offerData.id}`;
-                const smsText = `Vazeny p. ${zakazka.customer_name || 'zakaznik'}, servis Vasho vozidla ${zakazka.plate_number || ''} - AutoAlma Servis Vam poslala cenovu ponuku. Pre zobrazenie a schvalenie kliknite na: ${ponukaUrl}`;
+                const { data: settData } = await supabase.from('business_settings').select('id, value').in('id', ['company_name']);
+                const companyName = settData?.find(r => r.id === 'company_name')?.value || 'AutoAlma Servis';
+                const smsText = `Vazeny p. ${zakazka.customer_name || 'zakaznik'}, servis Vasho vozidla ${zakazka.plate_number || ''} - ${companyName} Vam poslala cenovu ponuku. Pre zobrazenie a schvalenie kliknite na: ${ponukaUrl}`;
                 await fetchWithAuth('/api/send-sms', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

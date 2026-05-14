@@ -79,6 +79,7 @@ export default function SmsEmailPage() {
   const [smsFooter, setSmsFooter] = useState('');
   const [savingFrame, setSavingFrame] = useState(false);
   const [frameSaved, setFrameSaved] = useState(false);
+  const [companyName, setCompanyName] = useState('AutoAlma Servis');
 
   useEffect(() => { fetchTemplates(); fetchCustomers(); fetchSmsFrame(); }, []);
 
@@ -107,11 +108,12 @@ export default function SmsEmailPage() {
     const { data } = await supabase
       .from('business_settings')
       .select('id, value')
-      .in('id', ['sms_intro', 'sms_footer']);
+      .in('id', ['sms_intro', 'sms_footer', 'company_name']);
     const introRow = data?.find(r => r.id === 'sms_intro');
     const footerRow = data?.find(r => r.id === 'sms_footer');
     setSmsIntro(introRow?.value ?? DEFAULT_INTRO);
     setSmsFooter(footerRow?.value ?? DEFAULT_FOOTER);
+    setCompanyName(data?.find(r => r.id === 'company_name')?.value || 'AutoAlma Servis');
   };
 
   const saveSmsFrame = async () => {
@@ -235,7 +237,7 @@ export default function SmsEmailPage() {
         await fetch('/api/send-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: item.customer_email, subject: item.subject || 'Správa od AutoAlma', message: item.message }),
+          body: JSON.stringify({ email: item.customer_email, subject: item.subject || `Správa od ${companyName}`, message: item.message }),
         });
       }
       await supabase.from('scheduled_sms').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', item.id);

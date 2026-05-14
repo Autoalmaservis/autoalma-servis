@@ -1,5 +1,6 @@
 import { createMailTransport } from '@/app/lib/mailer';
 import { createClient } from '@supabase/supabase-js';
+import { getCompanySettings } from '@/app/lib/companySettings';
 
 async function isAuthenticated(request) {
   const token = request.headers.get('authorization')?.replace('Bearer ', '');
@@ -26,6 +27,7 @@ export async function POST(request) {
       return Response.json({ ok: true, emailSent: false });
     }
 
+    const company = await getCompanySettings();
     const garageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/garaz`;
     const loginUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/login`;
 
@@ -39,13 +41,13 @@ export async function POST(request) {
       : '';
 
     const introText = createdByAdmin
-      ? `Prijímací technik AutoAlma Servis vám vytvoril prístup do zákazníckej zóny — <strong>Vašej Garáže</strong>.`
-      : `Váš účet bol úspešne vytvorený. Vitajte v zákazníckej zóne AutoAlma Servis.`;
+      ? `Prijímací technik ${company.name} vám vytvoril prístup do zákazníckej zóny — <strong>Vašej Garáže</strong>.`
+      : `Váš účet bol úspešne vytvorený. Vitajte v zákazníckej zóne ${company.name}.`;
 
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9f9f9;padding:32px;border-radius:12px;border:1px solid #e5e5e5">
         <div style="border-bottom:3px solid #ef4444;padding-bottom:14px;margin-bottom:22px">
-          <p style="color:#999;font-size:10px;text-transform:uppercase;letter-spacing:.3em;margin:0 0 4px">AutoAlma Servis · Zákaznícka zóna</p>
+          <p style="color:#999;font-size:10px;text-transform:uppercase;letter-spacing:.3em;margin:0 0 4px">${company.name} · Zákaznícka zóna</p>
           <h1 style="color:#111;font-size:22px;margin:0;font-style:italic;text-transform:uppercase">🔑 Váš prístup do Garáže</h1>
         </div>
 
@@ -73,7 +75,7 @@ export async function POST(request) {
         <p style="color:#999;font-size:12px;margin-top:20px;text-align:center">
           Ak tlačidlo nefunguje, kliknite na: <a href="${loginUrl}" style="color:#ef4444">${loginUrl}</a>
         </p>
-        <p style="color:#ccc;font-size:10px;text-align:center;margin-top:16px">AutoAlma Servis · Svornosti 119, 821 06 Bratislava · autoalma.sk</p>
+        <p style="color:#ccc;font-size:10px;text-align:center;margin-top:16px">${company.name} · ${company.web}</p>
       </div>`;
 
     const subject = createdByAdmin
@@ -82,7 +84,7 @@ export async function POST(request) {
 
     const transporter = createMailTransport();
     await transporter.sendMail({
-      from: `"AutoAlma Servis" <${process.env.SMTP_USER}>`,
+      from: `"${company.name}" <${process.env.SMTP_USER}>`,
       to: email,
       subject,
       html,

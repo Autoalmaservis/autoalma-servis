@@ -23,6 +23,7 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
   const [reminderDate, setReminderDate] = useState('');
   const [reminderTime, setReminderTime] = useState('09:00');
   const [reminderSaving, setReminderSaving] = useState(false);
+  const [company, setCompany] = useState({ name: 'AutoAlma Servis', phone: '0940 449 449', email: 'autoalma@autoalma.sk' });
 
   useEffect(() => {
     const plate = zakazka.plate_number || '';
@@ -30,11 +31,23 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
     Promise.all([
       supabase.from('sms_templates').select('*').order('label'),
       supabase.from('scheduled_sms').select('*').eq('plate_number', plate).eq('status', 'pending').order('scheduled_for', { ascending: true }),
-    ]).then(([tplRes, schedRes]) => {
+      supabase.from('business_settings').select('id, value').in('id', ['company_name', 'company_phone', 'company_email']),
+    ]).then(([tplRes, schedRes, settRes]) => {
       setCompleteTemplates(tplRes.data || []);
       setExistingScheduled(schedRes.data || []);
+      if (settRes.data) {
+        const get = (key, fb) => settRes.data.find(r => r.id === key)?.value || fb;
+        const co = {
+          name:  get('company_name',  'AutoAlma Servis'),
+          phone: get('company_phone', '0940 449 449'),
+          email: get('company_email', 'autoalma@autoalma.sk'),
+        };
+        setCompany(co);
+        setCompleteMsg(`Dobry den p. ${name}, Vase vozidlo ${plate} je pripravene na vyzdvihnutie. Tesime sa na Vas! ${co.name}, tel: ${co.phone}.`);
+      } else {
+        setCompleteMsg(`Dobry den p. ${name}, Vase vozidlo ${plate} je pripravene na vyzdvihnutie. Tesime sa na Vas! AutoAlma servis, tel: 0940 449 449.`);
+      }
     });
-    setCompleteMsg(`Dobry den p. ${name}, Vase vozidlo ${plate} je pripravene na vyzdvihnutie. Tesime sa na Vas! AutoAlma servis, tel: 0940 449 449.`);
     setCompleteSubject(`Vaše vozidlo ${plate} je pripravené na vyzdvihnutie`);
   }, []);
 
@@ -194,7 +207,7 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
                   <button
                     onClick={() => {
                       setCompleteChannel('sms');
-                      setCompleteMsg(`Dobry den p. ${zakazka.customer_name || 'klient'}, Vase vozidlo ${zakazka.plate_number || ''} je pripravene na vyzdvihnutie. Tesime sa na Vas! AutoAlma servis, tel: 0940 449 449.`);
+                      setCompleteMsg(`Dobry den p. ${zakazka.customer_name || 'klient'}, Vase vozidlo ${zakazka.plate_number || ''} je pripravene na vyzdvihnutie. Tesime sa na Vas! ${company.name}, tel: ${company.phone}.`);
                     }}
                     className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${completeChannel === 'sms' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}
                   >
@@ -203,7 +216,7 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
                   <button
                     onClick={() => {
                       setCompleteChannel('email');
-                      setCompleteMsg(`Dobrý deň, ${zakazka.customer_name || 'vážený zákazník'}.\n\nVaše vozidlo ${zakazka.plate_number} – ${zakazka.car_brand_model || ''} je pripravené na vyzdvihnutie.\n\nTešíme sa na Vás!\n\nAutoAlma servis\nTel: 0940 449 449 | autoalma@autoalma.sk`);
+                      setCompleteMsg(`Dobrý deň, ${zakazka.customer_name || 'vážený zákazník'}.\n\nVaše vozidlo ${zakazka.plate_number} – ${zakazka.car_brand_model || ''} je pripravené na vyzdvihnutie.\n\nTešíme sa na Vás!\n\n${company.name}\nTel: ${company.phone} | ${company.email}`);
                     }}
                     className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border ${completeChannel === 'email' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:text-white'}`}
                   >

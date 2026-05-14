@@ -1,4 +1,5 @@
 import { createMailTransport } from '@/app/lib/mailer';
+import { getCompanySettings } from '@/app/lib/companySettings';
 
 export async function POST(request) {
   try {
@@ -18,6 +19,8 @@ export async function POST(request) {
       console.warn('SMTP not configured — booking email not sent');
       return Response.json({ ok: true, emailSent: false });
     }
+
+    const company = await getCompanySettings();
 
     const dateFormatted = date
       ? new Date(`${date}T12:00:00`).toLocaleDateString('sk-SK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
@@ -51,7 +54,7 @@ export async function POST(request) {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9f9f9;padding:32px;border-radius:12px;border:1px solid #e5e5e5">
         <div style="border-bottom:3px solid #ef4444;padding-bottom:14px;margin-bottom:22px">
-          <p style="color:#999;font-size:10px;text-transform:uppercase;letter-spacing:.3em;margin:0 0 4px">AutoAlma Servis · ${source || 'Online objednávka'}</p>
+          <p style="color:#999;font-size:10px;text-transform:uppercase;letter-spacing:.3em;margin:0 0 4px">${company.name} · ${source || 'Online objednávka'}</p>
           <h1 style="color:#111;font-size:20px;margin:0;font-style:italic;text-transform:uppercase">🔧 Nová objednávka</h1>
         </div>
         <table style="width:100%;border-collapse:collapse">${tableRows}</table>
@@ -61,13 +64,13 @@ export async function POST(request) {
             📅 Otvoriť kalendár
           </a>
         </div>
-        <p style="color:#ccc;font-size:10px;text-align:center;margin-top:24px">AutoAlma Servis · autoalma.sk</p>
+        <p style="color:#ccc;font-size:10px;text-align:center;margin-top:24px">${company.name} · ${company.web}</p>
       </div>`;
 
     const transporter = createMailTransport();
     await transporter.sendMail({
-      from: `"AutoAlma Servis" <${process.env.SMTP_USER}>`,
-      to: 'autoalma@autoalma.sk',
+      from: `"${company.name}" <${process.env.SMTP_USER}>`,
+      to: company.email,
       subject: `Nová objednávka: ${plateNumber} — ${dateFormatted}`,
       html,
     });

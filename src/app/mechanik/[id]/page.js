@@ -153,10 +153,10 @@ export default function PracovnyList() {
 
       const plate = job?.plate_number || '';
       const customer = job?.customer_name || '';
-      const smsMsg = `AutoAlma Servis: Mechanik nahlásil nové zistenie na zákazke ${plate} (${customer}): "${findingText.trim()}" — zákazka pokračuje.`;
-
-      const { data: phoneSetting } = await supabase.from('business_settings').select('value').eq('id', 'company_phone').maybeSingle();
-      const receptionPhone = phoneSetting?.value || '0940449449';
+      const { data: bizData } = await supabase.from('business_settings').select('id, value').in('id', ['company_name', 'company_phone']);
+      const companyName    = bizData?.find(r => r.id === 'company_name')?.value  || 'AutoAlma Servis';
+      const receptionPhone = bizData?.find(r => r.id === 'company_phone')?.value || '0940449449';
+      const smsMsg = `${companyName}: Mechanik nahlásil nové zistenie na zákazke ${plate} (${customer}): "${findingText.trim()}" — zákazka pokračuje.`;
 
       await fetchWithAuth('/api/send-sms', {
         method: 'POST',
