@@ -7,6 +7,7 @@ const TABS = [
   { key: 'sablony',   label: 'Šablóny',  icon: '📋' },
   { key: 'planovane', label: 'Plánované', icon: '📅' },
   { key: 'hromadne',  label: 'Hromadné',  icon: '📣' },
+  { key: 'historia',  label: 'História',  icon: '📊' },
 ];
 
 function fmtDt(iso) {
@@ -65,10 +66,17 @@ export default function SmsEmailPage() {
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState(null);
 
+  // --- História ---
+  const [history, setHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyType, setHistoryType] = useState('all');
+  const [historySearch, setHistorySearch] = useState('');
+
   useEffect(() => { fetchTemplates(); fetchCustomers(); }, []);
 
   useEffect(() => {
     if (activeTab === 'planovane') fetchScheduled();
+    if (activeTab === 'historia') fetchHistory();
   }, [activeTab, channel]);
 
   // Reset výberu zákazníkov a šablóny pri zmene kanála
@@ -118,6 +126,17 @@ export default function SmsEmailPage() {
       .order('full_name', { ascending: true });
     if (data) setCustomers(data);
     setLoadingCust(false);
+  };
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    const { data } = await supabase
+      .from('scheduled_sms')
+      .select('*')
+      .eq('status', 'sent')
+      .order('scheduled_for', { ascending: false });
+    if (data) setHistory(data);
+    setLoadingHistory(false);
   };
 
   // Filtrovanie šablón podľa kanála (type pole, fallback na 'sms')
@@ -562,6 +581,99 @@ ALTER TABLE sms_templates ADD COLUMN IF NOT EXISTS subject text;`}
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ===== TAB: HISTÓRIA ===== */}
+        {activeTab === 'historia' && (
+          <div className="space-y-6">
+
+            {/* KPI karty */}
+            {!loadingHistory && (
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: 'Odoslaných SMS', count: history.filter(h => !h.type || h.type === 'sms' || h.type === 'one-time').length, color: 'text-blue-400', bg: 'bg-blue-600/10 border-blue-600/30' },
+                  { label: 'Odoslaných emailov', count: history.filter(h => h.type === 'email').length, color: 'text-purple-400', bg: 'bg-purple-600/10 border-purple-600/30' },
+                  { label: 'Spolu správ', count: history.length, color: 'text-white', bg: 'bg-zinc-800/60 border-zinc-700' },
+                ].map(({ label, count, color, bg }) => (
+                  <div key={label} className={`border rounded-[1.5rem] p-5 text-center ${bg}`}>
+                    <p className={`text-3xl font-black italic ${color}`}>{count}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mt-1">{label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Filter + search */}
+            <div className="flex flex-wrap gap-3 items-center">
+              <div className="flex gap-2">
+                {[['all', 'Všetky'], ['sms', '📱 SMS'], ['email', '✉️ Email']].map(([key, label]) => (
+                  <button key={key} onClick={() => setHistoryType(key)}
+                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${
+                      historyType === key ? 'bg-zinc-700 border-zinc-500 text-white' : 'bg-black border-zinc-800 text-zinc-600 hover:text-zinc-300'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                placeholder="Hľadať podľa mena alebo ŠPZ..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                className="flex-1 min-w-[200px] bg-black border border-zinc-700 focus:border-zinc-500 p-3 rounded-xl text-white text-xs font-bold outline-none"
+              />
+            </div>
+
+            {/* Zoznam */}
+            {loadingHistory ? (
+              <div className="text-center text-zinc-600 animate-pulse py-12 font-black uppercase text-xs">Načítavam...</div>
+            ) : (() => {
+              const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+              const q = nd(historySearch);
+              const visible = history.filter(h => {
+                const typeOk = historyType === 'all'
+                  || (historyType === 'sms' && (!h.type || h.type === 'sms' || h.type === 'one-time'))
+                  || (historyType === 'email' && h.type === 'email');
+                const searchOk = !q || nd(h.customer_name).includes(q) || nd(h.plate_number).includes(q);
+                return typeOk && searchOk;
+              });
+
+              if (visible.length === 0) return (
+                <div className="text-center text-zinc-700 font-black uppercase text-xs tracking-widest py-16 border-2 border-dashed border-zinc-900 rounded-[2rem]">
+                  Žiadne odoslané správy
+                </div>
+              );
+
+              return (
+                <div className="space-y-2">
+                  {visible.map(item => {
+                    const isSms = !item.type || item.type === 'sms' || item.type === 'one-time';
+                    return (
+                      <div key={item.id} className="bg-zinc-950 border border-zinc-800 rounded-[1.5rem] p-4">
+                        <div className="flex items-start gap-3">
+                          <span className={`shrink-0 text-[8px] font-black px-2 py-1 rounded border mt-0.5 ${isSms ? 'bg-blue-600/20 text-blue-400 border-blue-800' : 'bg-purple-600/20 text-purple-400 border-purple-800'}`}>
+                            {isSms ? '📱 SMS' : '✉️ Email'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 mb-1">
+                              <span className="font-black text-sm text-white">{item.customer_name || '—'}</span>
+                              {item.plate_number && <span className="bg-white text-black text-[9px] font-black px-2 py-0.5 rounded-lg">{item.plate_number}</span>}
+                              <span className="text-zinc-600 text-[10px] font-black ml-auto">{fmtDt(item.scheduled_for)}</span>
+                            </div>
+                            <p className="text-zinc-500 text-[10px] font-black uppercase mb-1">
+                              {isSms ? `📞 ${item.customer_phone || '—'}` : `✉️ ${item.customer_email || '—'}`}
+                            </p>
+                            {item.subject && <p className="text-purple-300 text-[10px] font-bold mb-1">Predmet: {item.subject}</p>}
+                            <p className="text-zinc-400 text-xs font-bold leading-relaxed line-clamp-2">{item.message}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 
