@@ -122,6 +122,15 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
             scheduled_for: new Date().toISOString(),
             status: 'sent',
           }]);
+          if (zakazka.customer_id) {
+            await supabase.from('notifications').insert([{
+              user_id: zakazka.customer_id,
+              title: '✅ Auto je pripravené',
+              content: completeMsg,
+              is_read: false,
+              type: 'success',
+            }]);
+          }
         }
       }
       if (scheduleNext && nextType && nextDate) {

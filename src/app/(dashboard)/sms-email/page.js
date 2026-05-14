@@ -190,6 +190,15 @@ export default function SmsEmailPage() {
         });
       }
       await supabase.from('scheduled_sms').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', item.id);
+      if (item.user_id) {
+        await supabase.from('notifications').insert([{
+          user_id: item.user_id,
+          title: 'Správa zo servisu',
+          content: item.message,
+          is_read: false,
+          type: 'info',
+        }]);
+      }
       fetchScheduled();
     } catch (err) {
       alert('Chyba: ' + err.message);
@@ -236,6 +245,7 @@ export default function SmsEmailPage() {
           });
         }
         await supabase.from('scheduled_sms').insert([{
+          user_id: c.id,
           customer_phone: channel === 'sms' ? c.phone : null,
           customer_email: channel === 'email' ? c.email : null,
           customer_name: c.full_name,
@@ -244,6 +254,13 @@ export default function SmsEmailPage() {
           type: channel,
           scheduled_for: new Date().toISOString(),
           status: 'sent',
+        }]);
+        await supabase.from('notifications').insert([{
+          user_id: c.id,
+          title: 'Správa zo servisu',
+          content: bulkMessage,
+          is_read: false,
+          type: 'info',
         }]);
       } catch {}
       setSendProgress({ done: i + 1, total: targets.length });

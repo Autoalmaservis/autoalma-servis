@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, Fragment } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 import { useParams, useRouter } from 'next/navigation';
 
 export default function NovaPonukaPage() {
@@ -17,6 +18,7 @@ export default function NovaPonukaPage() {
     const [rateCategories, setRateCategories] = useState([]);
     const [jobTasks, setJobTasks] = useState([]);
     const [jobItems, setJobItems] = useState([]);
+    const [sendSms, setSendSms] = useState(false);
 
     const [newItem, setNewItem] = useState({
         group_name: '',
@@ -213,6 +215,16 @@ export default function NovaPonukaPage() {
                 }]);
             }
 
+            if (sendSms && zakazka?.customer_phone) {
+                const ponukaUrl = `${window.location.origin}/ponuka/${offerData.id}`;
+                const smsText = `Vazeny p. ${zakazka.customer_name || 'zakaznik'}, servis Vasho vozidla ${zakazka.plate_number || ''} - AutoAlma Servis Vam poslala cenovu ponuku. Pre zobrazenie a schvalenie kliknite na: ${ponukaUrl}`;
+                await fetchWithAuth('/api/send-sms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: zakazka.customer_phone, message: smsText }),
+                });
+            }
+
             router.push(`/zakazky/${id}`);
         } catch (err) {
             alert("Chyba pri ukladaní: " + err.message);
@@ -249,6 +261,24 @@ export default function NovaPonukaPage() {
                         <button onClick={saveOnly} disabled={saving} className="bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all tracking-widest">
                             💾 Iba uložiť
                         </button>
+
+                        <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-2">
+                            {zakazka?.customer_phone ? (
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={sendSms}
+                                        onChange={e => setSendSms(e.target.checked)}
+                                        className="w-4 h-4 accent-blue-500 cursor-pointer"
+                                    />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300 whitespace-nowrap">
+                                        📱 SMS ({zakazka.customer_phone})
+                                    </span>
+                                </label>
+                            ) : (
+                                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600 whitespace-nowrap">📵 Chýba tel. číslo</span>
+                            )}
+                        </div>
 
                         <button onClick={saveOffer} disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs shadow-xl shadow-blue-900/20 transition-all tracking-widest">
                             {saving ? 'Ukladám...' : '🚀 Odoslať ponuku'}
