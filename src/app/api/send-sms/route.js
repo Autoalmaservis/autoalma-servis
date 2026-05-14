@@ -28,7 +28,7 @@ export async function POST(request) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        application_id: process.env.BULKGATE_APP_ID,
+        application_id: parseInt(process.env.BULKGATE_APP_ID),
         application_token: process.env.BULKGATE_APP_TOKEN,
         number,
         text: message,
@@ -41,7 +41,8 @@ export async function POST(request) {
 
     if (!res.ok || data?.data?.status === 'error') {
       console.error('BulkGate error:', JSON.stringify(data));
-      return Response.json({ error: data?.data?.error || 'Chyba SMS brány' }, { status: 502 });
+      const errMsg = data?.data?.error_desc || data?.data?.error || data?.error || 'Chyba SMS brány';
+      return Response.json({ error: `BulkGate: ${errMsg}` }, { status: 502 });
     }
 
     return Response.json({ ok: true, sms_id: data?.data?.sms_id });
