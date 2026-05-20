@@ -98,19 +98,16 @@ export default function BanneryPage() {
     fetchBanners();
   };
 
-  const moveUp = async (b, i) => {
-    if (i === 0) return;
-    const prev = banners[i - 1];
-    await supabase.from('banners').update({ sort_order: prev.sort_order }).eq('id', b.id);
-    await supabase.from('banners').update({ sort_order: b.sort_order }).eq('id', prev.id);
-    fetchBanners();
-  };
-
-  const moveDown = async (b, i) => {
-    if (i === banners.length - 1) return;
-    const next = banners[i + 1];
-    await supabase.from('banners').update({ sort_order: next.sort_order }).eq('id', b.id);
-    await supabase.from('banners').update({ sort_order: b.sort_order }).eq('id', next.id);
+  const moveTo = async (bannerId, newPos) => {
+    newPos = Math.max(0, Math.min(banners.length - 1, newPos));
+    const currentPos = banners.findIndex(b => b.id === bannerId);
+    if (currentPos === newPos) return;
+    const reordered = [...banners];
+    const [item] = reordered.splice(currentPos, 1);
+    reordered.splice(newPos, 0, item);
+    await Promise.all(reordered.map((b, idx) =>
+      supabase.from('banners').update({ sort_order: idx }).eq('id', b.id)
+    ));
     fetchBanners();
   };
 
@@ -181,9 +178,25 @@ export default function BanneryPage() {
 
               {/* Akcie */}
               <div className="flex flex-col gap-2 shrink-0">
-                <div className="flex gap-2">
-                  <button onClick={() => moveUp(b, i)} disabled={i === 0} className="w-8 h-8 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white text-xs disabled:opacity-20 transition-all">↑</button>
-                  <button onClick={() => moveDown(b, i)} disabled={i === banners.length - 1} className="w-8 h-8 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white text-xs disabled:opacity-20 transition-all">↓</button>
+                {/* Pozícia */}
+                <div className="flex flex-col items-center gap-1">
+                  <button onClick={() => moveTo(b.id, i - 1)} disabled={i === 0} className="w-8 h-6 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white text-[10px] disabled:opacity-20 transition-all">↑</button>
+                  <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-700 rounded-xl px-2 py-1">
+                    <span className="text-zinc-600 text-[8px] font-black uppercase">#</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={banners.length}
+                      value={i + 1}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) moveTo(b.id, val - 1);
+                      }}
+                      className="w-7 bg-transparent text-white font-black text-sm text-center outline-none"
+                    />
+                    <span className="text-zinc-600 text-[8px] font-black">/{banners.length}</span>
+                  </div>
+                  <button onClick={() => moveTo(b.id, i + 1)} disabled={i === banners.length - 1} className="w-8 h-6 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white text-[10px] disabled:opacity-20 transition-all">↓</button>
                 </div>
                 <button onClick={() => toggleActive(b)} className={`text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border transition-all ${b.active ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-red-600 hover:text-red-500' : 'bg-green-600/10 border-green-600/30 text-green-500 hover:bg-green-600/20'}`}>
                   {b.active ? 'Vypnúť' : 'Zapnúť'}
