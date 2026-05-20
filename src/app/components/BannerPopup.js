@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { trackBannerView, trackBannerCta, trackBannerPhone, trackBannerClose, trackBannerNavigate } from '@/app/lib/analytics';
 
 export default function BannerPopup() {
   const [banners, setBanners] = useState([]);
@@ -13,7 +14,7 @@ export default function BannerPopup() {
 
   useEffect(() => {
     supabase.from('banners').select('*').eq('active', true).order('sort_order').then(({ data }) => {
-      if (data?.length) { setBanners(data); setVisible(true); }
+      if (data?.length) { setBanners(data); setVisible(true); trackBannerView(data[0]?.title); }
     });
   }, []);
 
@@ -69,7 +70,7 @@ export default function BannerPopup() {
   return (
     <div
       className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 backdrop-blur-sm p-3 md:p-4"
-      onClick={() => setVisible(false)}
+      onClick={() => { trackBannerClose(current.title, index); setVisible(false); }}
     >
       <div
         className="relative bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden shadow-2xl shadow-black flex flex-col w-full"
@@ -84,7 +85,7 @@ export default function BannerPopup() {
             </div>
           )}
           <button
-            onClick={() => setVisible(false)}
+            onClick={() => { trackBannerClose(current.title, index); setVisible(false); }}
             className="w-9 h-9 md:w-10 md:h-10 bg-black/70 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-full flex items-center justify-center text-white font-black text-sm transition-all"
           >✕</button>
         </div>
@@ -118,11 +119,11 @@ export default function BannerPopup() {
           {banners.length > 1 && (
             <>
               <button
-                onClick={() => goTo((index - 1 + banners.length) % banners.length, true)}
+                onClick={() => { trackBannerNavigate('prev'); goTo((index - 1 + banners.length) % banners.length, true); }}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 bg-black/60 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-xl flex items-center justify-center text-white font-black transition-all z-10"
               >←</button>
               <button
-                onClick={() => goTo((index + 1) % banners.length, true)}
+                onClick={() => { trackBannerNavigate('next'); goTo((index + 1) % banners.length, true); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 bg-black/60 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-xl flex items-center justify-center text-white font-black transition-all z-10"
               >→</button>
             </>
@@ -150,6 +151,7 @@ export default function BannerPopup() {
                 {current.phone_number && (
                   <a
                     href={`tel:${current.phone_number.replace(/\s/g, '')}`}
+                    onClick={() => trackBannerPhone(current.title, current.phone_number)}
                     className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-black px-4 md:px-5 py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all whitespace-nowrap"
                   >
                     <span>📞</span>
@@ -162,6 +164,7 @@ export default function BannerPopup() {
                 {current.button_text && current.button_url && (
                   <a
                     href={current.button_url}
+                    onClick={() => trackBannerCta(current.title, current.button_url)}
                     className="flex items-center justify-center bg-red-600 hover:bg-red-500 text-white font-black px-4 md:px-6 py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-red-600/30 whitespace-nowrap"
                   >
                     {current.button_text}

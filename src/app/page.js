@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import BannerPopup from '@/app/components/BannerPopup';
+import { trackMojaGarazClick, trackPhoneClick, trackContactSubmit } from '@/app/lib/analytics';
 
 const services = [
   {
@@ -78,6 +79,7 @@ export default function HomePage() {
         body: JSON.stringify(contactForm),
       });
     } catch {}
+    trackContactSubmit();
     setContactSent(true);
     setContactForm({ name: '', email: '', phone: '', plate: '', vehicle: '', year: '', message: '' });
     setContactSending(false);
@@ -157,6 +159,7 @@ export default function HomePage() {
           <div className="flex items-center gap-3 md:gap-5">
             <a
               href="tel:0940449449"
+              onClick={() => trackPhoneClick('nav')}
               className="hidden md:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
             >
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
@@ -167,6 +170,7 @@ export default function HomePage() {
 
             <Link
               href="/login"
+              onClick={() => trackMojaGarazClick('nav')}
               className={`bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest transition-all rounded-xl shadow-lg shadow-red-600/20 hover:shadow-red-600/30 ${scrolled ? 'text-[9px] px-4 py-2' : 'text-[10px] px-5 py-2.5'}`}
             >
               🏎️ Moja Garáž
@@ -517,13 +521,13 @@ export default function HomePage() {
             <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] flex flex-col gap-5">
               <div>
                 <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-4">📞 Telefón</p>
-                <a href="tel:0940449449" className="flex flex-col group mb-4">
+                <a href="tel:0940449449" onClick={() => trackPhoneClick('kontakt')} className="flex flex-col group mb-4">
                   <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0940 449 449</span>
                   <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Christian Flickinger</span>
                   <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Prijímací technik</span>
                 </a>
                 <div className="h-px bg-zinc-900 mb-4" />
-                <a href="tel:0908647227" className="flex flex-col group">
+                <a href="tel:0908647227" onClick={() => trackPhoneClick('kontakt')} className="flex flex-col group">
                   <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0908 647 227</span>
                   <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Maroš Jurkovič</span>
                   <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Diagnostik</span>

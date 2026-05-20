@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { trackRegistrationSuccess } from '@/app/lib/analytics';
 
 const GDPR_VERSION = '1.0';
 
@@ -104,6 +105,7 @@ export default function RegistraciaPage() {
           }),
         }).catch(() => {});
 
+        trackRegistrationSuccess(clientType);
         if (authData.session === null) {
             alert("Registrácia úspešná! Skontrolujte si e-mailovú schránku a potvrďte svoju adresu kliknutím na odkaz.");
         } else {

@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+import { trackGuideStepOpen } from '@/app/lib/analytics';
 
 /* ---------- VIZUÁLNE MOCKUPY každého kroku ---------- */
 
@@ -258,7 +259,7 @@ export default function NavodPage() {
               >
                 <button
                   className="w-full text-left p-6 flex items-start gap-5"
-                  onClick={() => setActiveStep(isOpen ? null : i)}
+                  onClick={() => { if (!isOpen) trackGuideStepOpen(step.num, step.title); setActiveStep(isOpen ? null : i); }}
                 >
                   <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xs tracking-widest transition-all ${isOpen ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500'}`}>
                     {step.num}
