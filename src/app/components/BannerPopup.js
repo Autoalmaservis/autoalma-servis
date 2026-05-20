@@ -14,8 +14,17 @@ export default function BannerPopup() {
   autoPlayRef.current = autoPlay;
 
   useEffect(() => {
+    const wasMinimized = sessionStorage.getItem('banner_minimized') === 'true';
     supabase.from('banners').select('*').eq('active', true).order('sort_order').then(({ data }) => {
-      if (data?.length) { setBanners(data); setOpen(true); trackBannerView(data[0]?.title); }
+      if (data?.length) {
+        setBanners(data);
+        if (wasMinimized) {
+          setMinimized(true);
+        } else {
+          setOpen(true);
+          trackBannerView(data[0]?.title);
+        }
+      }
     });
   }, []);
 
@@ -61,6 +70,7 @@ export default function BannerPopup() {
 
   const minimize = () => {
     trackBannerClose(current?.title, index);
+    sessionStorage.setItem('banner_minimized', 'true');
     setOpen(false);
     setMinimized(true);
   };
