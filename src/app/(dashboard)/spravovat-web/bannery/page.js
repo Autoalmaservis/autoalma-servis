@@ -51,12 +51,19 @@ export default function BanneryPage() {
     e.preventDefault();
     if (!form.title.trim()) { alert('Zadajte názov bannera'); return; }
     setSaving(true);
+    let saveError;
     if (editBanner) {
-      await supabase.from('banners').update(form).eq('id', editBanner.id);
+      const { error } = await supabase.from('banners').update(form).eq('id', editBanner.id);
+      saveError = error;
     } else {
-      await supabase.from('banners').insert([form]);
+      const { error } = await supabase.from('banners').insert([form]);
+      saveError = error;
     }
     setSaving(false);
+    if (saveError) {
+      alert('Chyba pri ukladaní: ' + saveError.message);
+      return;
+    }
     setModal(false);
     fetchBanners();
   };
