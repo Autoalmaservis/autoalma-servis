@@ -6,7 +6,8 @@ import { trackBannerView, trackBannerCta, trackBannerPhone, trackBannerClose, tr
 export default function BannerPopup() {
   const [banners, setBanners] = useState([]);
   const [index, setIndex] = useState(0);
-  const [visible, setVisible] = useState(false);
+  const [open, setOpen] = useState(false);       // plné okno
+  const [minimized, setMinimized] = useState(false); // malý widget
   const [fading, setFading] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
   const autoPlayRef = useRef(autoPlay);
@@ -14,70 +15,118 @@ export default function BannerPopup() {
 
   useEffect(() => {
     supabase.from('banners').select('*').eq('active', true).order('sort_order').then(({ data }) => {
-      if (data?.length) { setBanners(data); setVisible(true); trackBannerView(data[0]?.title); }
+      if (data?.length) { setBanners(data); setOpen(true); trackBannerView(data[0]?.title); }
     });
   }, []);
 
-  // Plynulý prechod na index
   const goTo = useCallback((newIndex, manual = false) => {
     if (manual) setAutoPlay(false);
     setFading(true);
-    setTimeout(() => {
-      setIndex(newIndex);
-      setFading(false);
-    }, 250);
+    setTimeout(() => { setIndex(newIndex); setFading(false); }, 250);
   }, []);
 
-  const prev = useCallback((manual = false) => {
-    setBanners(b => { goTo((index - 1 + b.length) % b.length, manual); return b; });
+  const prev = useCallback(() => {
+    setBanners(b => { goTo((index - 1 + b.length) % b.length, true); return b; });
   }, [index, goTo]);
 
-  const next = useCallback((manual = false) => {
-    setBanners(b => { goTo((index + 1) % b.length, manual); return b; });
+  const next = useCallback(() => {
+    setBanners(b => { goTo((index + 1) % b.length, true); return b; });
   }, [index, goTo]);
 
-  // Auto-slide každé 3 sekundy
+  // Auto-slide
   useEffect(() => {
-    if (!visible || banners.length <= 1) return;
+    if (!open || banners.length <= 1) return;
     const interval = setInterval(() => {
       if (!autoPlayRef.current) return;
       setIndex(i => {
-        const nextI = (i + 1) % banners.length;
         setFading(true);
-        setTimeout(() => { setIndex(nextI); setFading(false); }, 250);
+        setTimeout(() => { setIndex((i + 1) % banners.length); setFading(false); }, 250);
         return i;
       });
     }, 3000);
     return () => clearInterval(interval);
-  }, [visible, banners.length]);
+  }, [open, banners.length]);
 
   // Klávesnica
   useEffect(() => {
     const onKey = (e) => {
-      if (!visible) return;
-      if (e.key === 'ArrowLeft') prev(true);
-      if (e.key === 'ArrowRight') next(true);
-      if (e.key === 'Escape') setVisible(false);
+      if (!open) return;
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'Escape') minimize();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, prev, next]);
+  }, [open, prev, next]);
 
-  if (!visible || !banners.length) return null;
+  const minimize = () => {
+    trackBannerClose(current?.title, index);
+    setOpen(false);
+    setMinimized(true);
+  };
 
+  const expand = () => {
+    setOpen(true);
+    setMinimized(false);
+    setAutoPlay(true);
+  };
+
+  if (!banners.length) return null;
   const current = banners[index];
+
+  // ─── MINI WIDGET ───────────────────────────────────────────
+  if (minimized) {
+    return (
+      <div
+        className="fixed bottom-5 left-5 z-[2000] cursor-pointer group"
+        onClick={expand}
+      >
+        <div className="relative bg-zinc-950 border border-red-600/40 group-hover:border-red-600 rounded-2xl shadow-2xl shadow-red-600/10 transition-all duration-300 overflow-hidden flex items-center gap-0">
+
+          {/* Miniatúra obrázka */}
+          <div className="w-14 h-14 shrink-0 overflow-hidden">
+            {current.image_url
+              ? <img src={current.image_url} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full bg-zinc-900 flex items-center justify-center text-2xl">🚗</div>
+            }
+          </div>
+
+          {/* Text */}
+          <div className="px-3 py-2 max-w-[140px]">
+            <p className="text-[8px] text-red-500 font-black uppercase tracking-widest mb-0.5">
+              {banners.length > 1 ? `Akcie · ${banners.length}` : 'Akcia'}
+            </p>
+            <p className="text-white font-black text-[11px] uppercase italic leading-tight line-clamp-2">
+              {current.title}
+            </p>
+          </div>
+
+          {/* Expand šípka */}
+          <div className="pr-3 text-red-600 group-hover:text-red-400 font-black text-base transition-colors">
+            ↑
+          </div>
+
+          {/* Červená linka dole */}
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600/60 group-hover:bg-red-600 transition-colors" />
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PLNÉ OKNO ─────────────────────────────────────────────
+  if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/90 backdrop-blur-sm p-3 md:p-4"
-      onClick={() => { trackBannerClose(current.title, index); setVisible(false); }}
+      onClick={minimize}
     >
       <div
         className="relative bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden shadow-2xl shadow-black flex flex-col w-full"
         style={{ height: '90vh', maxWidth: '960px' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Zavrieť + počítadlo — vpravo hore */}
+        {/* Počítadlo + Zavrieť (minimalizovať) */}
         <div className="absolute top-3 right-3 md:top-5 md:right-5 z-20 flex items-center gap-2">
           {banners.length > 1 && (
             <div className="bg-black/70 backdrop-blur border border-zinc-700 rounded-full px-3 py-1.5">
@@ -85,12 +134,13 @@ export default function BannerPopup() {
             </div>
           )}
           <button
-            onClick={() => { trackBannerClose(current.title, index); setVisible(false); }}
-            className="w-9 h-9 md:w-10 md:h-10 bg-black/70 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-full flex items-center justify-center text-white font-black text-sm transition-all"
+            onClick={minimize}
+            title="Minimalizovať"
+            className="w-9 h-9 md:w-10 md:h-10 bg-red-600 hover:bg-red-500 border border-red-500 rounded-full flex items-center justify-center text-white font-black text-sm transition-all shadow-lg shadow-red-600/40"
           >✕</button>
         </div>
 
-        {/* OBRÁZOK s fade prechodom */}
+        {/* OBRÁZOK */}
         <div className="relative flex-1 overflow-hidden min-h-0">
           <div className={`w-full h-full transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}>
             {current.image_url ? (
@@ -115,16 +165,16 @@ export default function BannerPopup() {
             </div>
           )}
 
-          {/* Šípky */}
+          {/* Šípky — vždy červené */}
           {banners.length > 1 && (
             <>
               <button
                 onClick={() => { trackBannerNavigate('prev'); goTo((index - 1 + banners.length) % banners.length, true); }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 bg-black/60 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-xl flex items-center justify-center text-white font-black transition-all z-10"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 bg-red-600 hover:bg-red-500 border border-red-500 rounded-xl flex items-center justify-center text-white font-black transition-all z-10 shadow-lg shadow-red-600/40"
               >←</button>
               <button
                 onClick={() => { trackBannerNavigate('next'); goTo((index + 1) % banners.length, true); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 bg-black/60 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-xl flex items-center justify-center text-white font-black transition-all z-10"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 bg-red-600 hover:bg-red-500 border border-red-500 rounded-xl flex items-center justify-center text-white font-black transition-all z-10 shadow-lg shadow-red-600/40"
               >→</button>
             </>
           )}
@@ -147,7 +197,6 @@ export default function BannerPopup() {
 
             <div className="flex flex-col items-stretch md:items-end gap-2 shrink-0">
               <div className="flex gap-2">
-                {/* Telefón */}
                 {current.phone_number && (
                   <a
                     href={`tel:${current.phone_number.replace(/\s/g, '')}`}
@@ -159,8 +208,6 @@ export default function BannerPopup() {
                     <span className="md:hidden">{current.phone_number}</span>
                   </a>
                 )}
-
-                {/* CTA */}
                 {current.button_text && current.button_url && (
                   <a
                     href={current.button_url}
@@ -172,7 +219,6 @@ export default function BannerPopup() {
                 )}
               </div>
 
-              {/* Dots + progress bar */}
               {banners.length > 1 && (
                 <div className="flex gap-1.5 items-center justify-end">
                   {banners.map((_, i) => (
