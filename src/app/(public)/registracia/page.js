@@ -195,7 +195,7 @@ export default function RegistraciaPage() {
                 />
                 <label htmlFor="gdpr" className="text-xs text-zinc-300 font-bold leading-relaxed cursor-pointer">
                   Súhlasím so spracúvaním mojich osobných údajov prevádzkovateľom{' '}
-                  <span className="text-white font-black">AutoAlma s.r.o., Svornosti 119, 821 06 Bratislava (IČO: 46044876)</span>{' '}
+                  <span className="text-white font-black">Autoalma s.r.o., Tilgnerova 712/3, 841 04 Bratislava (IČO: 46044876)</span>{' '}
                   na účely vedenia zákazníckej evidencie a informovania o priebehu opravy vozidla (SMS, e-mail).
                   Právny základ: čl. 6 ods. 1 písm. b) nariadenia GDPR (plnenie zmluvy).{' '}
                   <span className="text-white font-black">Tento súhlas je povinný</span> pre vytvorenie účtu. *
@@ -227,7 +227,7 @@ export default function RegistraciaPage() {
 
               {gdprExpanded && (
                 <div className="text-[10px] text-zinc-500 font-bold leading-relaxed space-y-2 border-t border-zinc-800 pt-4">
-                  <p><span className="text-zinc-300 font-black">Prevádzkovateľ:</span> AutoAlma s.r.o., Svornosti 119, 821 06 Bratislava, autoalma@autoalma.sk</p>
+                  <p><span className="text-zinc-300 font-black">Prevádzkovateľ:</span> Autoalma s.r.o., Tilgnerova 712/3, 841 04 Bratislava, autoalma@autoalma.sk</p>
                   <p><span className="text-zinc-300 font-black">Účel a právny základ:</span> Vedenie evidencie zákazníkov a vozidiel, informovanie o oprave (čl. 6 ods. 1 písm. b) GDPR — plnenie zmluvy). Marketingové správy len so súhlasom (čl. 6 ods. 1 písm. a) GDPR).</p>
                   <p><span className="text-zinc-300 font-black">Príjemcovia:</span> Údaje nie sú poskytované tretím stranám mimo EÚ. Spracúvajú ich len oprávnení zamestnanci servisu.</p>
                   <p><span className="text-zinc-300 font-black">Doba uchovávania:</span> Po dobu trvania zmluvného vzťahu a 3 roky po jeho ukončení, alebo po dobu vyžadovanú zákonom (napr. účtovné doklady 10 rokov).</p>
