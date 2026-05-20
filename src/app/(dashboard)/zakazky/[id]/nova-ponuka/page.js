@@ -220,11 +220,14 @@ export default function NovaPonukaPage() {
                 const { data: settData } = await supabase.from('business_settings').select('id, value').in('id', ['company_name']);
                 const companyName = settData?.find(r => r.id === 'company_name')?.value || 'AutoAlma Servis';
                 const smsText = `Vazeny p. ${zakazka.customer_name || 'zakaznik'}, servis Vasho vozidla ${zakazka.plate_number || ''} - ${companyName} Vam poslala cenovu ponuku. Pre zobrazenie a schvalenie kliknite na: ${ponukaUrl}`;
-                await fetchWithAuth('/api/send-sms', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: zakazka.customer_phone, message: smsText }),
-                });
+                const doSend = confirm(`Odoslať SMS zákazníkovi ${zakazka.customer_name} (${zakazka.customer_phone})?`);
+                if (doSend) {
+                    await fetchWithAuth('/api/send-sms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone: zakazka.customer_phone, message: smsText }),
+                    });
+                }
             }
 
             router.push(`/zakazky/${id}`);

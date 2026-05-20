@@ -96,20 +96,24 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
       }
       if (completeSendMsg && completeMsg.trim()) {
         if (completeChannel === 'sms' && zakazka.customer_phone) {
-          await fetchWithAuth('/api/send-sms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: zakazka.customer_phone, message: completeMsg }),
-          });
-          await supabase.from('scheduled_sms').insert([{
-            customer_phone: zakazka.customer_phone,
-            customer_name: zakazka.customer_name,
-            plate_number: zakazka.plate_number,
-            message: completeMsg,
-            type: 'sms',
-            scheduled_for: new Date().toISOString(),
-            status: 'sent',
-          }]);
+          const doSend = confirm(`Odoslať SMS zákazníkovi ${zakazka.customer_name} (${zakazka.customer_phone})?`);
+          if (doSend) {
+            await fetchWithAuth('/api/send-sms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone: zakazka.customer_phone, message: completeMsg }),
+            });
+            await supabase.from('scheduled_sms').insert([{
+              customer_phone: zakazka.customer_phone,
+              customer_name: zakazka.customer_name,
+              plate_number: zakazka.plate_number,
+              message: completeMsg,
+              type: 'sms',
+              scheduled_for: new Date().toISOString(),
+              status: 'sent',
+              user_id: zakazka.customer_id || null,
+            }]);
+          }
           if (zakazka.customer_id) {
             await supabase.from('notifications').insert([{
               user_id: zakazka.customer_id,

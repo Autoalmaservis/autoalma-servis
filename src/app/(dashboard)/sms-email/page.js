@@ -225,6 +225,7 @@ export default function SmsEmailPage() {
     fetchScheduled();
   };
 
+
   const sendNow = async (item) => {
     try {
       if (channel === 'sms') {
