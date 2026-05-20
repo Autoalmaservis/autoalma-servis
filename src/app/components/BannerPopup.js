@@ -76,18 +76,18 @@ export default function BannerPopup() {
         style={{ height: '90vh', maxWidth: '960px' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Zavrieť */}
-        <button
-          onClick={() => setVisible(false)}
-          className="absolute top-3 right-3 md:top-5 md:right-5 z-20 w-9 h-9 md:w-10 md:h-10 bg-black/70 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-full flex items-center justify-center text-white font-black text-sm transition-all"
-        >✕</button>
-
-        {/* Počítadlo */}
-        {banners.length > 1 && (
-          <div className="absolute top-3 left-3 md:top-5 md:left-5 z-20 bg-black/70 backdrop-blur border border-zinc-700 rounded-full px-3 py-1.5">
-            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{index + 1} / {banners.length}</p>
-          </div>
-        )}
+        {/* Zavrieť + počítadlo — vpravo hore */}
+        <div className="absolute top-3 right-3 md:top-5 md:right-5 z-20 flex items-center gap-2">
+          {banners.length > 1 && (
+            <div className="bg-black/70 backdrop-blur border border-zinc-700 rounded-full px-3 py-1.5">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{index + 1} / {banners.length}</p>
+            </div>
+          )}
+          <button
+            onClick={() => setVisible(false)}
+            className="w-9 h-9 md:w-10 md:h-10 bg-black/70 backdrop-blur border border-zinc-700 hover:bg-red-600 hover:border-red-600 rounded-full flex items-center justify-center text-white font-black text-sm transition-all"
+          >✕</button>
+        </div>
 
         {/* OBRÁZOK s fade prechodom */}
         <div className="relative flex-1 overflow-hidden min-h-0">
@@ -130,15 +130,15 @@ export default function BannerPopup() {
         </div>
 
         {/* TEXT + TLAČIDLÁ */}
-        <div className={`px-4 md:px-8 py-4 md:py-5 shrink-0 transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`px-4 md:px-8 pt-4 pb-4 md:pb-5 shrink-0 transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}>
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-6">
 
-            <div className="flex-1 min-w-0">
-              <h2 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter text-white leading-tight line-clamp-2">
+            <div className="flex-1 min-w-0 max-h-28 md:max-h-36 overflow-y-auto pr-1" style={{ scrollbarWidth: 'none' }}>
+              <h2 className="text-xl md:text-3xl font-black uppercase italic tracking-tighter text-white leading-tight">
                 {current.title}
               </h2>
               {current.description && (
-                <p className="text-zinc-400 text-xs md:text-sm font-bold mt-1 leading-relaxed line-clamp-2">
+                <p className="text-zinc-400 text-xs md:text-sm font-bold mt-1 leading-relaxed">
                   {current.description}
                 </p>
               )}
