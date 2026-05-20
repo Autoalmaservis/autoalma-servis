@@ -285,7 +285,7 @@ export default function HomePage() {
                         <span className="text-zinc-300 group-hover/item:text-white text-sm font-bold transition-colors">
                           {item}
                         </span>
-                        <span className="ml-auto text-zinc-700 group-hover/item:text-white text-xs transition-all opacity-0 group-hover/item:opacity-100 group-hover/item:translate-x-0.5">→</span>
+                        <span className="ml-auto text-zinc-600 group-hover/item:text-white text-xs transition-all">→</span>
                       </button>
                     </li>
                   ))}
