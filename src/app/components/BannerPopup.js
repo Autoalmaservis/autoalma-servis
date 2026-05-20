@@ -78,7 +78,7 @@ export default function BannerPopup() {
   if (minimized) {
     return (
       <div
-        className="fixed bottom-5 left-5 z-[2000] cursor-pointer group"
+        className="fixed bottom-5 right-5 z-[2000] cursor-pointer group"
         onClick={expand}
       >
         <div className="relative bg-zinc-950 border border-red-600/40 group-hover:border-red-600 rounded-2xl shadow-2xl shadow-red-600/10 transition-all duration-300 overflow-hidden flex items-center gap-0">
