@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
+import BannerPopup from '@/app/components/BannerPopup';
 
 const services = [
   {
@@ -120,6 +121,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans">
+      <BannerPopup />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       {/* NAVIGÁCIA */}

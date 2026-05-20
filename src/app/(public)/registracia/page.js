@@ -4,6 +4,8 @@ import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+const GDPR_VERSION = '1.0';
+
 export default function RegistraciaPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -12,20 +14,22 @@ export default function RegistraciaPage() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    confirmPassword: '', 
+    confirmPassword: '',
     full_name: '',
     phone: '',
     company_name: '',
     ico: '',
     dic: '',
-    ic_dph: '', 
+    ic_dph: '',
     address: '',
     city: '',
     zip: '',
-    country: 'Slovensko', 
-    referral_source: '', 
-    gdpr: false
+    country: 'Slovensko',
+    referral_source: '',
+    gdpr: false,
+    gdprMarketing: false,
   });
+  const [gdprExpanded, setGdprExpanded] = useState(false);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -68,7 +72,7 @@ export default function RegistraciaPage() {
         .from('user_profiles')
         .insert([{
           id: authData.user.id,
-          email: formData.email.trim(), 
+          email: formData.email.trim(),
           full_name: formData.full_name,
           role: 'zakaznik',
           phone: formData.phone,
@@ -80,7 +84,10 @@ export default function RegistraciaPage() {
           city: formData.city,
           zip: formData.zip,
           country: formData.country,
-          referral_source: formData.referral_source
+          referral_source: formData.referral_source,
+          gdpr_consent_at: new Date().toISOString(),
+          gdpr_consent_version: GDPR_VERSION,
+          gdpr_marketing: formData.gdprMarketing,
         }]);
 
       if (profileError) {
@@ -172,11 +179,63 @@ export default function RegistraciaPage() {
             </div>
           </div>
 
-          <div className="flex items-start gap-3 bg-black/50 p-5 rounded-2xl border border-zinc-800 mt-4">
-            <input type="checkbox" id="gdpr" required checked={formData.gdpr} onChange={(e) => setFormData({...formData, gdpr: e.target.checked})} className="w-5 h-5 accent-red-600 cursor-pointer mt-1" />
-            <label htmlFor="gdpr" className="text-[9px] text-zinc-500 font-black uppercase tracking-widest leading-relaxed cursor-pointer font-bold">
-              Súhlasím so spracovaním osobných údajov pre účely servisu vozidiel v súlade s nariadením GDPR. AutoAlma spracúva údaje len pre potreby evidencie a technickej správy.
-            </label>
+          {/* GDPR SEKCIA */}
+          <div className="space-y-3 mt-4">
+
+            {/* Povinný súhlas */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 space-y-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-red-600">Ochrana osobných údajov (GDPR)</p>
+
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox" id="gdpr" required
+                  checked={formData.gdpr}
+                  onChange={(e) => setFormData({...formData, gdpr: e.target.checked})}
+                  className="w-5 h-5 accent-red-600 cursor-pointer mt-0.5 shrink-0"
+                />
+                <label htmlFor="gdpr" className="text-xs text-zinc-300 font-bold leading-relaxed cursor-pointer">
+                  Súhlasím so spracúvaním mojich osobných údajov prevádzkovateľom{' '}
+                  <span className="text-white font-black">AutoAlma s.r.o., Svornosti 119, 821 06 Bratislava (IČO: 46044876)</span>{' '}
+                  na účely vedenia zákazníckej evidencie a informovania o priebehu opravy vozidla (SMS, e-mail).
+                  Právny základ: čl. 6 ods. 1 písm. b) nariadenia GDPR (plnenie zmluvy).{' '}
+                  <span className="text-white font-black">Tento súhlas je povinný</span> pre vytvorenie účtu. *
+                </label>
+              </div>
+
+              {/* Voliteľný marketingový súhlas */}
+              <div className="flex items-start gap-3 pt-3 border-t border-zinc-800">
+                <input
+                  type="checkbox" id="gdprMarketing"
+                  checked={formData.gdprMarketing}
+                  onChange={(e) => setFormData({...formData, gdprMarketing: e.target.checked})}
+                  className="w-5 h-5 accent-red-600 cursor-pointer mt-0.5 shrink-0"
+                />
+                <label htmlFor="gdprMarketing" className="text-xs text-zinc-500 font-bold leading-relaxed cursor-pointer">
+                  Súhlasím so zasielaním upomienok na servisné prehliadky a sezónnych akcií.
+                  Právny základ: čl. 6 ods. 1 písm. a) GDPR (súhlas). <span className="text-zinc-600">Voliteľné — môžete kedykoľvek odvolať.</span>
+                </label>
+              </div>
+
+              {/* Expandovateľné podrobnosti */}
+              <button
+                type="button"
+                onClick={() => setGdprExpanded(v => !v)}
+                className="text-[9px] font-black uppercase tracking-widest text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-2"
+              >
+                {gdprExpanded ? '▲' : '▼'} {gdprExpanded ? 'Skryť podrobnosti' : 'Zobraziť podrobnosti o spracúvaní údajov'}
+              </button>
+
+              {gdprExpanded && (
+                <div className="text-[10px] text-zinc-500 font-bold leading-relaxed space-y-2 border-t border-zinc-800 pt-4">
+                  <p><span className="text-zinc-300 font-black">Prevádzkovateľ:</span> AutoAlma s.r.o., Svornosti 119, 821 06 Bratislava, autoalma@autoalma.sk</p>
+                  <p><span className="text-zinc-300 font-black">Účel a právny základ:</span> Vedenie evidencie zákazníkov a vozidiel, informovanie o oprave (čl. 6 ods. 1 písm. b) GDPR — plnenie zmluvy). Marketingové správy len so súhlasom (čl. 6 ods. 1 písm. a) GDPR).</p>
+                  <p><span className="text-zinc-300 font-black">Príjemcovia:</span> Údaje nie sú poskytované tretím stranám mimo EÚ. Spracúvajú ich len oprávnení zamestnanci servisu.</p>
+                  <p><span className="text-zinc-300 font-black">Doba uchovávania:</span> Po dobu trvania zmluvného vzťahu a 3 roky po jeho ukončení, alebo po dobu vyžadovanú zákonom (napr. účtovné doklady 10 rokov).</p>
+                  <p><span className="text-zinc-300 font-black">Vaše práva:</span> Právo na prístup (čl. 15), opravu (čl. 16), vymazanie (čl. 17), obmedzenie spracúvania (čl. 18), prenosnosť (čl. 20) a námietku (čl. 21). Súhlas môžete kedykoľvek odvolať na <span className="text-white">autoalma@autoalma.sk</span> bez vplyvu na zákonnosť predchádzajúceho spracúvania.</p>
+                  <p><span className="text-zinc-300 font-black">Dozorný orgán:</span> Úrad na ochranu osobných údajov SR, Hraničná 12, 820 07 Bratislava, <span className="text-white">dataprotection.gov.sk</span></p>
+                </div>
+              )}
+            </div>
           </div>
 
           <button type="submit" disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-6 rounded-2xl uppercase text-xs tracking-[0.3em] shadow-xl shadow-red-900/20 transition-all disabled:opacity-50 font-bold">
