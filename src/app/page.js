@@ -279,13 +279,13 @@ export default function HomePage() {
                     <li key={j}>
                       <button
                         onClick={() => router.push(`/sluzby/${s.slug}/${toSlug(item)}`)}
-                        className="w-full text-left flex items-center gap-3 group/item py-1 px-2 -mx-2 rounded-lg hover:bg-white/5 transition-all"
+                        className="w-full text-left flex items-center gap-3 group/item py-2 px-3 -mx-3 rounded-xl hover:bg-red-600 transition-all duration-200 cursor-pointer"
                       >
-                        <span className="w-1.5 h-1.5 bg-blue-500/50 group-hover/item:bg-red-500 rounded-full shrink-0 transition-colors" />
+                        <span className="w-1.5 h-1.5 bg-zinc-600 group-hover/item:bg-white rounded-full shrink-0 transition-colors" />
                         <span className="text-zinc-300 group-hover/item:text-white text-sm font-bold transition-colors">
                           {item}
                         </span>
-                        <span className="ml-auto text-zinc-800 group-hover/item:text-blue-400 text-xs transition-colors opacity-0 group-hover/item:opacity-100">→</span>
+                        <span className="ml-auto text-zinc-700 group-hover/item:text-white text-xs transition-all opacity-0 group-hover/item:opacity-100 group-hover/item:translate-x-0.5">→</span>
                       </button>
                     </li>
                   ))}
