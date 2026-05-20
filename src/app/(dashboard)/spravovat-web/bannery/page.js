@@ -9,7 +9,7 @@ export default function BanneryPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [editBanner, setEditBanner] = useState(null);
-  const [form, setForm] = useState({ title: '', description: '', image_url: '', button_text: '', button_url: '', active: true, sort_order: 0 });
+  const [form, setForm] = useState({ title: '', description: '', image_url: '', button_text: '', button_url: '', phone_number: '', phone_button_text: 'Zavolať', discount_percent: '', active: true, sort_order: 0 });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -30,7 +30,7 @@ export default function BanneryPage() {
 
   const openEdit = (b) => {
     setEditBanner(b);
-    setForm({ title: b.title, description: b.description || '', image_url: b.image_url || '', button_text: b.button_text || '', button_url: b.button_url || '', active: b.active, sort_order: b.sort_order });
+    setForm({ title: b.title, description: b.description || '', image_url: b.image_url || '', button_text: b.button_text || '', button_url: b.button_url || '', phone_number: b.phone_number || '', phone_button_text: b.phone_button_text || 'Zavolať', discount_percent: b.discount_percent || '', active: b.active, sort_order: b.sort_order });
     setModal(true);
   };
 
@@ -225,18 +225,41 @@ export default function BanneryPage() {
                   className="w-full bg-black border border-zinc-800 focus:border-zinc-600 p-4 rounded-2xl text-white font-bold outline-none transition-all resize-none text-sm" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Text tlačidla (voliteľný)</label>
-                  <input value={form.button_text} onChange={e => setForm(p => ({ ...p, button_text: e.target.value }))}
-                    placeholder="napr. Objednať sa"
-                    className="w-full bg-black border border-zinc-800 focus:border-red-600 p-4 rounded-2xl text-white font-bold outline-none transition-all text-sm" />
+              {/* Zľava */}
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-red-600 block mb-2">Zľava v % (voliteľné — zobrazí trojuholník)</label>
+                <div className="flex items-center gap-3">
+                  <input type="number" min="0" max="99" value={form.discount_percent} onChange={e => setForm(p => ({ ...p, discount_percent: e.target.value }))}
+                    placeholder="napr. 20"
+                    className="w-32 bg-black border border-red-600/30 focus:border-red-600 p-4 rounded-2xl text-white font-black outline-none transition-all text-xl text-right" />
+                  <span className="text-zinc-500 font-black text-lg">%</span>
+                  <span className="text-[10px] text-zinc-600 font-bold">— ak je 0 alebo prázdne, trojuholník sa nezobrazí</span>
                 </div>
-                <div>
-                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Odkaz (URL)</label>
+              </div>
+
+              {/* CTA tlačidlo */}
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">CTA tlačidlo (voliteľné)</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <input value={form.button_text} onChange={e => setForm(p => ({ ...p, button_text: e.target.value }))}
+                    placeholder="Text tlačidla (napr. Objednať sa)"
+                    className="w-full bg-black border border-zinc-800 focus:border-red-600 p-4 rounded-2xl text-white font-bold outline-none transition-all text-sm" />
                   <input value={form.button_url} onChange={e => setForm(p => ({ ...p, button_url: e.target.value }))}
-                    placeholder="napr. /objednavka"
+                    placeholder="URL (napr. /objednavka)"
                     className="w-full bg-black border border-zinc-800 focus:border-zinc-600 p-4 rounded-2xl text-white font-mono outline-none transition-all text-sm" />
+                </div>
+              </div>
+
+              {/* Telefónne tlačidlo */}
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">📞 Telefónne tlačidlo (voliteľné)</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <input value={form.phone_number} onChange={e => setForm(p => ({ ...p, phone_number: e.target.value }))}
+                    placeholder="Telefón (napr. 0940 449 449)"
+                    className="w-full bg-black border border-zinc-800 focus:border-zinc-600 p-4 rounded-2xl text-white font-mono outline-none transition-all text-sm" />
+                  <input value={form.phone_button_text} onChange={e => setForm(p => ({ ...p, phone_button_text: e.target.value }))}
+                    placeholder="Text (napr. Zavolať)"
+                    className="w-full bg-black border border-zinc-800 focus:border-zinc-600 p-4 rounded-2xl text-white font-bold outline-none transition-all text-sm" />
                 </div>
               </div>
 
