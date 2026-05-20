@@ -22,15 +22,28 @@ export default function BanneryPage() {
     setLoading(false);
   };
 
+  const EMPTY_FORM = { title: '', description: '', image_url: '', button_text: '', button_url: '', phone_number: '', phone_button_text: 'Zavolať', discount_percent: '', active: true, sort_order: 0 };
+
   const openNew = () => {
     setEditBanner(null);
-    setForm({ title: '', description: '', image_url: '', button_text: '', button_url: '', active: true, sort_order: banners.length });
+    setForm({ ...EMPTY_FORM, sort_order: banners.length });
     setModal(true);
   };
 
   const openEdit = (b) => {
     setEditBanner(b);
-    setForm({ title: b.title, description: b.description || '', image_url: b.image_url || '', button_text: b.button_text || '', button_url: b.button_url || '', phone_number: b.phone_number || '', phone_button_text: b.phone_button_text || 'Zavolať', discount_percent: b.discount_percent || '', active: b.active, sort_order: b.sort_order });
+    setForm({
+      title: b.title || '',
+      description: b.description || '',
+      image_url: b.image_url || '',
+      button_text: b.button_text || '',
+      button_url: b.button_url || '',
+      phone_number: b.phone_number || '',
+      phone_button_text: b.phone_button_text || 'Zavolať',
+      discount_percent: b.discount_percent ?? '',
+      active: b.active ?? true,
+      sort_order: b.sort_order ?? 0,
+    });
     setModal(true);
   };
 
@@ -51,9 +64,11 @@ export default function BanneryPage() {
     e.preventDefault();
     if (!form.title.trim()) { alert('Zadajte názov bannera'); return; }
     setSaving(true);
+    const toInt = (v) => (v === '' || v === null || v === undefined) ? null : parseInt(v, 10);
     const payload = {
       ...form,
-      discount_percent: form.discount_percent === '' || form.discount_percent === null ? null : parseInt(form.discount_percent, 10),
+      discount_percent: toInt(form.discount_percent),
+      sort_order: toInt(form.sort_order) ?? 0,
     };
     let saveError;
     if (editBanner) {
