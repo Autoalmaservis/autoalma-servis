@@ -706,45 +706,45 @@ export default function KalendarPage() {
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex pl-[260px] font-bold uppercase italic">
-          <div className="flex-grow flex flex-col bg-black border-l border-zinc-900 shadow-2xl">
-            <div className="p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950 font-bold">
-              <h2 className="text-3xl font-black italic text-white tracking-tighter">
-                {selectionMode === 'block' ? '🚫 BLOKOVANÝ ČAS' : '🚗 SERVISNÁ OBJEDNÁVKA'}
+        <div className="fixed inset-0 bg-black/50 z-[100] flex pl-0 md:pl-[260px] font-bold uppercase italic">
+          <div className="flex-grow flex flex-col bg-black border-l border-zinc-900 shadow-2xl overflow-hidden">
+            <div className="p-4 md:p-6 border-b border-zinc-900 flex justify-between items-center bg-zinc-950 font-bold shrink-0">
+              <h2 className="text-lg md:text-3xl font-black italic text-white tracking-tighter">
+                {selectionMode === 'block' ? '🚫 Blokovaný čas' : '🚗 Servisná objednávka'}
               </h2>
-              <button onClick={() => { setIsModalOpen(false); setSelectionMode(null); setEditingEventId(null); }} className="bg-zinc-900 hover:bg-white hover:text-black p-4 rounded-full transition-all font-bold">✕</button>
+              <button onClick={() => { setIsModalOpen(false); setSelectionMode(null); setEditingEventId(null); }} className="bg-zinc-900 hover:bg-white hover:text-black p-3 md:p-4 rounded-full transition-all font-bold">✕</button>
             </div>
 
             <div className="flex-grow overflow-y-auto">
               {selectionMode === 'ask' ? (
-                <div className="h-full flex items-center justify-center p-12 gap-8 font-bold">
-                  <button onClick={() => setSelectionMode('order')} className="flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-red-600 transition-all w-80 aspect-square shadow-2xl">
-                    <span className="text-5xl mb-6">🚗</span> <span className="font-black tracking-widest font-bold">Nová Objednávka</span>
+                <div className="h-full flex flex-col md:flex-row items-center justify-center p-6 md:p-12 gap-4 md:gap-8 font-bold">
+                  <button onClick={() => setSelectionMode('order')} className="flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[2rem] md:rounded-[3rem] hover:bg-red-600 transition-all w-full md:w-80 md:aspect-square shadow-2xl">
+                    <span className="text-4xl md:text-5xl mb-4 md:mb-6">🚗</span> <span className="font-black tracking-widest font-bold text-sm md:text-base">Nová Objednávka</span>
                   </button>
-                  <button onClick={() => setSelectionMode('block')} className="flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-12 rounded-[3rem] hover:bg-zinc-700 transition-all w-80 aspect-square shadow-2xl">
-                    <span className="text-5xl mb-6">🚫</span> <span className="font-black tracking-widest font-bold">Blokovať Čas</span>
+                  <button onClick={() => setSelectionMode('block')} className="flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[2rem] md:rounded-[3rem] hover:bg-zinc-700 transition-all w-full md:w-80 md:aspect-square shadow-2xl">
+                    <span className="text-4xl md:text-5xl mb-4 md:mb-6">🚫</span> <span className="font-black tracking-widest font-bold text-sm md:text-base">Blokovať Čas</span>
                   </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 h-full font-bold">
-                  <form onSubmit={saveReservation} className="p-8 md:p-12 space-y-8 border-r border-zinc-900 font-bold">
-                    <div className="bg-zinc-900/30 p-6 rounded-[2rem] border border-zinc-800 space-y-6">
+                  <form onSubmit={saveReservation} className="p-4 md:p-12 space-y-4 md:space-y-8 border-r border-zinc-900 font-bold overflow-y-auto">
+                    <div className="bg-zinc-900/30 p-4 md:p-6 rounded-xl md:rounded-[2rem] border border-zinc-800 space-y-4 md:space-y-6">
                       <div>
-                        <label className="block text-[10px] font-black text-red-500 mb-2 ml-1 tracking-widest uppercase font-bold">Dátum opravy</label>
+                        <label className="block text-[9px] font-black text-red-500 mb-2 ml-1 tracking-widest uppercase font-bold">Dátum opravy</label>
                         <div className="relative group">
-                          <input 
-                            required 
-                            type="date" 
-                            value={selectedDate} 
-                            onChange={(e) => setSelectedDate(e.target.value)} 
-                            className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold pr-14 cursor-pointer"
+                          <input
+                            required
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold pr-10 cursor-pointer text-sm"
                           />
-                          <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-2xl group-hover:scale-110 transition-transform">📅</div>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-lg">📅</div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-6 font-bold">
-                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none font-bold" />
-                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none font-bold" />
+                      <div className="grid grid-cols-2 gap-3 md:gap-6 font-bold">
+                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none text-sm" />
+                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none text-sm" />
                       </div>
                     </div>
 
@@ -762,7 +762,7 @@ export default function KalendarPage() {
                             value={clientSearch}
                             onChange={handleClientSearchChange}
                             placeholder="Meno, telefón, email, firma..."
-                            className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 transition-all"
+                            className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 transition-all text-sm"
                           />
                           {clientSearchResults.length > 0 && (
                             <div className="absolute top-full left-0 right-0 z-20 bg-zinc-900 border border-zinc-700 rounded-2xl mt-1 shadow-2xl overflow-hidden">
@@ -806,11 +806,11 @@ export default function KalendarPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
                             <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">ŠPZ Vozidla</label>
-                            <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-5 rounded-3xl font-black text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
+                            <input required type="text" value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} onBlur={(e) => handlePlateBlur(e.target.value)} className="w-full bg-white text-black border-none p-3 md:p-5 rounded-2xl md:rounded-3xl font-black text-xl md:text-3xl tracking-widest focus:ring-4 focus:ring-red-600 outline-none uppercase shadow-2xl font-bold" />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
-                            <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full h-[76px] bg-zinc-900 border border-zinc-800 p-4 rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
+                            <label className="block text-[9px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
+                            <select required value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-4 rounded-xl md:rounded-3xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold text-sm">
                               <option value="">-- Vybrať --</option>
                               {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
                             </select>
@@ -822,7 +822,7 @@ export default function KalendarPage() {
                     {selectionMode === 'block' && (
                       <div>
                         <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Mechanik</label>
-                        <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold">
+                        <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-black uppercase outline-none focus:border-red-600 cursor-pointer font-bold text-sm">
                           <option value="">-- Všetci / Interné --</option>
                           {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name.toUpperCase()}</option>)}
                         </select>
@@ -831,23 +831,23 @@ export default function KalendarPage() {
 
                     <div className="font-bold">
                       <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Popis / Dôvod</label>
-                      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Napr. Výmena oleja..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-4 uppercase italic font-bold" />
-                      {selectionMode === 'order' && <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti závady..." className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-white text-sm outline-none focus:border-red-600 h-24 resize-none uppercase font-bold" />}
+                      <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Napr. Výmena oleja..." className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-3 uppercase italic font-bold text-sm" />
+                      {selectionMode === 'order' && <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti závady..." className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-3xl text-white text-sm outline-none focus:border-red-600 h-20 resize-none uppercase font-bold" />}
                     </div>
 
                     <div className="flex flex-col gap-4 pt-4 font-bold">
                       {selectionMode === 'order' && editingEventId && (
-                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] text-center shadow-lg transition-all italic font-bold"> 📋 Otvoriť Zákazkový list </Link>
+                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] text-center shadow-lg transition-all italic font-bold block"> 📋 Otvoriť Zákazkový list </Link>
                       )}
-                      <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold`}>
+                      <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] shadow-xl transition-all italic font-bold`}>
                         {editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}
                       </button>
-                      
+
                       {editingEventId && (
-                        <button 
-                          type="button" 
-                          onClick={deleteReservation} 
-                          className="w-full bg-zinc-900 border border-red-900/30 text-red-500 hover:bg-red-600 hover:text-white font-black py-6 rounded-3xl uppercase text-xs tracking-[0.3em] shadow-xl transition-all italic font-bold"
+                        <button
+                          type="button"
+                          onClick={deleteReservation}
+                          className="w-full bg-zinc-900 border border-red-900/30 text-red-500 hover:bg-red-600 hover:text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] shadow-xl transition-all italic font-bold"
                         >
                           🗑️ Vymazať objednávku
                         </button>
@@ -855,7 +855,7 @@ export default function KalendarPage() {
                     </div>
                   </form>
 
-                  <div className="bg-zinc-950 p-8 md:p-12 space-y-10 border-l border-zinc-900 font-bold">
+                  <div className="hidden lg:block bg-zinc-950 p-8 md:p-12 space-y-10 border-l border-zinc-900 font-bold overflow-y-auto">
                     <h3 className="text-sm font-black uppercase text-zinc-600 tracking-[0.4em] border-b border-zinc-900 pb-4 italic font-black">Detail Vozidla a Partnera</h3>
                     
                     {selectionMode === 'block' ? (
