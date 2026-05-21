@@ -291,6 +291,16 @@ export default function KlientiPage() {
     const klientyRows = await parseFile(klientyFile);
     const vozidlaRows = vozidlaFile ? await parseFile(vozidlaFile) : [];
 
+    // Validácia štruktúry CSV
+    if (!klientyRows.length) { alert('Súbor Klienty je prázdny alebo sa nepodarilo načítať.'); return; }
+    const firstRow = klientyRows[0];
+    const requiredCols = ['ID', 'MENO1', 'ULICA', 'MESTO'];
+    const missingCols = requiredCols.filter(c => !(c in firstRow));
+    if (missingCols.length > 0) {
+      alert(`Súbor Klienty nemá správnu štruktúru.\nChýbajú stĺpce: ${missingCols.join(', ')}\nSkontrolujte, či je nastavený oddeľovač ";" (bodkočiarka) pri exporte z AZSoft.`);
+      return;
+    }
+
     const parseFuel = (s) => {
       if (!s) return 'Iné';
       const p = s.toLowerCase();
@@ -383,33 +393,43 @@ export default function KlientiPage() {
     setImportLoading(true);
     const toImport = importPreview.filter((_, i) => importSelected.has(i));
     let successCount = 0, vehicleCount = 0, skipCount = 0;
+    const errors = [];
 
     for (const item of toImport) {
       try {
+        // Remove id from payload — let DB auto-generate UUID
+        const { id: _id, ...clientPayload } = item.client;
+
         const { data: profileData, error: profileError } = await supabase
           .from('user_profiles')
-          .insert([item.client])
+          .insert([clientPayload])
           .select('id')
           .single();
-        if (profileError) throw profileError;
+
+        if (profileError) {
+          errors.push(`${item.displayName}: ${profileError.message}`);
+          skipCount++;
+          continue;
+        }
 
         for (const v of item.vehicles) {
           const { _isDupPlate, ...vPayload } = v;
-          await supabase.from('vehicles').insert([{
+          const { error: vErr } = await supabase.from('vehicles').insert([{
             ...vPayload,
             owner_id: profileData.id,
             owner_name: item.displayName,
             owner_email: item.client.email || '',
           }]);
-          vehicleCount++;
+          if (!vErr) vehicleCount++;
         }
         successCount++;
-      } catch {
+      } catch (err) {
+        errors.push(`${item.displayName}: ${err.message}`);
         skipCount++;
       }
     }
 
-    setImportResult({ success: successCount, vehicles: vehicleCount, skip: skipCount });
+    setImportResult({ success: successCount, vehicles: vehicleCount, skip: skipCount, errors });
     setImportLoading(false);
     setImportStep(4);
     fetchKlienti();
@@ -718,28 +738,41 @@ export default function KlientiPage() {
 
               {/* KROK 4 — Výsledok */}
               {importStep === 4 && importResult && (
-                <div className="text-center py-8">
-                  <div className="w-20 h-20 bg-red-600/10 border-2 border-red-600/30 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <span className="text-3xl">✓</span>
+                <div className="py-6">
+                  <div className="text-center mb-6">
+                    <div className={`w-16 h-16 border-2 rounded-full flex items-center justify-center mx-auto mb-4 ${importResult.success > 0 ? 'bg-red-600/10 border-red-600/30' : 'bg-yellow-600/10 border-yellow-600/30'}`}>
+                      <span className="text-2xl">{importResult.success > 0 ? '✓' : '⚠'}</span>
+                    </div>
+                    <h3 className="text-2xl font-black uppercase italic text-white">Import dokončený</h3>
                   </div>
-                  <h3 className="text-3xl font-black uppercase italic text-white mb-2">Import dokončený</h3>
-                  <div className="flex gap-6 justify-center mt-6">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-6 py-4 text-center">
-                      <p className="text-3xl font-black text-white">{importResult.success}</p>
+                  <div className="flex gap-4 justify-center mb-6">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-3 text-center">
+                      <p className="text-2xl font-black text-white">{importResult.success}</p>
                       <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mt-1">Klientov</p>
                     </div>
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-6 py-4 text-center">
-                      <p className="text-3xl font-black text-white">{importResult.vehicles}</p>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-3 text-center">
+                      <p className="text-2xl font-black text-white">{importResult.vehicles}</p>
                       <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mt-1">Vozidiel</p>
                     </div>
                     {importResult.skip > 0 && (
-                      <div className="bg-yellow-600/10 border border-yellow-600/30 rounded-2xl px-6 py-4 text-center">
-                        <p className="text-3xl font-black text-yellow-500">{importResult.skip}</p>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-600 mt-1">Preskočených</p>
+                      <div className="bg-yellow-600/10 border border-yellow-600/30 rounded-2xl px-5 py-3 text-center">
+                        <p className="text-2xl font-black text-yellow-500">{importResult.skip}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-600 mt-1">Chýb</p>
                       </div>
                     )}
                   </div>
-                  <button onClick={() => setIsImportOpen(false)} className="mt-8 bg-white text-black font-black px-10 py-4 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-xl">Zavrieť</button>
+                  {importResult.errors?.length > 0 && (
+                    <div className="bg-red-600/5 border border-red-600/20 rounded-2xl p-4 mb-6 max-h-40 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-red-500 mb-3">Chybové hlásenia</p>
+                      {importResult.errors.map((e, i) => (
+                        <p key={i} className="text-[11px] text-red-400 font-bold mb-1 break-all">{e}</p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-4">
+                    <button onClick={() => setImportStep(2)} className="flex-1 text-zinc-600 font-black uppercase text-[10px] tracking-widest hover:text-white transition-colors">← Skúsiť znova</button>
+                    <button onClick={() => setIsImportOpen(false)} className="flex-[2] bg-white text-black font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-xl">Zavrieť</button>
+                  </div>
                 </div>
               )}
 
