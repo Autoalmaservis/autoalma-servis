@@ -397,8 +397,9 @@ export default function KlientiPage() {
 
     for (const item of toImport) {
       try {
-        // Remove id from payload — let DB auto-generate UUID
         const { id: _id, ...clientPayload } = item.client;
+
+        console.log('[IMPORT] Vkladám klienta:', item.displayName, clientPayload);
 
         const { data: profileData, error: profileError } = await supabase
           .from('user_profiles')
@@ -406,8 +407,16 @@ export default function KlientiPage() {
           .select('id')
           .single();
 
+        console.log('[IMPORT] Výsledok insertu:', { profileData, profileError });
+
         if (profileError) {
-          errors.push(`${item.displayName}: ${profileError.message}`);
+          errors.push(`${item.displayName}: ${profileError.message} (code: ${profileError.code})`);
+          skipCount++;
+          continue;
+        }
+
+        if (!profileData?.id) {
+          errors.push(`${item.displayName}: insert prebehol ale id sa nevrátilo (možný problém s RLS SELECT policy)`);
           skipCount++;
           continue;
         }
@@ -420,19 +429,21 @@ export default function KlientiPage() {
             owner_name: item.displayName,
             owner_email: item.client.email || '',
           }]);
-          if (!vErr) vehicleCount++;
+          if (vErr) console.log('[IMPORT] Chyba vozidla:', vErr.message);
+          else vehicleCount++;
         }
         successCount++;
       } catch (err) {
+        console.log('[IMPORT] Catch error:', err);
         errors.push(`${item.displayName}: ${err.message}`);
         skipCount++;
       }
     }
 
+    await fetchKlienti();
     setImportResult({ success: successCount, vehicles: vehicleCount, skip: skipCount, errors });
     setImportLoading(false);
     setImportStep(4);
-    fetchKlienti();
   };
 
   const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
