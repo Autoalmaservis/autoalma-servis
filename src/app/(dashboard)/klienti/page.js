@@ -37,6 +37,16 @@ export default function KlientiPage() {
   const [importSelected, setImportSelected] = useState(new Set());
   const [importResult, setImportResult] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
+  const [importRetryQueue, setImportRetryQueue] = useState([]);
+  const [retryIdx, setRetryIdx] = useState(0);
+  const [isRetryOpen, setIsRetryOpen] = useState(false);
+  const [retryForm, setRetryForm] = useState({ full_name: '', phone: '', email: '', address: '' });
+  const [retrySaving, setRetrySaving] = useState(false);
+  const [importSearch, setImportSearch] = useState('');
+  const [importDateFrom, setImportDateFrom] = useState('');
+  const [importHistory, setImportHistory] = useState(() => { try { return JSON.parse(localStorage.getItem('importHistory') || '[]'); } catch { return []; } });
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [deletingBatch, setDeletingBatch] = useState(null);
   const klientyFileRef = useRef(null);
   const vozidlaFileRef = useRef(null);
 
@@ -45,35 +55,65 @@ export default function KlientiPage() {
   // --- 1. NAČÍTANIE KLIENTOV ---
   const fetchKlienti = async () => {
     setLoading(true);
-    const { data: webProfiles } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .or('role.eq.zakaznik,role.eq.klient'); 
+    const [{ data: webProfiles }, { data: customersData }, { data: vehiclesData }] = await Promise.all([
+      supabase.from('user_profiles').select('*').or('role.eq.zakaznik,role.eq.klient'),
+      supabase.from('customers').select('*'),
+      supabase.from('vehicles').select('*'),
+    ]);
 
-    const { data: vehiclesData } = await supabase.from('vehicles').select('*');
     const mapaKlientov = {};
 
     webProfiles?.forEach(p => {
       const hlavneZobrazovaneMeno = p.company_name || p.full_name || p.email || "Neznámy partner";
-      mapaKlientov[hlavneZobrazovaneMeno] = { 
-        ...p, 
-        customer_name: hlavneZobrazovaneMeno, 
-        db_full_name: p.full_name, 
+      mapaKlientov[hlavneZobrazovaneMeno] = {
+        ...p,
+        customer_name: hlavneZobrazovaneMeno,
+        db_full_name: p.full_name,
         db_company_name: p.company_name,
-        customer_phone: p.phone || '', 
+        customer_phone: p.phone || '',
         customer_email: p.email || '',
-        all_plates: [], 
-        client_type: (p.ico || p.company_name) ? 'Firma' : 'Osoba' 
+        all_plates: [],
+        client_type: (p.ico || p.company_name) ? 'Firma' : 'Osoba'
       };
     });
 
+    // Importovaní klienti z customers tabuľky (preskočiť duplicity)
+    customersData?.forEach(c => {
+      const meno = c.company_name || c.full_name || c.email || 'Neznámy';
+      const emailExists = c.email && Object.values(mapaKlientov).some(k => k.customer_email?.toLowerCase() === c.email.toLowerCase());
+      const nameExists = meno !== 'Neznámy' && Object.values(mapaKlientov).some(k => (k.db_full_name || k.db_company_name || k.customer_name)?.toLowerCase() === meno.toLowerCase());
+      if (!emailExists && !nameExists) {
+        mapaKlientov['__cust__' + c.id] = {
+          id: c.id,
+          _customerId: c.id,
+          customer_name: meno,
+          db_full_name: c.full_name,
+          db_company_name: c.company_name || null,
+          customer_phone: c.phone || '',
+          customer_email: c.email || '',
+          address: c.address || '',
+          city: c.city || '',
+          zip: c.zip || '',
+          ico: c.ico || '',
+          dic: c.dic || '',
+          ic_dph: c.ic_dph || '',
+          all_plates: [],
+          client_type: c.client_type || (c.company_name ? 'Firma' : 'Osoba'),
+        };
+      }
+    });
+
     vehiclesData?.forEach(v => {
-      const majitel = Object.values(mapaKlientov).find(k => 
-        (k.id === v.owner_id) || (k.email === v.owner_email) || (k.customer_name === v.owner_name)
+      const majitel = Object.values(mapaKlientov).find(k =>
+        (k._customerId && k._customerId === v.owner_id) ||
+        (k.id === v.owner_id) ||
+        (k.customer_email && v.owner_email && k.customer_email === v.owner_email) ||
+        (k.customer_name === v.owner_name)
       );
       if (majitel && v.license_plate) {
-        if (!mapaKlientov[majitel.customer_name].all_plates.includes(v.license_plate)) {
-          mapaKlientov[majitel.customer_name].all_plates.push(v.license_plate);
+        const key = Object.keys(mapaKlientov).find(k => mapaKlientov[k] === majitel);
+        if (key && !mapaKlientov[key].all_plates.includes(v.license_plate)) {
+          mapaKlientov[key].all_plates.push(v.license_plate);
         }
       }
     });
@@ -90,8 +130,15 @@ export default function KlientiPage() {
     const realCompName = klientObj.db_company_name;
     setSelectedKlient(meno);
     
-    const { data: ticketCars } = await supabase.from('job_tickets').select('*, job_items(*)').or(`customer_name.eq."${meno}",customer_name.eq."${realFullName}",customer_name.eq."${realCompName}"`);
-    const { data: webCars } = await supabase.from('vehicles').select('*').or(`owner_name.eq."${meno}",owner_name.eq."${realFullName}",owner_name.eq."${realCompName}",owner_email.eq."${email}"`);
+    const nameFilters = [meno, realFullName, realCompName].filter(Boolean);
+    const ticketOrParts = nameFilters.map(n => `customer_name.eq."${n}"`).join(',');
+    const vehicleOrParts = [
+      ...nameFilters.map(n => `owner_name.eq."${n}"`),
+      ...(email ? [`owner_email.eq."${email}"`] : []),
+      ...(klientObj._customerId ? [`owner_id.eq.${klientObj._customerId}`] : []),
+    ].join(',');
+    const { data: ticketCars } = ticketOrParts ? await supabase.from('job_tickets').select('*, job_items(*)').or(ticketOrParts) : { data: [] };
+    const { data: webCars } = vehicleOrParts ? await supabase.from('vehicles').select('*').or(vehicleOrParts) : { data: [] };
 
     let finalVehicles = [];
     if (webCars) {
@@ -164,7 +211,7 @@ export default function KlientiPage() {
     const payload = {
       owner_name: selectedKlient,
       owner_email: klientInfo?.customer_email || '',
-      owner_id: klientInfo?.id || null,
+      owner_id: klientInfo?._customerId ? null : (klientInfo?.id || null),
       license_plate: carForm.plate_number.toUpperCase().replace(/\s/g, ''),
       brand_model: `${carForm.brand} ${carForm.model}`.trim(),
       vin_number: carForm.vin_number.toUpperCase().trim(),
@@ -238,8 +285,14 @@ export default function KlientiPage() {
 
   const handleDeleteKlient = async (klient) => {
     if (confirmDeleteName !== klient.customer_name) { setConfirmDeleteName(klient.customer_name); return; }
-    const { error } = await supabase.from('user_profiles').delete().eq('email', klient.customer_email);
-    if (!error) { setConfirmDeleteName(null); fetchKlienti(); setSelectedKlient(null); }
+    if (klient._customerId) {
+      await supabase.from('vehicles').delete().eq('owner_id', klient._customerId);
+      const { error } = await supabase.from('customers').delete().eq('id', klient._customerId);
+      if (!error) { setConfirmDeleteName(null); fetchKlienti(); setSelectedKlient(null); }
+    } else {
+      const { error } = await supabase.from('user_profiles').delete().eq('email', klient.customer_email);
+      if (!error) { setConfirmDeleteName(null); fetchKlienti(); setSelectedKlient(null); }
+    }
   };
 
   const handleDeleteCar = async (v) => {
@@ -285,7 +338,14 @@ export default function KlientiPage() {
     if (!klientyFile) { alert('Vyberte súbor Klienty!'); return; }
 
     const parseFile = (file) => new Promise((resolve) => {
-      Papa.parse(file, { header: true, delimiter: ';', skipEmptyLines: true, complete: (r) => resolve(r.data) });
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const decoder = new TextDecoder('windows-1250');
+        const text = decoder.decode(e.target.result);
+        const result = Papa.parse(text, { header: true, delimiter: ';', skipEmptyLines: true });
+        resolve(result.data);
+      };
+      reader.readAsArrayBuffer(file);
     });
 
     const klientyRows = await parseFile(klientyFile);
@@ -321,8 +381,9 @@ export default function KlientiPage() {
       return isNaN(n) ? null : n;
     };
 
-    const existingEmails = new Set(klienti.map(k => k.customer_email).filter(Boolean));
+    const existingEmails = new Set(klienti.map(k => k.customer_email).filter(Boolean).map(e => e.toLowerCase()));
     const existingPhones = new Set(klienti.map(k => k.customer_phone).filter(Boolean));
+    const existingNames = new Set(klienti.flatMap(k => [k.db_full_name, k.db_company_name, k.customer_name].filter(Boolean).map(n => n.toLowerCase())));
     const existingPlates = new Set(klienti.flatMap(k => k.all_plates || []));
 
     const clientMap = {};
@@ -346,25 +407,30 @@ export default function KlientiPage() {
         role: 'klient',
       };
       const displayName = client.company_name || client.full_name || `Klient ${row.ID}`;
-      const isDuplicate = (email && existingEmails.has(email)) || (phone && existingPhones.has(phone));
-      clientMap[row.ID] = { client, displayName, isDuplicate, vehicles: [] };
+      const isDuplicate = (email && existingEmails.has(email.toLowerCase())) || (phone && existingPhones.has(phone)) || existingNames.has(displayName.toLowerCase());
+      const dupReason = (email && existingEmails.has(email.toLowerCase())) ? 'email' : (phone && existingPhones.has(phone)) ? 'tel' : existingNames.has(displayName.toLowerCase()) ? 'meno' : null;
+      clientMap[row.ID] = { client, displayName, isDuplicate, dupReason, vehicles: [] };
     });
+
+    const parseAzsoftDate = (s) => {
+      if (!s) return null;
+      // Format: DD.MM.YYYY HH:MM or DD.MM.YYYY
+      const m = s.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+      return null;
+    };
 
     vozidlaRows.forEach(row => {
       const owner = clientMap[row.ID_ODBER];
       if (!owner) return;
       const spz = row.SPZ?.trim().toUpperCase().replace(/\s/g, '');
       if (!spz) return;
+      const casOprava = parseAzsoftDate(row.CAS_OPRAVA);
+      if (casOprava) {
+        if (!owner.lastActivity || casOprava > owner.lastActivity) owner.lastActivity = casOprava;
+      }
       owner.vehicles.push({
         license_plate: spz,
-        brand_model: row.TYPAUTA?.trim() || '',
-        vin_number: row.CKAROSERIE?.trim().toUpperCase() || '',
-        year_produced: parseYear(row.VYROBENE),
-        engine_volume: parseNum(row.OBJEMMOT),
-        engine_power: parseNum(row.VYKONMOT),
-        fuel_type: parseFuel(row.PALIVODRUH),
-        mileage: 0,
-        delete_requested: false,
         _isDupPlate: existingPlates.has(spz),
       });
     });
@@ -389,65 +455,192 @@ export default function KlientiPage() {
     });
   };
 
+  const insertCustomerAndVehicles = async (item) => {
+    const isFirma = !!(item.client.company_name || (item.client.ico && item.client.ico.trim().length > 3));
+    const customerPayload = {
+      full_name: item.client.full_name || item.client.company_name || null,
+      company_name: item.client.company_name || null,
+      phone: item.client.phone || null,
+      email: item.client.email || null,
+      address: item.client.address || null,
+      city: item.client.city || null,
+      zip: item.client.zip || null,
+      ico: item.client.ico || null,
+      dic: item.client.dic || null,
+      ic_dph: item.client.ic_dph || null,
+      client_type: isFirma ? 'Firma' : 'Osoba',
+    };
+
+    const { data: customerData, error: customerError } = await supabase
+      .from('customers')
+      .insert([customerPayload])
+      .select('id')
+      .single();
+
+    if (customerError) throw customerError;
+
+    let vehicleCount = 0;
+    const vehicleErrors = [];
+    for (const v of item.vehicles) {
+      let brand_model = '';
+      let vin_number = '';
+      try {
+        const res = await fetch(`/api/vehicle-lookup?ecv=${encodeURIComponent(v.license_plate)}`);
+        const json = await res.json();
+        if (json?.vehicle) {
+          brand_model = [json.vehicle.znacka, json.vehicle.obch_nazov].filter(Boolean).join(' ');
+          vin_number = json.vehicle.vin || '';
+        }
+      } catch (_) {}
+
+      const { error: vErr } = await supabase.from('vehicles').insert([{
+        license_plate: v.license_plate,
+        brand_model: brand_model || null,
+        vin_number: vin_number || null,
+        owner_name: item.displayName,
+        owner_email: item.client.email || null,
+        owner_phone: item.client.phone || null,
+        delete_requested: false,
+      }]);
+      if (vErr && vErr.code !== '23505') vehicleErrors.push(`${v.license_plate}: ${vErr.message}`);
+      else vehicleCount++;
+    }
+    if (vehicleErrors.length) throw Object.assign(new Error(vehicleErrors.join('; ')), { _isVehicleError: true, _vehicleErrors: vehicleErrors, _vehicleCount: vehicleCount, _customerId: customerData.id });
+    return { vehicleCount, customerId: customerData.id };
+  };
+
   const doImport = async () => {
     setImportLoading(true);
     const toImport = importPreview.filter((_, i) => importSelected.has(i));
     let successCount = 0, vehicleCount = 0, skipCount = 0;
     const errors = [];
+    const failedItems = [];
+    const batchCustomerIds = [];
 
     for (const item of toImport) {
       try {
-        const { id: _id, ...clientPayload } = item.client;
-
-        clientPayload.id = crypto.randomUUID();
-        console.log('[IMPORT] Vkladám klienta:', item.displayName, clientPayload);
-
-        const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
-          .insert([clientPayload])
-          .select('id')
-          .single();
-
-        console.log('[IMPORT] Výsledok insertu:', { profileData, profileError });
-
-        if (profileError) {
-          errors.push(`${item.displayName}: ${profileError.message} (code: ${profileError.code})`);
-          skipCount++;
-          continue;
-        }
-
-        if (!profileData?.id) {
-          errors.push(`${item.displayName}: insert prebehol ale id sa nevrátilo (možný problém s RLS SELECT policy)`);
-          skipCount++;
-          continue;
-        }
-
-        for (const v of item.vehicles) {
-          const { _isDupPlate, ...vPayload } = v;
-          const { error: vErr } = await supabase.from('vehicles').insert([{
-            ...vPayload,
-            owner_id: profileData.id,
-            owner_name: item.displayName,
-            owner_email: item.client.email || '',
-          }]);
-          if (vErr) console.log('[IMPORT] Chyba vozidla:', vErr.message);
-          else vehicleCount++;
-        }
+        const { vehicleCount: vCount, customerId } = await insertCustomerAndVehicles(item);
+        vehicleCount += vCount;
         successCount++;
+        if (customerId) batchCustomerIds.push(customerId);
       } catch (err) {
-        console.log('[IMPORT] Catch error:', err);
-        errors.push(`${item.displayName}: ${err.message}`);
-        skipCount++;
+        if (err._isVehicleError) {
+          vehicleCount += err._vehicleCount || 0;
+          successCount++;
+          if (err._customerId) batchCustomerIds.push(err._customerId);
+          err._vehicleErrors.forEach(e => errors.push(`${item.displayName} – vozidlo: ${e}`));
+        } else {
+          errors.push(`${item.displayName}: ${err.message}`);
+          failedItems.push({ item, reason: err.message });
+          skipCount++;
+        }
       }
     }
 
+    if (batchCustomerIds.length > 0) {
+      const batch = { id: crypto.randomUUID(), date: new Date().toISOString(), count: batchCustomerIds.length, customerIds: batchCustomerIds };
+      const newHistory = [batch, ...importHistory].slice(0, 10);
+      setImportHistory(newHistory);
+      localStorage.setItem('importHistory', JSON.stringify(newHistory));
+    }
+
     await fetchKlienti();
+    setImportRetryQueue(failedItems);
+    setRetryIdx(0);
     setImportResult({ success: successCount, vehicles: vehicleCount, skip: skipCount, errors });
     setImportLoading(false);
     setImportStep(4);
   };
 
+  const deleteImportBatch = async (batch) => {
+    setDeletingBatch(batch.id);
+    try {
+      for (const cid of batch.customerIds) {
+        const { data: cust } = await supabase.from('customers').select('full_name, phone, email').eq('id', cid).single();
+        if (cust) {
+          if (cust.email) await supabase.from('vehicles').delete().eq('owner_email', cust.email);
+          if (cust.full_name) await supabase.from('vehicles').delete().eq('owner_name', cust.full_name);
+        }
+        await supabase.from('customers').delete().eq('id', cid);
+      }
+      const newHistory = importHistory.filter(b => b.id !== batch.id);
+      setImportHistory(newHistory);
+      localStorage.setItem('importHistory', JSON.stringify(newHistory));
+      await fetchKlienti();
+    } finally { setDeletingBatch(null); }
+  };
+
+  const openRetryModal = (idx) => {
+    const { item } = importRetryQueue[idx];
+    setRetryForm({
+      full_name: item.client.full_name || '',
+      company_name: item.client.company_name || '',
+      phone: item.client.phone || '',
+      email: item.client.email || '',
+      address: item.client.address || '',
+      city: item.client.city || '',
+      zip: item.client.zip || '',
+      ico: item.client.ico || '',
+      dic: item.client.dic || '',
+      ic_dph: item.client.ic_dph || '',
+      client_type: item.client.company_name ? 'Firma' : 'Osoba',
+      _vehicles: item.vehicles,
+      _displayName: item.displayName,
+    });
+    setRetryIdx(idx);
+    setIsRetryOpen(true);
+  };
+
+  const handleRetrySave = async () => {
+    setRetrySaving(true);
+    try {
+      const isFirma = retryForm.client_type === 'Firma' || !!retryForm.company_name;
+      const customerPayload = {
+        full_name: retryForm.full_name || retryForm.company_name || null,
+        company_name: retryForm.company_name || null,
+        phone: retryForm.phone || null,
+        email: retryForm.email || null,
+        address: retryForm.address || null,
+        city: retryForm.city || null,
+        zip: retryForm.zip || null,
+        ico: retryForm.ico || null,
+        dic: retryForm.dic || null,
+        ic_dph: retryForm.ic_dph || null,
+        client_type: isFirma ? 'Firma' : 'Osoba',
+      };
+      const { data: customerData, error } = await supabase.from('customers').insert([customerPayload]).select('id').single();
+      if (error) throw error;
+
+      const ownerName = retryForm.company_name || retryForm.full_name || retryForm._displayName;
+      for (const v of (retryForm._vehicles || [])) {
+        await supabase.from('vehicles').insert([{
+          license_plate: v.license_plate,
+          owner_name: ownerName,
+          owner_email: retryForm.email || null,
+          delete_requested: false,
+        }]);
+      }
+
+      const newQueue = importRetryQueue.filter((_, i) => i !== retryIdx);
+      setImportRetryQueue(newQueue);
+      setImportResult(prev => ({ ...prev, success: prev.success + 1, skip: prev.skip - 1 }));
+      await fetchKlienti();
+
+      if (newQueue.length > 0) {
+        const nextIdx = Math.min(retryIdx, newQueue.length - 1);
+        openRetryModal(nextIdx);
+      } else {
+        setIsRetryOpen(false);
+      }
+    } catch (err) {
+      alert(`Chyba: ${err.message}`);
+    } finally {
+      setRetrySaving(false);
+    }
+  };
+
   const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const stripDia = s => s ? s.normalize('NFD').replace(/[̀-ͯ]/g, '') : s;
   const filteredKlienti = klienti.filter(k => {
     const s = nd(searchTerm);
     return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
@@ -463,6 +656,7 @@ export default function KlientiPage() {
         </div>
         <div className="flex gap-4">
           <button onClick={openImport} className="bg-zinc-900 text-zinc-400 font-black px-6 py-3.5 rounded-2xl text-[10px] uppercase hover:text-white transition-all border border-zinc-800">Import CSV</button>
+          {importHistory.length > 0 && <button onClick={() => setIsHistoryOpen(true)} className="bg-zinc-900 text-zinc-600 font-black px-4 py-3.5 rounded-2xl text-[10px] uppercase hover:text-yellow-500 transition-all border border-zinc-800">História ({importHistory.length})</button>}
           <button onClick={() => {
             const dataToExport = klienti.map(k => ({
               Meno: k.customer_name,
@@ -483,6 +677,61 @@ export default function KlientiPage() {
             XLSX.utils.book_append_sheet(wb, ws, "Klienti");
             XLSX.writeFile(wb, "Partneri_Dielne.xlsx");
           }} className="bg-zinc-900 text-zinc-400 font-black px-6 py-3.5 rounded-2xl text-[10px] uppercase hover:text-white transition-all border border-zinc-800">Export XLSX</button>
+          <button onClick={async () => {
+            setLoading(true);
+            try {
+              const [custRes, vehRes, tickRes, itemRes, taskRes, invRes] = await Promise.all([
+                supabase.from('customers').select('*'),
+                supabase.from('vehicles').select('*'),
+                supabase.from('job_tickets').select('*'),
+                supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type'),
+                supabase.from('job_tasks').select('id, job_id, task_description, is_completed'),
+                supabase.from('invoices').select('*'),
+              ]);
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((custRes.data || []).map(c => ({
+                _id: c.id, Meno: c.name || '', Firma: c.company_name || '', Typ: c.client_type || 'Osoba',
+                Telefon: c.phone || '', Email: c.email || '', Ulica: c.address || '', Mesto: c.city || '',
+                PSC: c.zip || '', ICO: c.ico || '', DIC: c.dic || '', IC_DPH: c.ic_dph || '',
+              }))), 'Klienti');
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((vehRes.data || []).map(v => ({
+                _id: v.id, _owner_id: v.owner_id || '', SPZ: v.license_plate || '', Znacka_model: v.brand_model || '',
+                VIN: v.vin_number || '', Objem: v.engine_volume || '', Vykon: v.engine_power || '',
+                Rok: v.year_produced || '', Palivo: v.fuel_type || '', Km: v.mileage || '',
+                Vlastnik: v.owner_name || '', Email_vlastnika: v.owner_email || '',
+              }))), 'Vozidla');
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((tickRes.data || []).map(t => ({
+                _id: t.id, _customer_id: t.customer_id || '', Cislo: t.job_number || '',
+                Klient: t.customer_name || '', SPZ: t.plate_number || '', Auto: t.car_brand_model || '',
+                VIN: t.vin_number || '', Km: t.mileage || '', Palivo: t.fuel_type || '', Status: t.status || '',
+                Telefon: t.customer_phone || '', Email: t.customer_email || '', Ulica: t.address || '',
+                Mesto: t.city || '', PSC: t.zip || '', Typ_klienta: t.client_type || '',
+                Firma: t.company_name || '', ICO: t.ico || '', DIC: t.dic || '', IC_DPH: t.ic_dph || '',
+                Objem_motora: t.engine_volume || '', Vykon: t.engine_power || '', Rok: t.year_produced || '',
+                Technik: t.technician_name || '', Datum: t.created_at || '',
+              }))), 'Zakazky');
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((itemRes.data || []).map(i => ({
+                _job_id: i.job_id, Nazov: i.name || '', Mnozstvo: i.quantity || 0,
+                Jednotka: i.unit || '', Cena_j: i.unit_price || 0, Typ: i.type || '',
+              }))), 'Polozky');
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((taskRes.data || []).map(t => ({
+                _job_id: t.job_id, Popis: t.task_description || '', Hotovo: t.is_completed ? 'true' : 'false',
+              }))), 'Ukony');
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((invRes.data || []).map(inv => ({
+                _id: inv.id, _job_id: inv.job_id || '', Cislo: inv.invoice_number || '',
+                Klient: inv.customer_name || '', Email_k: inv.customer_email || '', Tel_k: inv.customer_phone || '',
+                Celkom: inv.total_amount || 0, Subtotal: inv.subtotal_amount || 0, Dan: inv.tax_amount || 0,
+                Je_oficielna: inv.is_official ? 'true' : 'false', Datum: inv.created_at || '',
+                items_json: JSON.stringify(inv.items_json || []),
+                supplier_details: JSON.stringify(inv.supplier_details || {}),
+                company_details: JSON.stringify(inv.company_details || {}),
+                payment_info: JSON.stringify(inv.payment_info || {}),
+                car_details: JSON.stringify(inv.car_details || {}),
+              }))), 'Faktury');
+              XLSX.writeFile(wb, 'Servisco_migracia.xlsx');
+            } catch (err) { alert('Chyba pri exporte: ' + err.message); }
+            finally { setLoading(false); }
+          }} className="bg-zinc-900 text-amber-500 font-black px-6 py-3.5 rounded-2xl text-[10px] uppercase hover:text-white transition-all border border-amber-800">Export migrácia</button>
           <button onClick={() => { setEditMode(false); setClientForm({customer_name:'', customer_phone:'', customer_email:'', client_type:'Osoba', address:'', city:'', zip:'', ico:'', dic:'', ic_dph:'', company_name: '', password: ''}); setIsClientModalOpen(true); }} className="bg-white text-black font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold">+ Nový Partner</button>
         </div>
       </header>
@@ -686,47 +935,57 @@ export default function KlientiPage() {
               )}
 
               {/* KROK 3 — Preview */}
-              {importStep === 3 && (
+              {importStep === 3 && (() => {
+                const ndI = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                const dateFrom = importDateFrom ? new Date(importDateFrom) : null;
+                const filtered = importPreview.map((item, i) => ({ item, i })).filter(({ item }) => {
+                  const searchOk = !importSearch || ndI(item.displayName).includes(ndI(importSearch)) || ndI(item.client.phone || '').includes(ndI(importSearch)) || ndI(item.client.email || '').includes(ndI(importSearch));
+                  const dateOk = !dateFrom || (item.lastActivity && item.lastActivity >= dateFrom);
+                  return searchOk && dateOk;
+                });
+                return (
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">
-                      Nájdených <span className="text-white">{importPreview.length}</span> klientov · <span className="text-white">{importPreview.reduce((a, p) => a + p.vehicles.length, 0)}</span> vozidiel
-                    </p>
-                    <div className="flex gap-3">
-                      <button onClick={() => toggleAll(true)} className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-400 transition-colors">Vybrať všetkých</button>
-                      <span className="text-zinc-700">|</span>
-                      <button onClick={() => toggleAll(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Zrušiť výber</button>
+                  <div className="flex gap-3 mb-4">
+                    <input type="text" placeholder="Hľadať meno, telefón, email..." value={importSearch} onChange={e => setImportSearch(e.target.value)} className="flex-1 bg-black border border-zinc-800 px-4 py-2.5 rounded-2xl text-white text-[11px] font-bold outline-none focus:border-red-600"/>
+                    <div className="flex items-center gap-2 bg-black border border-zinc-800 px-3 rounded-2xl">
+                      <span className="text-[9px] text-zinc-500 font-black uppercase whitespace-nowrap">Aktivita od</span>
+                      <input type="date" value={importDateFrom} onChange={e => setImportDateFrom(e.target.value)} className="bg-transparent text-white text-[11px] font-bold outline-none py-2"/>
+                      {importDateFrom && <button onClick={() => setImportDateFrom('')} className="text-zinc-600 hover:text-white text-xs ml-1">✕</button>}
                     </div>
                   </div>
-
-                  <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1" style={{ scrollbarWidth: 'none' }}>
-                    {importPreview.map((item, i) => (
-                      <div
-                        key={i}
-                        onClick={() => toggleOne(i)}
-                        className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all ${importSelected.has(i) ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-900/30 border-zinc-900 opacity-50'}`}
-                      >
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-white">{filtered.length}</span> / {importPreview.length} klientov
+                    </p>
+                    <div className="flex gap-3">
+                      <button onClick={() => setImportSelected(new Set(filtered.map(({ i }) => i)))} className="text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-400 transition-colors">Vybrať zobrazených</button>
+                      <span className="text-zinc-700">|</span>
+                      <button onClick={() => toggleAll(true)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Všetko</button>
+                      <span className="text-zinc-700">|</span>
+                      <button onClick={() => toggleAll(false)} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Zrušiť</button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1" style={{ scrollbarWidth: 'none' }}>
+                    {filtered.map(({ item, i }) => (
+                      <div key={i} onClick={() => toggleOne(i)} className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all ${importSelected.has(i) ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-900/30 border-zinc-900 opacity-50'}`}>
                         <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${importSelected.has(i) ? 'bg-red-600 border-red-600' : 'border-zinc-700'}`}>
                           {importSelected.has(i) && <span className="text-white text-[10px] font-black">✓</span>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <p className="font-black uppercase italic text-white text-sm truncate">{item.displayName}</p>
-                            {item.isDuplicate && (
-                              <span className="text-[8px] bg-yellow-600/20 border border-yellow-600/40 text-yellow-500 font-black uppercase px-2 py-0.5 rounded-full shrink-0">Existuje</span>
-                            )}
+                            {item.isDuplicate && <span className="text-[8px] bg-yellow-600/20 border border-yellow-600/40 text-yellow-500 font-black uppercase px-2 py-0.5 rounded-full shrink-0">Existuje ({item.dupReason})</span>}
                           </div>
                           <p className="text-[10px] text-zinc-500 font-bold mt-0.5">
                             {[item.client.phone, item.client.email, item.client.city].filter(Boolean).join(' · ')}
+                            {item.lastActivity && <span className="ml-2 text-zinc-600">· posl. {item.lastActivity.toLocaleDateString('sk-SK')}</span>}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
                           {item.vehicles.length > 0 && (
                             <div className="flex gap-1 flex-wrap justify-end">
                               {item.vehicles.map((v, vi) => (
-                                <span key={vi} className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-lg uppercase ${v._isDupPlate ? 'bg-yellow-600/10 text-yellow-500 border border-yellow-600/30' : 'bg-black text-zinc-400 border border-zinc-800'}`}>
-                                  {v.license_plate}
-                                </span>
+                                <span key={vi} className={`text-[9px] font-mono font-black px-2 py-0.5 rounded-lg uppercase ${v._isDupPlate ? 'bg-yellow-600/10 text-yellow-500 border border-yellow-600/30' : 'bg-black text-zinc-400 border border-zinc-800'}`}>{v.license_plate}</span>
                               ))}
                             </div>
                           )}
@@ -734,19 +993,15 @@ export default function KlientiPage() {
                       </div>
                     ))}
                   </div>
-
                   <div className="flex gap-4 pt-6 border-t border-zinc-900 mt-4">
                     <button onClick={() => setImportStep(2)} className="flex-1 text-zinc-600 font-black uppercase text-[10px] tracking-widest hover:text-white transition-colors">← Späť</button>
-                    <button
-                      onClick={doImport}
-                      disabled={importSelected.size === 0 || importLoading}
-                      className="flex-[2] bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all shadow-lg"
-                    >
+                    <button onClick={doImport} disabled={importSelected.size === 0 || importLoading} className="flex-[2] bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all shadow-lg">
                       {importLoading ? 'Importujem...' : `Importovať ${importSelected.size} klientov →`}
                     </button>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* KROK 4 — Výsledok */}
               {importStep === 4 && importResult && (
@@ -781,6 +1036,11 @@ export default function KlientiPage() {
                       ))}
                     </div>
                   )}
+                  {importRetryQueue.length > 0 && (
+                    <button onClick={() => openRetryModal(0)} className="w-full mb-3 bg-yellow-600/20 border border-yellow-600/40 text-yellow-400 font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-yellow-600/30 transition-all">
+                      Doplniť chýbajúce ({importRetryQueue.length})
+                    </button>
+                  )}
                   <div className="flex gap-4">
                     <button onClick={() => setImportStep(2)} className="flex-1 text-zinc-600 font-black uppercase text-[10px] tracking-widest hover:text-white transition-colors">← Skúsiť znova</button>
                     <button onClick={() => setIsImportOpen(false)} className="flex-[2] bg-white text-black font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-xl">Zavrieť</button>
@@ -789,6 +1049,74 @@ export default function KlientiPage() {
               )}
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RETRY MODAL — chybní klienti z importu */}
+      {isRetryOpen && importRetryQueue.length > 0 && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] w-full max-w-lg shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-yellow-500 mb-1">Doplniť údaje</p>
+                <h2 className="text-2xl font-black uppercase italic text-white">{retryForm._displayName}</h2>
+              </div>
+              <span className="text-[10px] text-zinc-500 font-black">{retryIdx + 1} / {importRetryQueue.length}</span>
+            </div>
+            <div className="space-y-4">
+              <input type="text" placeholder="Celé meno / Firma" value={retryForm.full_name} onChange={e => setRetryForm(p => ({...p, full_name: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-yellow-500"/>
+              <input type="tel" placeholder="Telefón" value={retryForm.phone} onChange={e => setRetryForm(p => ({...p, phone: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-yellow-500"/>
+              <input type="email" placeholder="Email" value={retryForm.email} onChange={e => setRetryForm(p => ({...p, email: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-yellow-500"/>
+              <input type="text" placeholder="Adresa" value={retryForm.address} onChange={e => setRetryForm(p => ({...p, address: e.target.value}))} className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none focus:border-yellow-500"/>
+              {retryForm._vehicles?.length > 0 && (
+                <div className="bg-black/40 border border-zinc-800 rounded-2xl p-3">
+                  <p className="text-[10px] text-zinc-500 uppercase font-black mb-2">Vozidlá</p>
+                  <div className="flex flex-wrap gap-2">{retryForm._vehicles.map((v, i) => <span key={i} className="text-xs font-mono bg-zinc-800 px-2 py-1 rounded-lg text-white">{v.license_plate}</span>)}</div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => {
+                const newQueue = importRetryQueue.filter((_, i) => i !== retryIdx);
+                setImportRetryQueue(newQueue);
+                if (newQueue.length > 0) openRetryModal(Math.min(retryIdx, newQueue.length - 1));
+                else setIsRetryOpen(false);
+              }} className="flex-1 text-zinc-600 font-black uppercase text-[10px] tracking-widest hover:text-white transition-colors">Preskočiť</button>
+              <button onClick={handleRetrySave} disabled={retrySaving} className="flex-[2] bg-yellow-600 text-black font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest hover:bg-yellow-500 transition-all shadow-xl disabled:opacity-50">
+                {retrySaving ? 'Ukladám...' : 'Uložiť a pokračovať'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HISTÓRIA IMPORTOV */}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] w-full max-w-lg shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black uppercase italic text-white">História importov</h2>
+              <button onClick={() => setIsHistoryOpen(false)} className="text-zinc-500 hover:text-white text-2xl">×</button>
+            </div>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+              {importHistory.map((batch) => (
+                <div key={batch.id} className="flex items-center justify-between bg-black/40 border border-zinc-800 rounded-2xl p-4">
+                  <div>
+                    <p className="text-white font-black text-sm">{new Date(batch.date).toLocaleString('sk-SK')}</p>
+                    <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mt-1">{batch.count} klientov</p>
+                  </div>
+                  <button
+                    onClick={() => deleteImportBatch(batch)}
+                    disabled={deletingBatch === batch.id}
+                    className="bg-red-600/10 border border-red-600/30 text-red-500 font-black px-4 py-2 rounded-xl text-[10px] uppercase hover:bg-red-600/20 transition-all disabled:opacity-40"
+                  >
+                    {deletingBatch === batch.id ? 'Mazám...' : 'Vymazať import'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="text-zinc-600 text-[9px] font-black uppercase tracking-widest mt-4 text-center">Vymazaním sa odstránia klienti a ich vozidlá z tohto importu</p>
           </div>
         </div>
       )}
