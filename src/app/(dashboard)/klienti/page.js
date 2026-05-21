@@ -399,6 +399,7 @@ export default function KlientiPage() {
       try {
         const { id: _id, ...clientPayload } = item.client;
 
+        clientPayload.id = crypto.randomUUID();
         console.log('[IMPORT] Vkladám klienta:', item.displayName, clientPayload);
 
         const { data: profileData, error: profileError } = await supabase
