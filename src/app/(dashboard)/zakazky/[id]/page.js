@@ -47,7 +47,7 @@ export default function DetailZakazkyPage() {
 
   // Editácia položiek
   const [editingItemId, setEditingItemId] = useState(null);
-  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks' });
+  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks', worker_id: '' });
   const [editItemVatStr, setEditItemVatStr] = useState('');
   const [newItemVatStr, setNewItemVatStr] = useState('');
 
@@ -68,6 +68,7 @@ export default function DetailZakazkyPage() {
     unit_price: 0,
     type: 'Materiál',
     rateType: 'M1',
+    worker_id: '',
   });
 
   // --- REAL-TIME ODBERY (Postrážené, aby nič nevypadlo) ---
@@ -238,7 +239,7 @@ export default function DetailZakazkyPage() {
 
   const fetchItems = async () => {
     try {
-      const { data, error } = await supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type').eq('job_id', id).order('type', { ascending: false }).order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type, worker_id').eq('job_id', id).order('type', { ascending: false }).order('created_at', { ascending: true });
       if (error) throw error;
       if (data) setItems(data);
     } catch (err) { console.error("Chyba položiek:", err.message); }
@@ -373,17 +374,19 @@ export default function DetailZakazkyPage() {
 
   const openEditItem = (item) => {
     setEditingItemId(item.id);
-    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit });
+    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit, worker_id: item.worker_id || '' });
     setEditItemVatStr((parseFloat(item.unit_price) * 1.23).toFixed(2));
   };
 
   const saveEditItem = async (itemId) => {
     if (!await ensureAuth()) return;
+    const item = items.find(i => i.id === itemId);
     const { error } = await supabase.from('job_items').update({
       name: editItemForm.name,
       quantity: parseFloat(editItemForm.quantity) || 1,
       unit_price: parseFloat(editItemForm.unit_price) || 0,
       unit: editItemForm.unit,
+      worker_id: item?.type === 'Práca' ? (editItemForm.worker_id || null) : null,
     }).eq('id', itemId);
     if (!error) { setEditingItemId(null); fetchItems(); }
     else alert('Chyba pri ukladaní: ' + error.message);
@@ -593,11 +596,11 @@ export default function DetailZakazkyPage() {
 
     if (!isPraca && !isUkon) syncToCatalog(itemToSave);
 
-    const { rateType: _rt, ...itemForDb } = itemToSave;
-    const { error } = await supabase.from('job_items').insert([{ ...itemForDb, job_id: id }]);
+    const { rateType: _rt, worker_id: _wid, ...itemForDb } = itemToSave;
+    const { error } = await supabase.from('job_items').insert([{ ...itemForDb, job_id: id, worker_id: isPraca ? (newItem.worker_id || null) : null }]);
     if (!error) {
       if (!isPraca && !isUkon) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
-      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType });
+      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: newItem.worker_id });
       setUkonSearch('');
       fetchItems();
     }
@@ -928,6 +931,18 @@ export default function DetailZakazkyPage() {
                         <input type="text" value={editItemForm.name}
                           onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
                           className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs font-black uppercase italic outline-none focus:border-blue-500" />
+                        {item.type === 'Práca' && (
+                          <select
+                            className="w-full mt-1.5 bg-black border border-yellow-600/40 p-2 rounded-lg text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer"
+                            value={editItemForm.worker_id || ''}
+                            onChange={e => setEditItemForm(p => ({...p, worker_id: e.target.value}))}
+                          >
+                            <option value="">— Mechanik (voliteľné) —</option>
+                            {employees.map(e => (
+                              <option key={e.id} value={e.id}>{e.name}</option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                       <td className="p-3">
                         <input type="number" value={editItemForm.quantity}
@@ -968,7 +983,14 @@ export default function DetailZakazkyPage() {
                   ) : (
                     <tr key={item.id} className="hover:bg-white/5 transition-all">
                       <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
-                      <td className="p-4 font-black uppercase text-xs tracking-tight">{item.name}</td>
+                      <td className="p-4 font-black uppercase text-xs tracking-tight">
+                        {item.name}
+                        {item.type === 'Práca' && item.worker_id && (
+                          <span className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
+                            ↳ {employees.find(e => e.id === item.worker_id)?.name || ''}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
                       <td className="p-4 text-right">
                         <p className="font-mono text-xs text-white">{parseFloat(item.unit_price).toFixed(2)} €</p>
@@ -987,6 +1009,7 @@ export default function DetailZakazkyPage() {
                 
                 <tr className="no-print bg-black/50 border-t-2 border-red-600/20">
                   <td className="p-3">
+                    <div className="flex flex-col gap-1.5">
                     <div className="flex gap-1.5">
                     <select
                       className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-red-600 cursor-pointer"
@@ -1026,6 +1049,19 @@ export default function DetailZakazkyPage() {
                         ))}
                       </select>
                     )}
+                  </div>
+                  {newItem.type === 'Práca' && (
+                    <select
+                      className="bg-zinc-900 border border-yellow-600/50 p-2 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer w-full"
+                      value={newItem.worker_id || ''}
+                      onChange={(e) => setNewItem({ ...newItem, worker_id: e.target.value })}
+                    >
+                      <option value="">— Mechanik (voliteľné) —</option>
+                      {employees.map(e => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                  )}
                   </div>
                   </td>
                   <td className="p-3 relative" ref={dropdownRef}>

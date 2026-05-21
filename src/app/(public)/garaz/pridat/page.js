@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { trackAddVehicle } from '@/app/lib/analytics';
 
 export default function PridatAutoPage() {
   const router = useRouter();
@@ -115,6 +116,7 @@ export default function PridatAutoPage() {
       const { error: insertError } = await supabase.from('vehicles').insert([payload]);
       if (insertError) throw insertError;
 
+      trackAddVehicle();
       router.push('/garaz');
       router.refresh();
     } catch (error) {

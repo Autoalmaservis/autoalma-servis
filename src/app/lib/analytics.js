@@ -56,6 +56,10 @@ export const trackBookingOpen = (plate) =>
 export const trackBookingSubmit = (plate, worksCount) =>
   trackEvent('booking_submit', { license_plate: plate, works_count: worksCount });
 
+// ─── VEREJNÁ OBJEDNÁVKA ───────────────────────────────────────
+export const trackObjednavkaSubmit = () =>
+  trackEvent('public_booking_submit');
+
 // ─── NÁVOD ────────────────────────────────────────────────────
 export const trackGuideStepOpen = (stepNum, stepTitle) =>
   trackEvent('guide_step_open', { step: stepNum, step_title: stepTitle });

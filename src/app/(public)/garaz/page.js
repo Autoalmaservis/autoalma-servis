@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { trackBookingSubmit } from '@/app/lib/analytics';
 
 export default function GarazPage() {
   const [vehicles, setVehicles] = useState([]);
@@ -427,6 +428,7 @@ export default function GarazPage() {
         type: 'info'
       }]);
 
+      trackBookingSubmit(orderingVehicle?.license_plate, selectedNorms.length + customItems.length);
       alert(`Vaša požiadavka bola úspešne odoslaná!`);
       setIsOrderModalOpen(false);
     } catch (err) {

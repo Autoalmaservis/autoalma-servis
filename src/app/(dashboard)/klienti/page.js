@@ -286,6 +286,15 @@ export default function KlientiPage() {
   const handleDeleteKlient = async (klient) => {
     if (confirmDeleteName !== klient.customer_name) { setConfirmDeleteName(klient.customer_name); return; }
     if (klient._customerId) {
+      const { count } = await supabase
+        .from('job_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('customer_id', klient._customerId);
+      if (count > 0) {
+        alert(`Klienta nie je možné vymazať — má ${count} zákazk${count === 1 ? 'u' : count < 5 ? 'y' : 'iek'} v histórii.`);
+        setConfirmDeleteName(null);
+        return;
+      }
       await supabase.from('vehicles').delete().eq('owner_id', klient._customerId);
       const { error } = await supabase.from('customers').delete().eq('id', klient._customerId);
       if (!error) { setConfirmDeleteName(null); fetchKlienti(); setSelectedKlient(null); }

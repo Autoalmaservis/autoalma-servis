@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { trackObjednavkaSubmit } from '@/app/lib/analytics';
 import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -96,6 +97,7 @@ export default function VerejnaObjednavkaPage() {
         }),
       }).catch(() => {});
 
+      trackObjednavkaSubmit();
       alert("Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.");
       setIsModalOpen(false);
       fetchOccupiedSlots();

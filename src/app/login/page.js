@@ -93,6 +93,11 @@ function LoginFormContent() {
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-6 font-bold">
       <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] w-full max-w-md shadow-2xl">
+        <div className="mb-6">
+          <Link href="/" className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:text-white transition-all">
+            ← Späť na web
+          </Link>
+        </div>
         <header className="text-center mb-10">
           <h1 className="text-3xl font-black uppercase italic tracking-tighter text-red-600">
             AutoAlma <span className="text-white">{resetMode ? 'Reset' : 'Login'}</span>
