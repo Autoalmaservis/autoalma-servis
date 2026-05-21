@@ -274,7 +274,20 @@ export default function KlientiPage() {
         </div>
         <div className="flex gap-4">
           <button onClick={() => {
-            const dataToExport = klienti.map(k => ({ Meno: k.customer_name, Telefon: k.customer_phone, Email: k.customer_email, Vozidla: (k.all_plates || []).join(', ') }));
+            const dataToExport = klienti.map(k => ({
+              Meno: k.customer_name,
+              Typ: k.client_type || '',
+              Firma: k.company_name || '',
+              ICO: k.ico || '',
+              DIC: k.dic || '',
+              IC_DPH: k.ic_dph || '',
+              Telefon: k.customer_phone || '',
+              Email: k.customer_email || '',
+              Ulica: k.address || '',
+              Mesto: k.city || '',
+              PSC: k.zip || '',
+              Vozidla: (k.all_plates || []).join(', '),
+            }));
             const ws = XLSX.utils.json_to_sheet(dataToExport);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Klienti");
