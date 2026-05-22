@@ -43,6 +43,12 @@ export default function DatabazaPage() {
   const [pdfError, setPdfError] = useState('');
   const pdfInputRef = useRef(null);
 
+  // --- HISTÓRIA IMPORTOV ---
+  const [importHistory, setImportHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [revertingId, setRevertingId] = useState(null);
+  const [dupWarning, setDupWarning] = useState(null);
+
   function emptyImportLine() {
     return { existing_id: '', name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks', dodaci_list: '' };
   }
@@ -51,6 +57,7 @@ export default function DatabazaPage() {
     fetchNorms();
     fetchWarehouse();
     fetchUkony();
+    fetchImportHistory();
   }, []);
 
   const nd = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -156,6 +163,29 @@ export default function DatabazaPage() {
     setWarehouseFetched(true);
   };
 
+  const fetchImportHistory = async () => {
+    setHistoryLoading(true);
+    const { data } = await supabase.from('import_batches').select('*').order('created_at', { ascending: false }).limit(100);
+    if (data) setImportHistory(data);
+    setHistoryLoading(false);
+  };
+
+  const revertImport = async (batch) => {
+    if (!confirm(`Naozaj zrušiť import "${batch.doc_number || batch.supplier || 'bez názvu'}"?\n\nZ každého dielu sa odráta naskladnené množstvo.`)) return;
+    setRevertingId(batch.id);
+    for (const item of (batch.items_json || [])) {
+      if (!item.item_id || item.quantity <= 0) continue;
+      const existing = warehouseItems.find(w => w.id === item.item_id);
+      if (!existing) continue;
+      const newQty = Math.max(0, parseFloat(existing.quantity) - item.quantity);
+      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', item.item_id);
+    }
+    await supabase.from('import_batches').delete().eq('id', batch.id);
+    setRevertingId(null);
+    fetchWarehouse();
+    fetchImportHistory();
+  };
+
   const handleTabSwitch = (tab) => {
     setActiveTab(tab);
     if (tab === 'sklad' && !warehouseFetched) fetchWarehouse();
@@ -256,53 +286,68 @@ export default function DatabazaPage() {
     }
   };
 
-  const submitImport = async (e) => {
+  const submitImport = async (e, force = false) => {
     e.preventDefault();
+
+    // Dedup check
+    if (importHeader.doc_number && !force) {
+      const { data: existing } = await supabase
+        .from('import_batches').select('id, doc_number, supplier, created_at')
+        .eq('doc_number', importHeader.doc_number).maybeSingle();
+      if (existing) {
+        setDupWarning({ existing, evt: e });
+        return;
+      }
+    }
+
     setImportSaving(true);
+    const batchItems = [];
+
     for (const line of importLines) {
       const qty = parseFloat(line.quantity) || 0;
       if (qty <= 0) continue;
+      const note = [
+        importHeader.doc_number ? `Doklad: ${importHeader.doc_number}` : null,
+        importHeader.supplier || null,
+        line.dodaci_list ? `DL: ${line.dodaci_list}` : null,
+      ].filter(Boolean).join(' | ');
+
       if (line.existing_id) {
         const existing = warehouseItems.find(w => w.id === line.existing_id);
         if (!existing) continue;
-        const note1 = [
-          `Fakt: ${importHeader.doc_number || '—'}`,
-          line.dodaci_list ? `DL: ${line.dodaci_list}` : null,
-          importHeader.supplier || null,
-        ].filter(Boolean).join(' | ');
-        await supabase.from('warehouse_movements').insert([{
-          item_id: line.existing_id, movement_type: 'in', quantity: qty, note: note1,
-        }]);
+        await supabase.from('warehouse_movements').insert([{ item_id: line.existing_id, movement_type: 'in', quantity: qty, note }]);
         const upd = { quantity: parseFloat(existing.quantity) + qty };
         if (line.purchase_price) upd.purchase_price = parseFloat(line.purchase_price);
         await supabase.from('warehouse_items').update(upd).eq('id', line.existing_id);
+        batchItems.push({ item_id: line.existing_id, name: existing.name, part_number: line.part_number || null, quantity: qty, purchase_price: parseFloat(line.purchase_price) || 0, sale_price: parseFloat(line.sale_price) || 0 });
       } else if (line.name.trim()) {
-        const newPayload = {
-          name: line.name.toUpperCase(),
-          part_number: line.part_number || null,
-          purchase_price: parseFloat(line.purchase_price) || 0,
-          sale_price: parseFloat(line.sale_price) || 0,
-          unit: line.unit || 'ks',
-          quantity: qty,
-        };
+        const newPayload = { name: line.name.toUpperCase(), part_number: line.part_number || null, purchase_price: parseFloat(line.purchase_price) || 0, sale_price: parseFloat(line.sale_price) || 0, unit: line.unit || 'ks', quantity: qty };
         const { data: newItem } = await supabase.from('warehouse_items').insert([newPayload]).select().single();
         if (newItem) {
-          const note2 = [
-            `Fakt: ${importHeader.doc_number || '—'}`,
-            line.dodaci_list ? `DL: ${line.dodaci_list}` : null,
-            importHeader.supplier || null,
-          ].filter(Boolean).join(' | ');
-          await supabase.from('warehouse_movements').insert([{
-            item_id: newItem.id, movement_type: 'in', quantity: qty, note: note2,
-          }]);
+          await supabase.from('warehouse_movements').insert([{ item_id: newItem.id, movement_type: 'in', quantity: qty, note }]);
+          batchItems.push({ item_id: newItem.id, name: newPayload.name, part_number: line.part_number || null, quantity: qty, purchase_price: newPayload.purchase_price, sale_price: newPayload.sale_price });
         }
       }
     }
+
+    // Uložiť batch do histórie
+    const totalWithoutVat = batchItems.reduce((s, i) => s + i.quantity * i.purchase_price, 0);
+    await supabase.from('import_batches').insert([{
+      doc_number: importHeader.doc_number || null,
+      supplier: importHeader.supplier || null,
+      import_date: importHeader.date,
+      total_without_vat: totalWithoutVat,
+      total_with_vat: totalWithoutVat * 1.23,
+      items_json: batchItems,
+    }]);
+
     setImportSaving(false);
+    setDupWarning(null);
     setImportLines([emptyImportLine()]);
     setImportHeader({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
-    setWarehouseSubTab('zoznam');
+    setWarehouseSubTab('historia');
     fetchWarehouse();
+    fetchImportHistory();
   };
 
   // ---- PDF IMPORT ----
@@ -415,6 +460,7 @@ export default function DatabazaPage() {
             {[
               { key: 'zoznam', label: '📋 Zoznam skladu' },
               { key: 'import', label: '📥 Import dodacieho listu' },
+              { key: 'historia', label: '📜 História importov' },
             ].map(st => (
               <button key={st.key}
                 onClick={() => setWarehouseSubTab(st.key)}
@@ -488,6 +534,76 @@ export default function DatabazaPage() {
                 </span>
               </div>
             </>
+          )}
+
+          {/* HISTÓRIA IMPORTOV */}
+          {warehouseSubTab === 'historia' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
+                  Importy naskladnenia — kliknutím na <span className="text-red-500">Vrátiť</span> sa odráta množstvo zo skladu
+                </p>
+                <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">{importHistory.length} záznamov</span>
+              </div>
+              {historyLoading ? (
+                <div className="py-20 text-center text-zinc-600 animate-pulse font-black uppercase text-xs tracking-widest">Načítavam históriu...</div>
+              ) : importHistory.length === 0 ? (
+                <div className="py-20 text-center border-2 border-dashed border-zinc-900 rounded-[3rem] opacity-30 uppercase font-black tracking-[0.5em] text-sm italic">Žiadne importy</div>
+              ) : (
+                <div className="space-y-3">
+                  {importHistory.map(batch => (
+                    <div key={batch.id} className="bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-[2rem] p-5 transition-all">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {batch.doc_number && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-1 rounded-lg">
+                                {batch.doc_number}
+                              </span>
+                            )}
+                            {batch.supplier && (
+                              <span className="text-sm font-black uppercase italic text-white">{batch.supplier}</span>
+                            )}
+                            <span className="text-[9px] text-zinc-500 font-black">
+                              {batch.import_date ? new Date(batch.import_date).toLocaleDateString('sk-SK') : ''} · {new Date(batch.created_at).toLocaleDateString('sk-SK')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">
+                              {(batch.items_json || []).length} položiek
+                            </span>
+                            <span className="text-[9px] text-zinc-400 font-black">
+                              {parseFloat(batch.total_without_vat).toFixed(2)} € bez DPH
+                            </span>
+                            <span className="text-[9px] text-amber-400 font-black">
+                              {parseFloat(batch.total_with_vat).toFixed(2)} € s DPH
+                            </span>
+                          </div>
+                          {/* Položky */}
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {(batch.items_json || []).slice(0, 6).map((item, idx) => (
+                              <span key={idx} className="text-[8px] font-black uppercase bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-lg text-zinc-400">
+                                {item.name} ×{item.quantity}
+                              </span>
+                            ))}
+                            {(batch.items_json || []).length > 6 && (
+                              <span className="text-[8px] font-black text-zinc-600">+{batch.items_json.length - 6} ďalších</span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => revertImport(batch)}
+                          disabled={revertingId === batch.id}
+                          className="shrink-0 bg-red-600/10 hover:bg-red-600 border border-red-600/30 hover:border-red-600 text-red-500 hover:text-white font-black px-5 py-3 rounded-2xl uppercase text-[9px] tracking-widest transition-all disabled:opacity-50"
+                        >
+                          {revertingId === batch.id ? 'Vraciam...' : '↩ Vrátiť import'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* IMPORT DODACIEHO LISTU */}
@@ -629,6 +745,27 @@ export default function DatabazaPage() {
                   + Pridať riadok
                 </button>
               </div>
+
+              {/* CELKOVÁ SUMA */}
+              {importLines.some(l => parseFloat(l.purchase_price) > 0) && (() => {
+                const totalNoVat = importLines.reduce((s, l) => s + (parseFloat(l.quantity) || 0) * (parseFloat(l.purchase_price) || 0), 0);
+                const totalVat = totalNoVat * 1.23;
+                return (
+                  <div className="bg-zinc-950 border border-zinc-700 rounded-[2rem] p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Celková suma objednávky (kontrola)</p>
+                    <div className="flex gap-8 items-center">
+                      <div className="text-right">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Bez DPH</p>
+                        <p className="text-xl font-black text-white">{totalNoVat.toFixed(2)} €</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-amber-500 mb-0.5">S DPH (23%)</p>
+                        <p className="text-xl font-black text-amber-300">{totalVat.toFixed(2)} €</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-4">
                 <button type="button" onClick={() => setWarehouseSubTab('zoznam')}
@@ -932,6 +1069,32 @@ export default function DatabazaPage() {
                   className="flex-[2] bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all shadow-xl">Uložiť zmeny</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DUPLIKÁTNY DOKLAD */}
+      {dupWarning && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+          <div className="bg-zinc-950 border border-yellow-600/40 p-8 md:p-12 rounded-[3rem] max-w-md w-full shadow-2xl">
+            <h2 className="text-xl font-black uppercase italic mb-3 tracking-tighter text-center text-yellow-400">⚠️ Doklad už existuje</h2>
+            <p className="text-zinc-300 text-sm font-bold text-center mb-2">
+              Doklad č. <span className="text-yellow-400 font-black">{dupWarning.existing.doc_number}</span> bol už importovaný.
+            </p>
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest text-center mb-8">
+              {dupWarning.existing.supplier && `Dodávateľ: ${dupWarning.existing.supplier} · `}
+              {new Date(dupWarning.existing.created_at).toLocaleDateString('sk-SK')}
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDupWarning(null)}
+                className="flex-1 bg-zinc-800 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">
+                Zrušiť
+              </button>
+              <button onClick={() => submitImport(dupWarning.evt, true)}
+                className="flex-[2] bg-yellow-600 hover:bg-yellow-500 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest transition-all shadow-xl">
+                Aj tak importovať
+              </button>
+            </div>
           </div>
         </div>
       )}
