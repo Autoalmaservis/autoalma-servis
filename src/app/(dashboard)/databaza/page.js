@@ -179,8 +179,9 @@ export default function DatabazaPage() {
 
   const fetchImportHistory = async () => {
     setHistoryLoading(true);
-    const { data } = await supabase.from('import_batches').select('*').order('created_at', { ascending: false }).limit(100);
-    if (data) setImportHistory(data);
+    const { data, error } = await supabase.from('import_batches').select('*').order('created_at', { ascending: false }).limit(100);
+    if (error) console.error('import_batches fetch error:', error.message);
+    setImportHistory(data || []);
     setHistoryLoading(false);
   };
 
@@ -350,9 +351,8 @@ export default function DatabazaPage() {
     setDupWarning(null);
     setImportLines([emptyImportLine()]);
     setImportHeader({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
+    await Promise.all([fetchWarehouse(), fetchImportHistory()]);
     setWarehouseSubTab('historia');
-    fetchWarehouse();
-    fetchImportHistory();
   };
 
   // ---- PDF IMPORT ----
@@ -557,15 +557,37 @@ export default function DatabazaPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                  Celkom položiek: <span className="text-white">{filteredWarehouse.length}</span>
-                </span>
-                <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                  Hodnota skladu (nákup bez DPH):&nbsp;
-                  <span className="text-white">{filteredWarehouse.reduce((sum, w) => sum + parseFloat(w.purchase_price) * parseFloat(w.quantity), 0).toFixed(2)} €</span>
-                </span>
-              </div>
+              {(() => {
+                const nakupBezDph = filteredWarehouse.reduce((s, w) => s + parseFloat(w.purchase_price) * parseFloat(w.quantity), 0);
+                const pultBezDph = filteredWarehouse.reduce((s, w) => s + parseFloat(w.sale_price) * parseFloat(w.quantity), 0);
+                return (
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] p-5 mt-2">
+                    <div className="flex flex-wrap gap-6 items-center justify-between">
+                      <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest">
+                        Celkom položiek: <span className="text-white text-sm ml-1">{filteredWarehouse.length}</span>
+                      </span>
+                      <div className="flex flex-wrap gap-6">
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Nákup bez DPH</p>
+                          <p className="text-lg font-black text-white">{nakupBezDph.toFixed(2)} €</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-amber-500 mb-0.5">Nákup s DPH</p>
+                          <p className="text-lg font-black text-amber-300">{(nakupBezDph * 1.23).toFixed(2)} €</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Pult bez DPH</p>
+                          <p className="text-lg font-black text-zinc-300">{pultBezDph.toFixed(2)} €</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[8px] font-black uppercase tracking-widest text-green-500 mb-0.5">Pult s DPH</p>
+                          <p className="text-lg font-black text-green-300">{(pultBezDph * 1.23).toFixed(2)} €</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
 
