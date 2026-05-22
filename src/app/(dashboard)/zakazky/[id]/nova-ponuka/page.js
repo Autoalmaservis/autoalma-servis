@@ -408,10 +408,12 @@ export default function NovaPonukaPage() {
                                     <select className="flex-1 bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.type} onChange={(e) => {
                                         const t = e.target.value;
                                         const isPraca = t === 'Práca';
-                                        setNewItem({ ...newItem, type: t, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : '', name: isPraca ? `Servisná práca ${newItem.rateType}` : '' });
+                                        const defaultUnit = isPraca ? 'hod' : t === 'Úkon' ? 'norma' : 'ks';
+                                        setNewItem({ ...newItem, type: t, unit: defaultUnit, unit_price: isPraca ? getRateValue(newItem.rateType) : '', name: isPraca ? `Servisná práca ${newItem.rateType}` : '' });
                                     }}>
                                         <option value="Materiál">Materiál</option>
                                         <option value="Práca">Práca</option>
+                                        <option value="Úkon">Úkon</option>
                                     </select>
                                     {newItem.type === 'Práca' && (
                                         <select className="flex-1 bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.rateType} onChange={(e) => {
@@ -488,7 +490,7 @@ export default function NovaPonukaPage() {
                                             editingItemId === item.id ? (
                                                 <tr key={item.id} className="bg-blue-600/5 border-l-2 border-blue-500">
                                                     <td className="p-3">
-                                                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'}`}>
+                                                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : item.type === 'Úkon' ? 'text-green-400 border-green-800' : 'text-orange-400 border-orange-800'}`}>
                                                             {item.type}
                                                         </span>
                                                     </td>
@@ -535,7 +537,7 @@ export default function NovaPonukaPage() {
                                             ) : (
                                                 <tr key={item.id} className="hover:bg-white/5 transition-all group">
                                                     <td className="p-4">
-                                                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'} print-black-border print-black`}>
+                                                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : item.type === 'Úkon' ? 'text-green-400 border-green-800' : 'text-orange-400 border-orange-800'} print-black-border print-black`}>
                                                             {item.type}
                                                         </span>
                                                     </td>
