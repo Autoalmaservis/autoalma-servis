@@ -18,6 +18,7 @@ export default function NovaPonukaPage() {
     const [jobTasks, setJobTasks] = useState([]);
     const [jobItems, setJobItems] = useState([]);
     const [sendSms, setSendSms] = useState(false);
+    const [serviceActions, setServiceActions] = useState([]);
 
     // Editovateľná hlavička
     const [editCustomer, setEditCustomer] = useState('');
@@ -48,13 +49,15 @@ export default function NovaPonukaPage() {
     const loadInitialData = async () => {
         setLoading(true);
         try {
-            const [jobRes, catalogRes, settingsRes, tasksRes, itemsRes] = await Promise.all([
+            const [jobRes, catalogRes, settingsRes, tasksRes, itemsRes, actionsRes] = await Promise.all([
                 supabase.from('job_tickets').select('*').eq('id', id).single(),
                 supabase.from('inventory_catalog').select('*').order('name', { ascending: true }),
                 supabase.from('business_settings').select('*'),
                 supabase.from('job_tasks').select('*').eq('job_id', id).order('created_at', { ascending: true }),
-                supabase.from('job_items').select('*').eq('job_id', id).order('created_at', { ascending: true })
+                supabase.from('job_items').select('*').eq('job_id', id).order('created_at', { ascending: true }),
+                supabase.from('service_actions').select('*').order('name'),
             ]);
+            if (actionsRes.data) setServiceActions(actionsRes.data);
 
             if (jobRes.data) {
                 let jobData = jobRes.data;
@@ -429,13 +432,24 @@ export default function NovaPonukaPage() {
                             </div>
                             <div className="md:col-span-2">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Položka</label>
-                                <input list="catalog-list" type="text" placeholder="Hľadať v katalógu..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase italic focus:border-blue-500 outline-none transition-colors" value={newItem.name}
+                                <input
+                                    list={newItem.type === 'Úkon' ? 'service-actions-list' : 'catalog-list'}
+                                    type="text"
+                                    placeholder={newItem.type === 'Úkon' ? 'Hľadať úkon...' : 'Hľadať v katalógu...'}
+                                    className={`w-full bg-black border p-3 rounded-xl text-white text-xs font-black uppercase italic outline-none transition-colors ${newItem.type === 'Úkon' ? 'border-green-800 focus:border-green-500' : 'border-zinc-800 focus:border-blue-500'}`}
+                                    value={newItem.name}
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => {
                                         const val = e.target.value;
-                                        const match = catalog.find(c => c.name === val.toUpperCase());
-                                        if (match) setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit || 'ks', type: match.type === 'práca' ? 'Práca' : 'Materiál' });
-                                        else setNewItem({ ...newItem, name: val });
+                                        if (newItem.type === 'Úkon') {
+                                            const match = serviceActions.find(u => u.name.toLowerCase() === val.toLowerCase());
+                                            if (match) setNewItem({ ...newItem, name: val, unit_price: parseFloat(match.unit_price) || 0, unit: match.unit || 'ks' });
+                                            else setNewItem({ ...newItem, name: val });
+                                        } else {
+                                            const match = catalog.find(c => c.name === val.toUpperCase());
+                                            if (match) setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit || 'ks', type: match.type === 'práca' ? 'Práca' : 'Materiál' });
+                                            else setNewItem({ ...newItem, name: val });
+                                        }
                                     }}
                                 />
                             </div>
@@ -546,9 +560,9 @@ export default function NovaPonukaPage() {
                                                     <td className="p-4 text-right text-xs font-mono print-black">{(Number(item.unit_price)).toFixed(2)} €</td>
                                                     <td className="p-4 text-right text-xs font-mono print-black">{(item.quantity * item.unit_price).toFixed(2)} €</td>
                                                     <td className="p-4 text-center no-print">
-                                                        <div className="flex gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="flex gap-1 justify-center">
                                                             <button onClick={() => startEditItem(item)} className="text-zinc-500 hover:text-blue-400 transition-colors text-sm px-1" title="Upraviť">✏️</button>
-                                                            <button onClick={() => removeItem(item.id)} className="text-zinc-500 hover:text-red-500 transition-colors text-sm px-1" title="Odstrániť">✕</button>
+                                                            <button onClick={() => removeItem(item.id)} className="text-zinc-600 hover:text-red-500 transition-colors font-black text-sm px-1" title="Odstrániť">✕</button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -577,6 +591,9 @@ export default function NovaPonukaPage() {
 
             <datalist id="catalog-list">
                 {catalog.map((c, i) => (<option key={i} value={c.name}>{c.unit_price} €</option>))}
+            </datalist>
+            <datalist id="service-actions-list">
+                {serviceActions.map((u, i) => (<option key={i} value={u.name}>{parseFloat(u.unit_price || 0).toFixed(2)} €</option>))}
             </datalist>
 
             <style jsx global>{`
