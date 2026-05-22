@@ -9,18 +9,19 @@ export default function CenovePonukyPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const router = useRouter();
 
-  // --- NOVÁ PONUKA MODAL ---
   const [newOfferOpen, setNewOfferOpen] = useState(false);
   const [jobSearch, setJobSearch] = useState('');
   const [jobResults, setJobResults] = useState([]);
+  const [vehicleResults, setVehicleResults] = useState([]);
   const [jobSearching, setJobSearching] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualForm, setManualForm] = useState({ customer_name: '', plate_number: '', car_brand_model: '' });
+  const [creatingJob, setCreatingJob] = useState(false);
+
+  useEffect(() => { fetchOffers(); }, []);
 
   useEffect(() => {
-    fetchOffers();
-  }, []);
-
-  useEffect(() => {
-    if (!jobSearch.trim()) { setJobResults([]); return; }
+    if (!jobSearch.trim()) { setJobResults([]); setVehicleResults([]); setShowManualForm(false); return; }
     const timer = setTimeout(() => searchJobs(jobSearch), 300);
     return () => clearTimeout(timer);
   }, [jobSearch]);
@@ -30,20 +31,12 @@ export default function CenovePonukyPage() {
     try {
       const { data, error } = await supabase
         .from('price_offers')
-        .select(`
-          *,
-          job_tickets (
-            plate_number,
-            car_brand_model,
-            customer_name
-          )
-        `)
+        .select(`*, job_tickets (plate_number, car_brand_model, customer_name)`)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setOffers(data || []);
     } catch (err) {
-      console.error("Chyba pri načítaní ponúk:", err);
+      console.error('Chyba pri načítaní ponúk:', err);
     } finally {
       setLoading(false);
     }
@@ -51,18 +44,54 @@ export default function CenovePonukyPage() {
 
   const searchJobs = async (term) => {
     setJobSearching(true);
+    setShowManualForm(false);
     try {
       const t = term.trim().toUpperCase();
-      const { data } = await supabase
+      const { data: jobs } = await supabase
         .from('job_tickets')
         .select('id, plate_number, customer_name, car_brand_model, status')
         .or(`plate_number.ilike.%${t}%,customer_name.ilike.%${term.trim()}%`)
         .neq('status', 'Archivované')
         .order('created_at', { ascending: false })
         .limit(8);
-      setJobResults(data || []);
+      setJobResults(jobs || []);
+
+      const { data: vehicles } = await supabase
+        .from('vehicles')
+        .select('id, license_plate, brand_model, owner_id, customers(name)')
+        .ilike('license_plate', `%${t}%`)
+        .limit(4);
+
+      const activePlates = new Set((jobs || []).map(j => j.plate_number?.toUpperCase()));
+      setVehicleResults((vehicles || []).filter(v => !activePlates.has(v.license_plate?.toUpperCase())));
     } finally {
       setJobSearching(false);
+    }
+  };
+
+  const openManualForm = (prefill = {}) => {
+    setManualForm({ customer_name: prefill.customer_name || '', plate_number: prefill.plate_number || '', car_brand_model: prefill.car_brand_model || '' });
+    setShowManualForm(true);
+    setVehicleResults([]);
+  };
+
+  const createJobAndNavigate = async () => {
+    if (!manualForm.customer_name.trim()) { alert('Zadajte meno zákazníka'); return; }
+    setCreatingJob(true);
+    try {
+      const { data, error } = await supabase.from('job_tickets').insert([{
+        customer_name: manualForm.customer_name.trim(),
+        plate_number: manualForm.plate_number.trim().toUpperCase() || null,
+        car_brand_model: manualForm.car_brand_model.trim() || null,
+        status: 'Prebieha',
+      }]).select().single();
+      if (error) throw error;
+      setNewOfferOpen(false);
+      router.push(`/zakazky/${data.id}/nova-ponuka`);
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    } finally {
+      setCreatingJob(false);
     }
   };
 
@@ -74,7 +103,7 @@ export default function CenovePonukyPage() {
       if (error) throw error;
       setOffers(offers.filter(o => o.id !== offerId));
     } catch (err) {
-      alert("Chyba pri mazaní: " + err.message);
+      alert('Chyba pri mazaní: ' + err.message);
     }
   };
 
@@ -121,7 +150,6 @@ export default function CenovePonukyPage() {
             <p className="text-blue-500 text-[10px] font-black uppercase tracking-[0.4em] mb-2 italic">Finančný manažment</p>
             <h1 className="text-5xl font-black uppercase italic tracking-tighter leading-none">Cenové <span className="text-blue-600">Ponuky</span></h1>
           </div>
-
           <div className="flex items-center gap-4 w-full lg:w-auto">
             <div className="flex-grow lg:w-[400px] relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-transparent rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000"></div>
@@ -136,9 +164,8 @@ export default function CenovePonukyPage() {
                 <span className="absolute right-5 top-5 text-xl opacity-40">🔍</span>
               </div>
             </div>
-
             <button
-              onClick={() => { setNewOfferOpen(true); setJobSearch(''); setJobResults([]); }}
+              onClick={() => { setNewOfferOpen(true); setJobSearch(''); setJobResults([]); setVehicleResults([]); setShowManualForm(false); }}
               className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-black px-6 py-5 rounded-2xl uppercase text-[10px] tracking-widest transition-all shadow-xl shadow-blue-900/20 whitespace-nowrap"
             >
               + Nová ponuka
@@ -210,7 +237,7 @@ export default function CenovePonukyPage() {
         </div>
       </div>
 
-      {/* --- MODÁL: NOVÁ PONUKA --- */}
+      {/* MODAL */}
       {newOfferOpen && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
           <div className="bg-zinc-950 border border-zinc-800 rounded-[3rem] w-full max-w-xl shadow-2xl border-t-4 border-t-blue-600 overflow-hidden">
@@ -223,24 +250,29 @@ export default function CenovePonukyPage() {
               <button onClick={() => setNewOfferOpen(false)} className="p-3 bg-zinc-900 rounded-xl text-zinc-500 hover:text-white transition-all">✕</button>
             </div>
 
-            <div className="p-8 space-y-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="Zadajte ŠPZ alebo meno zákazníka..."
-                  value={jobSearch}
-                  onChange={(e) => setJobSearch(e.target.value)}
-                  className="w-full bg-black border border-zinc-700 focus:border-blue-500 p-4 rounded-2xl text-white font-black uppercase italic outline-none transition-all text-sm tracking-wide"
-                />
-                {jobSearching && (
-                  <span className="absolute right-4 top-4 text-blue-500 text-xs font-black uppercase animate-pulse tracking-widest">hľadám...</span>
-                )}
-              </div>
+            <div className="p-8 space-y-4 max-h-[70vh] overflow-y-auto">
 
-              {/* VÝSLEDKY */}
+              {/* Search input */}
+              {!showManualForm && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Zadajte ŠPZ alebo meno zákazníka..."
+                    value={jobSearch}
+                    onChange={(e) => setJobSearch(e.target.value)}
+                    className="w-full bg-black border border-zinc-700 focus:border-blue-500 p-4 rounded-2xl text-white font-black uppercase italic outline-none transition-all text-sm tracking-wide"
+                  />
+                  {jobSearching && (
+                    <span className="absolute right-4 top-4 text-blue-500 text-xs font-black uppercase animate-pulse tracking-widest">hľadám...</span>
+                  )}
+                </div>
+              )}
+
+              {/* STAV 1: Aktívne zákazky */}
               {jobResults.length > 0 && (
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Aktívne zákazky</p>
                   {jobResults.map(job => (
                     <button
                       key={job.id}
@@ -249,7 +281,7 @@ export default function CenovePonukyPage() {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-sm tracking-widest">{job.plate_number}</span>
+                          <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-sm tracking-widest">{job.plate_number || '—'}</span>
                           <div>
                             <p className="text-white font-black uppercase italic text-sm leading-none">{job.customer_name}</p>
                             <p className="text-zinc-500 text-[10px] uppercase font-black mt-0.5">{job.car_brand_model}</p>
@@ -265,23 +297,112 @@ export default function CenovePonukyPage() {
                 </div>
               )}
 
-              {jobSearch.trim() && !jobSearching && jobResults.length === 0 && (
-                <div className="text-center py-8 border border-dashed border-zinc-800 rounded-2xl">
-                  <p className="text-zinc-600 text-[10px] uppercase tracking-widest font-black">Žiadna zákazka nenájdená</p>
-                  <p className="text-zinc-700 text-[9px] uppercase tracking-widest font-black mt-1">Najprv vytvorte zákazku v sekcii Workflow</p>
+              {/* STAV 2: Vozidlo v systéme, ale bez aktívnej zákazky */}
+              {!showManualForm && vehicleResults.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-yellow-500">Vozidlo v systéme — bez aktívnej zákazky</p>
+                  {vehicleResults.map(v => (
+                    <div key={v.id} className="bg-zinc-900 border border-yellow-600/30 p-4 rounded-2xl">
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="bg-white text-black px-3 py-1 rounded-lg font-black text-sm tracking-widest">{v.license_plate}</span>
+                        <div>
+                          <p className="text-white font-black uppercase italic text-sm leading-none">{v.customers?.name || '—'}</p>
+                          <p className="text-zinc-500 text-[10px] uppercase font-black mt-0.5">{v.brand_model}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setNewOfferOpen(false); router.push('/prijem'); }}
+                          className="flex-1 bg-yellow-600/10 hover:bg-yellow-600/20 border border-yellow-600/30 text-yellow-400 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                        >
+                          🛠️ Otvoriť zákazku
+                        </button>
+                        <button
+                          onClick={() => openManualForm({ customer_name: v.customers?.name || '', plate_number: v.license_plate || '', car_brand_model: v.brand_model || '' })}
+                          className="flex-1 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-600/30 text-blue-400 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                        >
+                          📄 Ponuka bez zákazky
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* STAV 3: Nič nenájdené */}
+              {!showManualForm && jobSearch.trim() && !jobSearching && jobResults.length === 0 && vehicleResults.length === 0 && (
+                <div className="text-center py-6 border border-dashed border-zinc-800 rounded-2xl">
+                  <p className="text-zinc-600 text-[10px] uppercase tracking-widest font-black">Vozidlo ani zákazka nenájdená</p>
+                  <p className="text-zinc-700 text-[9px] uppercase tracking-widest font-black mt-1 mb-4 italic">"{jobSearch.trim()}"</p>
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      onClick={() => openManualForm({ plate_number: jobSearch.trim().toUpperCase() })}
+                      className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-900/20"
+                    >
+                      📄 Ponuka bez zákazky
+                    </button>
+                    <button
+                      onClick={() => { setNewOfferOpen(false); router.push('/prijem'); }}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                    >
+                      🛠️ Otvoriť zákazku →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Prázdny stav */}
+              {!showManualForm && !jobSearch.trim() && (
+                <div className="text-center py-4">
+                  <p className="text-zinc-700 text-[9px] uppercase tracking-widest font-black">Začnite písať ŠPZ alebo meno...</p>
                   <button
-                    onClick={() => { setNewOfferOpen(false); router.push('/zakazky'); }}
-                    className="mt-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                    onClick={() => openManualForm({})}
+                    className="mt-4 text-[9px] font-black uppercase tracking-widest text-zinc-600 hover:text-blue-400 transition-colors underline underline-offset-4"
                   >
-                    Prejsť na Zákazky →
+                    alebo vytvoriť ponuku bez zákazky
                   </button>
                 </div>
               )}
 
-              {!jobSearch.trim() && (
-                <p className="text-center text-zinc-700 text-[9px] uppercase tracking-widest font-black py-4">
-                  Začnite písať ŠPZ alebo meno...
-                </p>
+              {/* Manuálny formulár */}
+              {showManualForm && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 mb-1">
+                    <button onClick={() => { setShowManualForm(false); }} className="text-zinc-600 hover:text-white text-sm font-black transition-colors">←</button>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-blue-400">Nová ponuka bez zákazky</p>
+                  </div>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Meno zákazníka *"
+                    value={manualForm.customer_name}
+                    onChange={e => setManualForm({ ...manualForm, customer_name: e.target.value })}
+                    className="w-full bg-black border border-zinc-700 focus:border-blue-500 p-4 rounded-2xl text-white font-black text-sm outline-none transition-all"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="ŠPZ vozidla"
+                      value={manualForm.plate_number}
+                      onChange={e => setManualForm({ ...manualForm, plate_number: e.target.value.toUpperCase() })}
+                      className="bg-black border border-zinc-700 focus:border-blue-500 p-4 rounded-2xl text-white font-black text-sm outline-none uppercase transition-all"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Značka a model"
+                      value={manualForm.car_brand_model}
+                      onChange={e => setManualForm({ ...manualForm, car_brand_model: e.target.value })}
+                      className="bg-black border border-zinc-700 focus:border-blue-500 p-4 rounded-2xl text-white font-black text-sm outline-none transition-all"
+                    />
+                  </div>
+                  <button
+                    onClick={createJobAndNavigate}
+                    disabled={creatingJob || !manualForm.customer_name.trim()}
+                    className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-900/20"
+                  >
+                    {creatingJob ? 'Vytváram...' : '→ Vytvoriť ponuku'}
+                  </button>
+                </div>
               )}
             </div>
           </div>

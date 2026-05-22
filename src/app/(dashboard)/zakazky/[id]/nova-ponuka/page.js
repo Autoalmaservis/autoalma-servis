@@ -7,18 +7,27 @@ import { useParams, useRouter } from 'next/navigation';
 export default function NovaPonukaPage() {
     const { id } = useParams();
     const router = useRouter();
-    
+
     const [zakazka, setZakazka] = useState(null);
     const [catalog, setCatalog] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [generatedNumber, setGeneratedNumber] = useState(''); // Stav pre číslo ponuky
 
     const [offerItems, setOfferItems] = useState([]);
     const [rateCategories, setRateCategories] = useState([]);
     const [jobTasks, setJobTasks] = useState([]);
     const [jobItems, setJobItems] = useState([]);
     const [sendSms, setSendSms] = useState(false);
+
+    // Editovateľná hlavička
+    const [editCustomer, setEditCustomer] = useState('');
+    const [editPlate, setEditPlate] = useState('');
+    const [editCar, setEditCar] = useState('');
+    const [editOfferNumber, setEditOfferNumber] = useState('');
+
+    // Inline editovanie položiek
+    const [editingItemId, setEditingItemId] = useState(null);
+    const [editItemValues, setEditItemValues] = useState({});
 
     const [newItem, setNewItem] = useState({
         group_name: '',
@@ -30,16 +39,11 @@ export default function NovaPonukaPage() {
         rateType: 'M1',
     });
 
-    // --- LOGIKA DÁTUMOV ---
     const dateCreated = new Date();
     const dateExpiry = new Date();
     dateExpiry.setDate(dateCreated.getDate() + 14);
 
-    useEffect(() => {
-        if (id) {
-            loadInitialData();
-        }
-    }, [id]);
+    useEffect(() => { if (id) loadInitialData(); }, [id]);
 
     const loadInitialData = async () => {
         setLoading(true);
@@ -63,6 +67,9 @@ export default function NovaPonukaPage() {
                     if (vData?.owner_id) jobData = { ...jobData, customer_id: vData.owner_id };
                 }
                 setZakazka(jobData);
+                setEditCustomer(jobData.customer_name || '');
+                setEditPlate(jobData.plate_number || '');
+                setEditCar(jobData.car_brand_model || '');
             }
             if (catalogRes.data) setCatalog(catalogRes.data);
             if (tasksRes.data) setJobTasks(tasksRes.data);
@@ -81,23 +88,19 @@ export default function NovaPonukaPage() {
                 }
             }
 
-            // --- PRED-GENEROVANIE ČÍSLA PONUKY ---
             const teraz = new Date();
             const dd = String(teraz.getDate()).padStart(2, '0');
             const mm = String(teraz.getMonth() + 1).padStart(2, '0');
             const rr = String(teraz.getFullYear()).slice(-2);
-            const dnesnyDatumPrefix = `P${dd}${mm}${rr}`;
-
+            const prefix = `P${dd}${mm}${rr}`;
             const { count } = await supabase
                 .from('price_offers')
                 .select('*', { count: 'exact', head: true })
-                .like('offer_number', `${dnesnyDatumPrefix}%`);
-
-            const poradie = String((count || 0) + 1).padStart(3, '0');
-            setGeneratedNumber(`${dnesnyDatumPrefix}${poradie}`);
-
+                .like('offer_number', `${prefix}%`);
+            const num = `${prefix}${String((count || 0) + 1).padStart(3, '0')}`;
+            setEditOfferNumber(num);
         } catch (err) {
-            console.error("Chyba pri načítaní:", err);
+            console.error('Chyba pri načítaní:', err);
         }
         setLoading(false);
     };
@@ -106,24 +109,17 @@ export default function NovaPonukaPage() {
 
     const addItemToOffer = (e) => {
         e.preventDefault();
-        if (!newItem.name || !newItem.group_name) {
-            alert("Vyplňte názov skupiny aj názov položky.");
-            return;
-        }
-
+        if (!newItem.name || !newItem.group_name) { alert('Vyplňte názov skupiny aj názov položky.'); return; }
         const isPraca = newItem.type === 'Práca';
         const { rateType: _rt, ...itemForOffer } = newItem;
-
-        const itemToAdd = {
+        setOfferItems([...offerItems, {
             ...itemForOffer,
             id: crypto.randomUUID(),
             unit_price: isPraca ? getRateValue(newItem.rateType) : (parseFloat(newItem.unit_price) || 0),
             unit: isPraca ? 'hod' : newItem.unit,
             group_name: newItem.group_name.trim().toUpperCase(),
             is_selected: true
-        };
-
-        setOfferItems([...offerItems, itemToAdd]);
+        }]);
         setNewItem({
             ...newItem,
             name: isPraca ? `Servisná práca ${newItem.rateType}` : '',
@@ -132,58 +128,71 @@ export default function NovaPonukaPage() {
         });
     };
 
-    const removeItem = (tempId) => {
-        setOfferItems(offerItems.filter(item => item.id !== tempId));
+    const removeItem = (itemId) => setOfferItems(offerItems.filter(item => item.id !== itemId));
+
+    const startEditItem = (item) => {
+        setEditingItemId(item.id);
+        setEditItemValues({ name: item.name, quantity: item.quantity, unit: item.unit, unit_price: item.unit_price, group_name: item.group_name });
+    };
+
+    const saveEditItem = (itemId) => {
+        setOfferItems(prev => prev.map(it => it.id !== itemId ? it : {
+            ...it,
+            name: editItemValues.name,
+            quantity: parseFloat(editItemValues.quantity) || 0,
+            unit: editItemValues.unit,
+            unit_price: parseFloat(editItemValues.unit_price) || 0,
+            group_name: (editItemValues.group_name || it.group_name).trim().toUpperCase(),
+        }));
+        setEditingItemId(null);
     };
 
     const calculateTotal = () => {
         const subtotal = offerItems.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
         const tax = subtotal * 0.23;
-        const total = subtotal + tax;
-        return { subtotal, tax, total };
+        return { subtotal, tax, total: subtotal + tax };
     };
 
-    // --- FUNKCIA PRE SAMOTNÉ ULOŽENIE (BEZ ODOSLANIA) ---
-    const saveOnly = async () => {
-        if (offerItems.length === 0) {
-            alert("Ponuka musí obsahovať aspoň jednu položku.");
-            return;
+    const applyJobTicketUpdates = async () => {
+        const updates = {};
+        if (editCustomer !== zakazka?.customer_name) updates.customer_name = editCustomer;
+        if (editPlate.toUpperCase() !== zakazka?.plate_number) updates.plate_number = editPlate.toUpperCase();
+        if (editCar !== zakazka?.car_brand_model) updates.car_brand_model = editCar;
+        if (Object.keys(updates).length > 0) {
+            await supabase.from('job_tickets').update(updates).eq('id', id);
         }
+    };
+
+    const saveOnly = async () => {
+        if (offerItems.length === 0) { alert('Ponuka musí obsahovať aspoň jednu položku.'); return; }
         setSaving(true);
         const { subtotal } = calculateTotal();
-
         try {
-            const { error: offerError } = await supabase
-                .from('price_offers')
-                .insert([{
-                    job_id: id,
-                    customer_id: zakazka?.customer_id,
-                    items_json: offerItems,
-                    total_amount: subtotal,
-                    status: 'Rozpracované', // Iný status pre rozpracovanú ponuku
-                    offer_number: generatedNumber
-                }]);
-
-            if (offerError) throw offerError;
-
-            alert("Ponuka bola úspešne uložená (interný záznam).");
+            await applyJobTicketUpdates();
+            const { error } = await supabase.from('price_offers').insert([{
+                job_id: id,
+                customer_id: zakazka?.customer_id,
+                items_json: offerItems,
+                total_amount: subtotal,
+                status: 'Rozpracované',
+                offer_number: editOfferNumber,
+            }]);
+            if (error) throw error;
+            alert('Ponuka bola úspešne uložená (interný záznam).');
             router.push(`/zakazky/${id}`);
         } catch (err) {
-            alert("Chyba pri ukladaní: " + err.message);
+            alert('Chyba pri ukladaní: ' + err.message);
         } finally {
             setSaving(false);
         }
     };
 
     const saveOffer = async () => {
-        if (offerItems.length === 0) {
-            alert("Ponuka musí obsahovať aspoň jednu položku.");
-            return;
-        }
+        if (offerItems.length === 0) { alert('Ponuka musí obsahovať aspoň jednu položku.'); return; }
         setSaving(true);
         const { subtotal, total } = calculateTotal();
-
         try {
+            await applyJobTicketUpdates();
             const { data: offerData, error: offerError } = await supabase
                 .from('price_offers')
                 .insert([{
@@ -192,24 +201,20 @@ export default function NovaPonukaPage() {
                     items_json: offerItems,
                     total_amount: subtotal,
                     status: 'Odoslané',
-                    offer_number: generatedNumber
+                    offer_number: editOfferNumber,
                 }])
                 .select()
                 .single();
-
             if (offerError) throw offerError;
 
-            await supabase
-                .from('job_tickets')
-                .update({ status: 'Čaká na schválenie' })
-                .eq('id', id);
+            await supabase.from('job_tickets').update({ status: 'Čaká na schválenie' }).eq('id', id);
 
             if (zakazka?.customer_id) {
                 await supabase.from('notifications').insert([{
                     user_id: zakazka.customer_id,
                     customer_id: zakazka.customer_id,
                     title: 'Nová cenová ponuka 📄',
-                    content: `K Vašej zákazke (${zakazka.plate_number}) bola vypracovaná ponuka č. ${generatedNumber} v hodnote ${total.toFixed(2)} €.`,
+                    content: `K Vašej zákazke (${editPlate || zakazka.plate_number}) bola vypracovaná ponuka č. ${editOfferNumber} v hodnote ${total.toFixed(2)} €.`,
                     type: 'info',
                     link: `/ponuka/${offerData.id}`
                 }]);
@@ -219,8 +224,8 @@ export default function NovaPonukaPage() {
                 const ponukaUrl = `${window.location.origin}/ponuka/${offerData.id}`;
                 const { data: settData } = await supabase.from('business_settings').select('id, value').in('id', ['company_name']);
                 const companyName = settData?.find(r => r.id === 'company_name')?.value || 'AutoAlma Servis';
-                const smsText = `Vazeny p. ${zakazka.customer_name || 'zakaznik'}, servis Vasho vozidla ${zakazka.plate_number || ''} - ${companyName} Vam poslala cenovu ponuku. Pre zobrazenie a schvalenie kliknite na: ${ponukaUrl}`;
-                const doSend = confirm(`Odoslať SMS zákazníkovi ${zakazka.customer_name} (${zakazka.customer_phone})?`);
+                const smsText = `Vazeny p. ${editCustomer || 'zakaznik'}, servis Vasho vozidla ${editPlate || ''} - ${companyName} Vam poslala cenovu ponuku. Pre zobrazenie a schvalenie kliknite na: ${ponukaUrl}`;
+                const doSend = confirm(`Odoslať SMS zákazníkovi ${editCustomer} (${zakazka.customer_phone})?`);
                 if (doSend) {
                     await fetchWithAuth('/api/send-sms', {
                         method: 'POST',
@@ -232,16 +237,16 @@ export default function NovaPonukaPage() {
 
             router.push(`/zakazky/${id}`);
         } catch (err) {
-            alert("Chyba pri ukladaní: " + err.message);
+            alert('Chyba pri ukladaní: ' + err.message);
         } finally {
             setSaving(false);
         }
     };
 
     const groupedItems = offerItems.reduce((groups, item) => {
-        const group = groups[item.group_name] || [];
-        group.push(item);
-        groups[item.group_name] = group;
+        const g = groups[item.group_name] || [];
+        g.push(item);
+        groups[item.group_name] = g;
         return groups;
     }, {});
 
@@ -256,35 +261,24 @@ export default function NovaPonukaPage() {
     return (
         <div className="min-h-screen bg-black text-white p-4 md:p-12 font-sans font-bold">
             <div className="max-w-6xl mx-auto">
-                
-                {/* --- HEADER OVLÁDANIE --- */}
+
                 <div className="flex justify-between items-center mb-8 no-print">
                     <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs uppercase font-black tracking-widest">← Zrušiť</button>
-                    <div className="flex gap-4">
+                    <div className="flex gap-4 flex-wrap justify-end">
                         <button onClick={() => window.print()} className="bg-zinc-800 border border-zinc-700 px-6 py-3 rounded-2xl text-white hover:bg-zinc-700 transition-all text-xs uppercase font-black tracking-widest">🖨️ Tlačiť</button>
-                        
                         <button onClick={saveOnly} disabled={saving} className="bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all tracking-widest">
                             💾 Iba uložiť
                         </button>
-
                         <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-2xl px-4 py-2">
                             {zakazka?.customer_phone ? (
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
-                                    <input
-                                        type="checkbox"
-                                        checked={sendSms}
-                                        onChange={e => setSendSms(e.target.checked)}
-                                        className="w-4 h-4 accent-blue-500 cursor-pointer"
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300 whitespace-nowrap">
-                                        📱 SMS ({zakazka.customer_phone})
-                                    </span>
+                                    <input type="checkbox" checked={sendSms} onChange={e => setSendSms(e.target.checked)} className="w-4 h-4 accent-blue-500 cursor-pointer" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300 whitespace-nowrap">📱 SMS ({zakazka.customer_phone})</span>
                                 </label>
                             ) : (
                                 <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600 whitespace-nowrap">📵 Chýba tel. číslo</span>
                             )}
                         </div>
-
                         <button onClick={saveOffer} disabled={saving} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs shadow-xl shadow-blue-900/20 transition-all tracking-widest">
                             {saving ? 'Ukladám...' : '🚀 Odoslať ponuku'}
                         </button>
@@ -292,24 +286,29 @@ export default function NovaPonukaPage() {
                 </div>
 
                 <div className="printable-area">
-                    {/* Skrytá hlavička pre tlač */}
                     <div className="hidden print-block mb-10 border-b-2 border-black pb-6 text-center">
                         <h1 className="text-4xl font-black uppercase italic">Cenová ponuka</h1>
                         <p className="text-[10px] tracking-[0.3em] uppercase">AutoAlma Servis</p>
                     </div>
 
-                    {/* Info Box - PORADOVÉ ČÍSLO V STREDE */}
+                    {/* Info box — editovateľný */}
                     <div className="bg-zinc-900/50 border border-zinc-800 p-6 rounded-[2rem] mb-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center info-box">
                         <div className="space-y-4">
                             <div>
                                 <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Zákazník</p>
-                                <p className="text-xl italic uppercase font-black text-blue-400 print-black">{zakazka?.customer_name}</p>
+                                <input
+                                    type="text"
+                                    value={editCustomer}
+                                    onChange={e => setEditCustomer(e.target.value)}
+                                    placeholder="Meno zákazníka"
+                                    className="w-full bg-transparent border-b border-zinc-700 focus:border-blue-500 text-xl italic uppercase font-black text-blue-400 outline-none py-1 transition-colors"
+                                />
                             </div>
                             <div>
                                 <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Dátumy</p>
-                                <p className="text-[11px] font-black text-white print-black">
-                                    Vystavené: {dateCreated.toLocaleDateString('sk-SK')} <br/>
-                                    Platnosť: <span className="text-red-500 print-black">{dateExpiry.toLocaleDateString('sk-SK')}</span>
+                                <p className="text-[11px] font-black text-white">
+                                    Vystavené: {dateCreated.toLocaleDateString('sk-SK')} <br />
+                                    Platnosť: <span className="text-red-500">{dateExpiry.toLocaleDateString('sk-SK')}</span>
                                 </p>
                             </div>
                         </div>
@@ -317,20 +316,40 @@ export default function NovaPonukaPage() {
                         <div className="text-center border-x border-zinc-800/50 px-4 py-2 print-border-none">
                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Číslo ponuky</p>
                             <div className="bg-white/5 border border-zinc-800 px-4 py-3 rounded-2xl print-no-bg">
-                                <p className="text-3xl font-black tracking-tighter text-blue-500 print-black">
-                                    {generatedNumber}
-                                </p>
+                                <input
+                                    type="text"
+                                    value={editOfferNumber}
+                                    onChange={e => setEditOfferNumber(e.target.value)}
+                                    className="w-full bg-transparent text-3xl font-black tracking-tighter text-blue-500 outline-none text-center"
+                                    placeholder="P0000000"
+                                />
                             </div>
                         </div>
 
-                        <div className="md:text-right">
-                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Vozidlo</p>
-                            <p className="text-xl italic uppercase font-black print-black">{zakazka?.car_brand_model}</p>
-                            <p className="text-blue-500 text-lg font-black tracking-widest print-black mt-1">[{zakazka?.plate_number}]</p>
+                        <div className="md:text-right space-y-2">
+                            <div>
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Vozidlo</p>
+                                <input
+                                    type="text"
+                                    value={editCar}
+                                    onChange={e => setEditCar(e.target.value)}
+                                    placeholder="Značka a model"
+                                    className="w-full bg-transparent border-b border-zinc-700 focus:border-blue-500 text-xl italic uppercase font-black outline-none py-1 text-right transition-colors"
+                                />
+                            </div>
+                            <div>
+                                <input
+                                    type="text"
+                                    value={editPlate}
+                                    onChange={e => setEditPlate(e.target.value.toUpperCase())}
+                                    placeholder="ŠPZ"
+                                    className="w-full bg-transparent border-b border-zinc-700 focus:border-blue-500 text-lg font-black tracking-widest text-blue-500 outline-none py-1 text-right transition-colors uppercase"
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Panel záverov mechanika - SKRYTÝ PRI TLAČI */}
+                    {/* Záznamy mechanika */}
                     {(jobTasks.length > 0 || jobItems.length > 0 || zakazka?.complaints) && (
                         <div className="no-print bg-amber-950/30 border border-amber-600/30 rounded-[2rem] p-6 mb-6">
                             <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-4">🔧 Záznamy mechanika zo zákazky</p>
@@ -375,13 +394,13 @@ export default function NovaPonukaPage() {
                         </div>
                     )}
 
-                    {/* Form Box - SKRYTÝ PRI TLAČI */}
+                    {/* Formulár — pridanie položky */}
                     <div className="bg-zinc-900 border-t-4 border-blue-600 p-8 rounded-[2.5rem] mb-8 shadow-2xl no-print">
                         <h2 className="text-blue-500 font-black uppercase text-[10px] tracking-[0.3em] mb-6 italic">Nová položka do rozpočtu</h2>
                         <form onSubmit={addItemToOffer} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                             <div className="md:col-span-2">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Skupina</label>
-                                <input type="text" placeholder="MOTOR..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors" value={newItem.group_name} onChange={(e) => setNewItem({...newItem, group_name: e.target.value})} onFocus={(e) => e.target.select()} />
+                                <input type="text" placeholder="MOTOR..." className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-xs font-black uppercase focus:border-blue-500 outline-none transition-colors" value={newItem.group_name} onChange={(e) => setNewItem({ ...newItem, group_name: e.target.value })} onFocus={(e) => e.target.select()} />
                             </div>
                             <div className="md:col-span-3">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest font-black">Typ</label>
@@ -413,21 +432,18 @@ export default function NovaPonukaPage() {
                                     onChange={(e) => {
                                         const val = e.target.value;
                                         const match = catalog.find(c => c.name === val.toUpperCase());
-                                        if (match) {
-                                            setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit || 'ks', type: match.type === 'práca' ? 'Práca' : 'Materiál' });
-                                        } else {
-                                            setNewItem({...newItem, name: val});
-                                        }
+                                        if (match) setNewItem({ ...newItem, name: val, unit_price: match.unit_price, unit: match.unit || 'ks', type: match.type === 'práca' ? 'Práca' : 'Materiál' });
+                                        else setNewItem({ ...newItem, name: val });
                                     }}
                                 />
                             </div>
                             <div className="md:col-span-1">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Mn.</label>
-                                <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseFloat(e.target.value) || 0})} onFocus={(e) => e.target.select()} />
+                                <input type="number" className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-center text-xs font-black focus:border-blue-500 outline-none" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })} onFocus={(e) => e.target.select()} />
                             </div>
                             <div className="md:col-span-1">
                                 <label className="text-[9px] uppercase text-zinc-500 mb-2 block tracking-widest text-center font-black">Jedn.</label>
-                                <select className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-[10px] font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.unit} onChange={(e) => setNewItem({...newItem, unit: e.target.value})}>
+                                <select className="w-full bg-black border border-zinc-800 p-3 rounded-xl text-white text-[10px] font-black uppercase focus:border-blue-500 outline-none transition-colors cursor-pointer" value={newItem.unit} onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}>
                                     <option value="ks">ks</option><option value="l">l</option><option value="m">m</option><option value="hod">hod</option><option value="norma">norma</option><option value="bal">bal</option><option value="sada">sada</option>
                                 </select>
                             </div>
@@ -437,7 +453,7 @@ export default function NovaPonukaPage() {
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => {
                                         const val = e.target.value.replace(',', '.');
-                                        if (/^\d*\.?\d*$/.test(val)) setNewItem({...newItem, unit_price: val});
+                                        if (/^\d*\.?\d*$/.test(val)) setNewItem({ ...newItem, unit_price: val });
                                     }}
                                 />
                             </div>
@@ -447,6 +463,7 @@ export default function NovaPonukaPage() {
                         </form>
                     </div>
 
+                    {/* Tabuľka položiek */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl table-container">
                         <table className="w-full text-left text-sm">
                             <thead className="bg-zinc-800/50 text-[10px] uppercase font-black text-zinc-400 tracking-widest italic">
@@ -456,7 +473,7 @@ export default function NovaPonukaPage() {
                                     <th className="p-4 text-center">Množstvo</th>
                                     <th className="p-4 text-right">Cena/J</th>
                                     <th className="p-4 text-right">Spolu</th>
-                                    <th className="p-4 text-center w-10 no-print"></th>
+                                    <th className="p-4 text-center w-16 no-print"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800 font-black italic uppercase">
@@ -468,20 +485,72 @@ export default function NovaPonukaPage() {
                                             </td>
                                         </tr>
                                         {groupedItems[groupName].map((item) => (
-                                            <tr key={item.id} className="hover:bg-white/5 transition-all group">
-                                                <td className="p-4">
-                                                    <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'} print-black-border print-black`}>
-                                                        {item.type}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-xs tracking-tight print-black">{item.name}</td>
-                                                <td className="p-4 text-center text-xs font-mono print-black">{item.quantity} {item.unit}</td>
-                                                <td className="p-4 text-right text-xs font-mono print-black">{(Number(item.unit_price)).toFixed(2)} €</td>
-                                                <td className="p-4 text-right text-xs font-mono print-black">{(item.quantity * item.unit_price).toFixed(2)} €</td>
-                                                <td className="p-4 text-center no-print">
-                                                    <button onClick={() => removeItem(item.id)} className="text-zinc-800 group-hover:text-red-600 transition-colors">✕</button>
-                                                </td>
-                                            </tr>
+                                            editingItemId === item.id ? (
+                                                <tr key={item.id} className="bg-blue-600/5 border-l-2 border-blue-500">
+                                                    <td className="p-3">
+                                                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'}`}>
+                                                            {item.type}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <input
+                                                            type="text"
+                                                            value={editItemValues.name}
+                                                            onChange={e => setEditItemValues({ ...editItemValues, name: e.target.value })}
+                                                            className="w-full bg-black border border-zinc-600 focus:border-blue-500 px-2 py-1.5 rounded-lg text-xs font-black text-white outline-none uppercase"
+                                                            autoFocus
+                                                        />
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <input
+                                                            type="number"
+                                                            value={editItemValues.quantity}
+                                                            onChange={e => setEditItemValues({ ...editItemValues, quantity: e.target.value })}
+                                                            className="bg-black border border-zinc-600 focus:border-blue-500 px-2 py-1.5 rounded-lg text-xs font-black text-white text-center outline-none w-16"
+                                                            step="any"
+                                                        />
+                                                        <span className="text-[9px] text-zinc-500 ml-1">{item.unit}</span>
+                                                    </td>
+                                                    <td className="p-3 text-right">
+                                                        <input
+                                                            type="number"
+                                                            value={editItemValues.unit_price}
+                                                            onChange={e => setEditItemValues({ ...editItemValues, unit_price: e.target.value })}
+                                                            className="bg-black border border-zinc-600 focus:border-blue-500 px-2 py-1.5 rounded-lg text-xs font-black text-white text-right outline-none w-20"
+                                                            disabled={item.type === 'Práca'}
+                                                            step="any"
+                                                        />
+                                                        <span className="text-[9px] text-zinc-500 ml-1">€</span>
+                                                    </td>
+                                                    <td className="p-3 text-right text-xs font-mono text-white">
+                                                        {(parseFloat(editItemValues.quantity || 0) * parseFloat(editItemValues.unit_price || 0)).toFixed(2)} €
+                                                    </td>
+                                                    <td className="p-3 text-center no-print">
+                                                        <div className="flex gap-1 justify-center">
+                                                            <button onClick={() => saveEditItem(item.id)} className="text-green-500 hover:text-green-400 transition-colors font-black text-base px-1">✓</button>
+                                                            <button onClick={() => setEditingItemId(null)} className="text-zinc-600 hover:text-zinc-400 transition-colors font-black text-base px-1">✕</button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                <tr key={item.id} className="hover:bg-white/5 transition-all group">
+                                                    <td className="p-4">
+                                                        <span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : 'text-orange-400 border-orange-800'} print-black-border print-black`}>
+                                                            {item.type}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 text-xs tracking-tight print-black">{item.name}</td>
+                                                    <td className="p-4 text-center text-xs font-mono print-black">{item.quantity} {item.unit}</td>
+                                                    <td className="p-4 text-right text-xs font-mono print-black">{(Number(item.unit_price)).toFixed(2)} €</td>
+                                                    <td className="p-4 text-right text-xs font-mono print-black">{(item.quantity * item.unit_price).toFixed(2)} €</td>
+                                                    <td className="p-4 text-center no-print">
+                                                        <div className="flex gap-1 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => startEditItem(item)} className="text-zinc-500 hover:text-blue-400 transition-colors text-sm px-1" title="Upraviť">✏️</button>
+                                                            <button onClick={() => removeItem(item.id)} className="text-zinc-500 hover:text-red-500 transition-colors text-sm px-1" title="Odstrániť">✕</button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
                                         ))}
                                     </Fragment>
                                 ))}
@@ -490,12 +559,10 @@ export default function NovaPonukaPage() {
 
                         <div className="p-10 bg-black/40 border-t border-zinc-800 flex flex-col items-end space-y-2 recap-area">
                             <div className="flex justify-between w-64 text-zinc-500 text-[10px] font-black uppercase italic tracking-widest print-black">
-                                <span>Základ:</span>
-                                <span>{subtotal.toFixed(2)} €</span>
+                                <span>Základ:</span><span>{subtotal.toFixed(2)} €</span>
                             </div>
                             <div className="flex justify-between w-64 text-zinc-500 text-[10px] font-black uppercase italic tracking-widest border-b border-zinc-800 pb-3 print-black">
-                                <span>DPH (23%):</span>
-                                <span>{tax.toFixed(2)} €</span>
+                                <span>DPH (23%):</span><span>{tax.toFixed(2)} €</span>
                             </div>
                             <div className="flex justify-between w-80 pt-4 items-center">
                                 <span className="text-blue-500 font-black uppercase italic text-xl tracking-tighter print-black">Celkom ponuka:</span>
@@ -518,7 +585,7 @@ export default function NovaPonukaPage() {
                     .no-print { display: none !important; }
                     .print-block { display: block !important; }
                     .printable-area { background: white !important; padding: 0 !important; width: 100% !important; }
-                    .bg-zinc-900, .bg-zinc-900/50, .bg-black/40, .bg-black { background: white !important; }
+                    .bg-zinc-900, .bg-zinc-900\\/50, .bg-black\\/40, .bg-black { background: white !important; }
                     .border, .border-zinc-800, .border-t { border-color: #eee !important; }
                     .info-box { border: 1pt solid #000 !important; border-radius: 10pt !important; margin-bottom: 20pt !important; display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; }
                     .print-border-none { border: none !important; }
@@ -529,6 +596,7 @@ export default function NovaPonukaPage() {
                     .print-row-bg { background: #f8fafc !important; }
                     p, span, h1, h2, td, th { color: black !important; }
                     .recap-area { border-top: 2pt solid black !important; background: #fff !important; }
+                    input { border: none !important; background: none !important; padding: 0 !important; color: black !important; font-size: inherit !important; font-weight: inherit !important; text-transform: inherit !important; width: auto !important; }
                 }
             `}</style>
         </div>
