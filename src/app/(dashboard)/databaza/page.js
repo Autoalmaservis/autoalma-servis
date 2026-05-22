@@ -733,13 +733,24 @@ export default function DatabazaPage() {
                   ))}
                 </div>
 
-                {importLines.map((line, i) => (
-                  <div key={i} className={`rounded-2xl border overflow-hidden ${line.matched_item ? 'border-yellow-600/50' : 'border-zinc-800/50'}`}>
-                    {/* Hlavný riadok importu */}
-                    {line.matched_item && (
+                {importLines.map((line, i) => {
+                  const priceMatch = line.matched_item && line.purchase_price &&
+                    parseFloat(line.purchase_price).toFixed(2) === parseFloat(line.matched_item.purchase_price).toFixed(2);
+                  return (
+                  <div key={i} className={`rounded-2xl border overflow-hidden ${priceMatch ? 'border-green-600/40' : line.matched_item ? 'border-yellow-600/50' : 'border-zinc-800/50'}`}>
+                    {/* Zhoda + rovnaká cena → zelený banner, automatické zlúčenie */}
+                    {priceMatch && (
+                      <div className="bg-green-600/10 border-b border-green-600/30 px-3 py-2 flex items-center gap-3">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-green-400 bg-green-500/20 px-2 py-0.5 rounded-lg">✓ Zhoda + rovnaká cena</span>
+                        <span className="text-green-300 text-[10px] font-black uppercase">{line.matched_item.name}</span>
+                        <span className="text-green-600 text-[9px]">· {parseFloat(line.matched_item.quantity).toFixed(0)} {line.matched_item.unit} na sklade → pridáme k existujúcemu</span>
+                      </div>
+                    )}
+                    {/* Zhoda + iná cena → žltý banner s výberom akcie */}
+                    {line.matched_item && !priceMatch && (
                       <div className="bg-yellow-600/10 border-b border-yellow-600/30 px-3 py-2 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-[8px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-lg">⚠️ Zhoda v sklade</span>
+                          <span className="text-[8px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-lg">⚠️ Zhoda — iná cena</span>
                           <span className="text-yellow-300 text-[10px] font-black uppercase">{line.matched_item.name}</span>
                           <span className="text-yellow-600 text-[9px]">· {parseFloat(line.matched_item.quantity).toFixed(0)} {line.matched_item.unit} na sklade</span>
                         </div>
@@ -769,7 +780,7 @@ export default function DatabazaPage() {
                       </div>
                     )}
                     {/* Nový import riadok */}
-                    <div className={`grid grid-cols-1 md:grid-cols-[130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 items-center p-3 ${line.matched_item ? (line.merge_action === 'add' ? 'bg-green-900/10' : 'bg-blue-900/10') : 'bg-black/30'}`}>
+                    <div className={`grid grid-cols-1 md:grid-cols-[130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 items-center p-3 ${priceMatch ? 'bg-green-900/10' : line.matched_item ? (line.merge_action === 'add' ? 'bg-green-900/10' : 'bg-blue-900/10') : 'bg-black/30'}`}>
                       <input type="text" placeholder="Číslo dielu" value={line.part_number}
                         onChange={e => updateImportLine(i, 'part_number', e.target.value)}
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-yellow-300 font-black text-xs outline-none transition-all" />
@@ -783,7 +794,7 @@ export default function DatabazaPage() {
                       <div className="relative">
                         <input type="number" min="0" step="0.01" value={line.purchase_price}
                           onChange={e => updateImportLine(i, 'purchase_price', e.target.value)}
-                          className={`w-full bg-zinc-900 border p-2.5 pr-5 rounded-xl font-black text-xs outline-none transition-all ${line.matched_item && parseFloat(line.purchase_price) !== parseFloat(line.matched_item.purchase_price) ? 'border-yellow-600/60 text-yellow-300' : 'border-zinc-800 text-white'}`} />
+                          className={`w-full bg-zinc-900 border p-2.5 pr-5 rounded-xl font-black text-xs outline-none transition-all ${!priceMatch && line.matched_item && line.purchase_price && parseFloat(line.purchase_price).toFixed(2) !== parseFloat(line.matched_item.purchase_price).toFixed(2) ? 'border-yellow-600/60 text-yellow-300' : 'border-zinc-800 text-white'}`} />
                         <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
                       </div>
                       <div className="bg-zinc-900/40 border border-zinc-800/50 p-2.5 rounded-xl text-center">
@@ -817,7 +828,8 @@ export default function DatabazaPage() {
                         className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs">✕</button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 <button type="button" onClick={addImportLine}
                   className="w-full border-2 border-dashed border-zinc-800 hover:border-zinc-600 rounded-2xl py-3 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all">
