@@ -18,6 +18,10 @@ export default function VerejnaPonukaPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [savingChanges, setSavingChanges] = useState(false);
 
+  // Discount
+  const [discountType, setDiscountType] = useState('pct');
+  const [discountValue, setDiscountValue] = useState('');
+
   const [myCompany, setMyCompany] = useState({
     name: 'AutoAlma Servis',
     address: '', city: '', zip: '', ico: '', dic: '', ic_dph: '',
@@ -63,7 +67,20 @@ export default function VerejnaPonukaPage() {
     if (data) {
       const ticketData = Array.isArray(data.job_tickets) ? data.job_tickets[0] : data.job_tickets;
       setOffer({ ...data, job_tickets: ticketData });
-      setItems(data.items_json.map(item => ({
+
+      const raw = data.items_json;
+      let parsedItems, parsedDiscount = null;
+      if (Array.isArray(raw)) {
+        parsedItems = raw;
+      } else {
+        parsedItems = raw?.items || [];
+        parsedDiscount = raw?.discount || null;
+      }
+      if (parsedDiscount) {
+        setDiscountType(parsedDiscount.type || 'pct');
+        setDiscountValue(parsedDiscount.value || '');
+      }
+      setItems(parsedItems.map(item => ({
         ...item,
         is_selected: item.is_selected !== undefined ? item.is_selected : true
       })));
@@ -80,6 +97,11 @@ export default function VerejnaPonukaPage() {
 
   const calculateSelectedTotal = () => {
     return items.filter(i => i.is_selected).reduce((acc, i) => acc + (i.quantity * i.unit_price), 0) * 1.23;
+  };
+
+  const getDiscountAmount = (baseTotal) => {
+    const discNum = parseFloat(discountValue) || 0;
+    return discountType === 'eur' ? discNum : baseTotal * discNum / 100;
   };
 
   // --- Admin edit ---
@@ -104,10 +126,16 @@ export default function VerejnaPonukaPage() {
 
   const saveChangesToDb = async () => {
     setSavingChanges(true);
-    const newTotal = items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0);
+    const baseTotal = items.reduce((acc, i) => acc + (i.quantity * i.unit_price), 0) * 1.23;
+    const discountAmount = getDiscountAmount(baseTotal);
+    const newTotal = Math.max(0, baseTotal - discountAmount);
+    const discNum = parseFloat(discountValue) || 0;
+    const itemsData = discNum > 0
+      ? { items, discount: { type: discountType, value: discountValue } }
+      : items;
     try {
       const { error } = await supabase.from('price_offers')
-        .update({ items_json: items, total_amount: newTotal })
+        .update({ items_json: itemsData, total_amount: newTotal })
         .eq('id', id);
       if (error) throw error;
       setHasUnsavedChanges(false);
@@ -122,7 +150,9 @@ export default function VerejnaPonukaPage() {
   // --- Customer response ---
   const handleResponse = async () => {
     const selectedCount = items.filter(i => i.is_selected).length;
-    const finalTotal = calculateSelectedTotal();
+    const baseTotal = calculateSelectedTotal();
+    const discountAmount = getDiscountAmount(baseTotal);
+    const finalTotal = Math.max(0, baseTotal - discountAmount);
     const message = selectedCount === 0
       ? 'Naozaj chcete zamietnuť všetky položky ponuky?'
       : `Potvrdzujete vybraté opravy v celkovej hodnote ${finalTotal.toFixed(2)}€?`;
@@ -168,6 +198,10 @@ export default function VerejnaPonukaPage() {
   const dateCreated = new Date(offer.created_at);
   const dateExpiry = new Date(offer.created_at);
   dateExpiry.setDate(dateExpiry.getDate() + 14);
+
+  const baseTotal = calculateSelectedTotal();
+  const discountAmount = getDiscountAmount(baseTotal);
+  const finalTotal = Math.max(0, baseTotal - discountAmount);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-4 md:p-12 font-sans font-bold">
@@ -308,7 +342,6 @@ export default function VerejnaPonukaPage() {
                   <div className="p-6 space-y-3 print-p-2">
                     {groupedItems[groupName].map((item) => (
                       editingItemId === item.id ? (
-                        // Edit mode
                         <div key={item.id} className="bg-blue-600/10 border border-blue-500/40 rounded-2xl p-4 space-y-3 no-print">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                             <input
@@ -360,22 +393,15 @@ export default function VerejnaPonukaPage() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button
-                              onClick={() => saveEditItem(item.id)}
-                              className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
-                            >
+                            <button onClick={() => saveEditItem(item.id)} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">
                               ✓ Potvrdiť
                             </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
-                            >
+                            <button onClick={cancelEdit} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">
                               ✕ Zrušiť
                             </button>
                           </div>
                         </div>
                       ) : (
-                        // Normal display
                         <div key={item.id} className={`flex justify-between items-center border-b border-zinc-800/50 pb-2 print-border-black group ${isSelected ? 'opacity-100' : 'opacity-50'}`}>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-black uppercase italic print-text-black">{item.name}</p>
@@ -402,16 +428,59 @@ export default function VerejnaPonukaPage() {
             })}
           </div>
 
+          {/* ZĽAVA — admin only, no-print */}
+          {isAdmin && (
+            <div className="no-print flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Zľava:</span>
+                <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-[10px] font-black">
+                  <button
+                    onClick={() => { setDiscountType('pct'); setHasUnsavedChanges(true); }}
+                    className={`px-3 py-1 transition-all ${discountType === 'pct' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
+                  >%</button>
+                  <button
+                    onClick={() => { setDiscountType('eur'); setHasUnsavedChanges(true); }}
+                    className={`px-3 py-1 transition-all ${discountType === 'eur' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
+                  >€</button>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={discountValue}
+                  onChange={e => { setDiscountValue(e.target.value); setHasUnsavedChanges(true); }}
+                  onFocus={e => e.target.select()}
+                  placeholder={discountType === 'pct' ? '0 %' : '0.00 €'}
+                  className="w-24 bg-black border border-zinc-700 focus:border-blue-500 px-3 py-1 rounded-lg text-white text-[11px] font-black outline-none text-right"
+                />
+              </div>
+              {discountAmount > 0 && (
+                <div className="text-red-400 text-[11px] font-black uppercase tracking-widest">
+                  Zľava {discountType === 'pct' ? `(${discountValue}%)` : ''}: − {discountAmount.toFixed(2)} €
+                </div>
+              )}
+            </div>
+          )}
+
           {/* SUMA */}
-          <div className="bg-white text-black p-6 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-2 shadow-lg border border-zinc-200 print-no-round print-p-4 print-border-thick">
+          <div className={`p-6 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-2 shadow-lg print-no-round print-p-4 print-border-thick ${discountAmount > 0 ? 'bg-green-600 text-white border-2 border-green-500' : 'bg-white text-black border border-zinc-200'}`}>
             <div className="text-left">
               <span className="text-sm font-black uppercase italic leading-none block">Celková suma s DPH:</span>
-              <span className="text-[8px] uppercase font-black tracking-widest mt-1 opacity-40 block">Sadzba DPH 23%</span>
+              <span className={`text-[8px] uppercase font-black tracking-widest mt-1 block ${discountAmount > 0 ? 'opacity-70' : 'opacity-40'}`}>
+                Sadzba DPH 23%{discountAmount > 0 ? ` · Pred zľavou: ${baseTotal.toFixed(2)} €` : ''}
+              </span>
             </div>
             <div className="text-right">
-              <p className="text-4xl font-black italic leading-none tracking-tighter print-text-2xl">{calculateSelectedTotal().toFixed(2)}€</p>
+              <p className="text-4xl font-black italic leading-none tracking-tighter print-text-2xl">{finalTotal.toFixed(2)}€</p>
             </div>
           </div>
+
+          {/* PRINT: zľava riadok */}
+          {discountAmount > 0 && (
+            <div className="hidden print-block" style={{ textAlign: 'right', fontSize: '8pt', color: '#dc2626', fontWeight: '900', marginTop: '-8pt' }}>
+              Zľava {discountType === 'pct' ? `(${discountValue}%)` : ''}: − {discountAmount.toFixed(2)} €
+            </div>
+          )}
 
           {/* AKCIA */}
           <div className="no-print">
@@ -452,6 +521,8 @@ export default function VerejnaPonukaPage() {
           .print-p-4 { padding: 10pt !important; }
           .print-p-2 { padding: 5pt !important; }
           .print-border-black { border-bottom: 0.2pt solid #eee !important; }
+          input { border: none !important; background: none !important; padding: 0 !important; color: black !important; }
+          select { display: none !important; }
         }
       `}</style>
     </div>
