@@ -49,9 +49,23 @@ export default function DatabazaPage() {
   const [revertingId, setRevertingId] = useState(null);
   const [dupWarning, setDupWarning] = useState(null);
 
+  // --- SORT SKLAD ---
+  const [sortField, setSortField] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
+
   function emptyImportLine() {
-    return { existing_id: '', name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks', dodaci_list: '' };
+    return { name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks', dodaci_list: '', matched_item: null, merge_action: 'add' };
   }
+
+  const autoMatch = (line, items) => {
+    if (!line.part_number || !line.part_number.trim()) return null;
+    return items.find(w => w.part_number && w.part_number.trim().toLowerCase() === line.part_number.trim().toLowerCase()) || null;
+  };
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  };
 
   useEffect(() => {
     fetchNorms();
@@ -259,9 +273,11 @@ export default function DatabazaPage() {
     setImportLines(l => l.map((line, idx) => {
       if (idx !== i) return line;
       const updated = { ...line, [field]: value };
-      // auto-calc sale_price when purchase_price changes and sale_price is empty
       if (field === 'purchase_price' && !line.sale_price && value) {
         updated.sale_price = (parseFloat(value) * (1 + globalMargin / 100)).toFixed(2);
+      }
+      if (field === 'part_number') {
+        updated.matched_item = autoMatch({ ...line, part_number: value }, warehouseItems);
       }
       return updated;
     }));
@@ -273,17 +289,6 @@ export default function DatabazaPage() {
         ? (parseFloat(line.purchase_price) * (1 + globalMargin / 100)).toFixed(2)
         : line.sale_price,
     })));
-  };
-
-  const handleImportSelect = (i, existing_id) => {
-    const w = warehouseItems.find(x => x.id === existing_id);
-    if (w) {
-      setImportLines(l => l.map((line, idx) => idx === i
-        ? { ...line, existing_id, name: w.name, part_number: w.part_number || '', purchase_price: w.purchase_price, sale_price: w.sale_price, unit: w.unit }
-        : line));
-    } else {
-      setImportLines(l => l.map((line, idx) => idx === i ? { ...line, existing_id: '', name: '', part_number: '' } : line));
-    }
   };
 
   const submitImport = async (e, force = false) => {
@@ -312,14 +317,14 @@ export default function DatabazaPage() {
         line.dodaci_list ? `DL: ${line.dodaci_list}` : null,
       ].filter(Boolean).join(' | ');
 
-      if (line.existing_id) {
-        const existing = warehouseItems.find(w => w.id === line.existing_id);
-        if (!existing) continue;
-        await supabase.from('warehouse_movements').insert([{ item_id: line.existing_id, movement_type: 'in', quantity: qty, note }]);
+      if (line.matched_item && line.merge_action === 'add') {
+        const existing = line.matched_item;
+        await supabase.from('warehouse_movements').insert([{ item_id: existing.id, movement_type: 'in', quantity: qty, note }]);
         const upd = { quantity: parseFloat(existing.quantity) + qty };
         if (line.purchase_price) upd.purchase_price = parseFloat(line.purchase_price);
-        await supabase.from('warehouse_items').update(upd).eq('id', line.existing_id);
-        batchItems.push({ item_id: line.existing_id, name: existing.name, part_number: line.part_number || null, quantity: qty, purchase_price: parseFloat(line.purchase_price) || 0, sale_price: parseFloat(line.sale_price) || 0 });
+        if (line.sale_price) upd.sale_price = parseFloat(line.sale_price);
+        await supabase.from('warehouse_items').update(upd).eq('id', existing.id);
+        batchItems.push({ item_id: existing.id, name: existing.name, part_number: line.part_number || null, quantity: qty, purchase_price: parseFloat(line.purchase_price) || 0, sale_price: parseFloat(line.sale_price) || 0 });
       } else if (line.name.trim()) {
         const newPayload = { name: line.name.toUpperCase(), part_number: line.part_number || null, purchase_price: parseFloat(line.purchase_price) || 0, sale_price: parseFloat(line.sale_price) || 0, unit: line.unit || 'ks', quantity: qty };
         const { data: newItem } = await supabase.from('warehouse_items').insert([newPayload]).select().single();
@@ -374,20 +379,21 @@ export default function DatabazaPage() {
           date: json.date || h.date,
         }));
         setImportLines(json.items.map(item => {
-          const existing = warehouseItems.find(w =>
-            (item.part_number && w.part_number === item.part_number) ||
-            w.name === (item.name || '').toUpperCase()
-          );
+          const matched = warehouseItems.find(w =>
+            item.part_number && w.part_number &&
+            w.part_number.trim().toLowerCase() === item.part_number.trim().toLowerCase()
+          ) || null;
           return {
-            existing_id: existing?.id || '',
-            name: existing ? existing.name : (item.name || ''),
-            part_number: item.part_number || existing?.part_number || '',
+            name: matched ? matched.name : (item.name || ''),
+            part_number: item.part_number || '',
             quantity: item.quantity || 1,
             purchase_price: item.purchase_price || '',
             purchase_price_with_vat: item.purchase_price_with_vat || '',
-            sale_price: item.sale_price || existing?.sale_price || '',
-            unit: item.unit || existing?.unit || 'ks',
+            sale_price: item.sale_price || (matched ? matched.sale_price : '') || '',
+            unit: item.unit || matched?.unit || 'ks',
             dodaci_list: item.dodaci_list || '',
+            matched_item: matched,
+            merge_action: matched ? 'add' : 'new',
           };
         }));
         setWarehouseSubTab('import');
@@ -402,10 +408,18 @@ export default function DatabazaPage() {
     }
   };
 
-  const filteredWarehouse = warehouseItems.filter(w =>
-    nd(w.name).includes(nd(warehouseSearch)) ||
-    (w.part_number && nd(w.part_number).includes(nd(warehouseSearch)))
-  );
+  const filteredWarehouse = (() => {
+    const filtered = warehouseItems.filter(w =>
+      nd(w.name).includes(nd(warehouseSearch)) ||
+      (w.part_number && nd(w.part_number).includes(nd(warehouseSearch)))
+    );
+    if (!sortField) return filtered;
+    return [...filtered].sort((a, b) => {
+      const va = parseFloat(a[sortField]) || 0;
+      const vb = parseFloat(b[sortField]) || 0;
+      return sortDir === 'asc' ? va - vb : vb - va;
+    });
+  })();
 
   const filteredUkony = ukonActions.filter(u => nd(u.name).includes(nd(ukonSearch)));
 
@@ -481,8 +495,25 @@ export default function DatabazaPage() {
               </div>
 
               <div className="hidden md:grid grid-cols-[140px_1fr_80px_100px_120px_120px_130px_120px] gap-3 px-6 py-2">
-                {['Číslo dielu', 'Názov', 'Jedn.', 'Na sklade', 'Nákup bez DPH', 'Pult bez DPH', 'Pult s DPH', ''].map(h => (
+                {['Číslo dielu', 'Názov', 'Jedn.'].map(h => (
                   <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
+                ))}
+                {[
+                  { label: 'Na sklade', field: 'quantity' },
+                  { label: 'Nákup bez DPH', field: 'purchase_price' },
+                  { label: 'Pult bez DPH', field: 'sale_price' },
+                  { label: 'Pult s DPH', field: null },
+                  { label: '', field: null },
+                ].map(({ label, field }) => field ? (
+                  <button key={label} onClick={() => toggleSort(field)}
+                    className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-zinc-600 hover:text-white transition-colors text-left">
+                    {label}
+                    <span className={`text-[10px] ${sortField === field ? 'text-red-500' : 'text-zinc-700'}`}>
+                      {sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                    </span>
+                  </button>
+                ) : (
+                  <span key={label} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{label}</span>
                 ))}
               </div>
 
@@ -672,71 +703,95 @@ export default function DatabazaPage() {
                   </div>
                 </div>
 
-                <div className="hidden md:grid grid-cols-[180px_130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 px-2">
-                  {['Existujúci diel', 'Číslo dielu', 'Názov (nový diel)', 'Množ.', 'Nákup bez DPH', 'S DPH', 'Pult bez DPH', 'Jedn.', 'Dodací list', ''].map(h => (
+                <div className="hidden md:grid grid-cols-[130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 px-2">
+                  {['Číslo dielu', 'Názov dielu', 'Množ.', 'Nákup bez DPH', 'S DPH', 'Pult bez DPH', 'Jedn.', 'Dodací list', ''].map(h => (
                     <span key={h} className="text-[8px] font-black uppercase tracking-widest text-zinc-600">{h}</span>
                   ))}
                 </div>
 
                 {importLines.map((line, i) => (
-                  <div key={i} className="grid grid-cols-1 md:grid-cols-[180px_130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 items-center border border-zinc-800/50 rounded-2xl p-3 bg-black/30">
-                    <select value={line.existing_id} onChange={e => handleImportSelect(i, e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all">
-                      <option value="">— Nový diel —</option>
-                      {warehouseItems.map(w => <option key={w.id} value={w.id}>{w.name}{w.part_number ? ` (${w.part_number})` : ''}</option>)}
-                    </select>
-                    <input type="text" placeholder="Číslo dielu" value={line.part_number}
-                      onChange={e => updateImportLine(i, 'part_number', e.target.value)}
-                      disabled={!!line.existing_id}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
-                    <input type="text" placeholder="Názov dielu" value={line.name}
-                      onChange={e => updateImportLine(i, 'name', e.target.value)}
-                      disabled={!!line.existing_id}
-                      required={!line.existing_id}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all disabled:opacity-40" />
-                    <input type="number" min="0.001" step="0.001" value={line.quantity}
-                      onChange={e => updateImportLine(i, 'quantity', e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
-                    {/* Nákup bez DPH */}
-                    <div className="relative">
-                      <input type="number" min="0" step="0.01" value={line.purchase_price}
-                        onChange={e => updateImportLine(i, 'purchase_price', e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 pr-5 rounded-xl text-white font-black text-xs outline-none transition-all" />
-                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
+                  <div key={i} className={`rounded-2xl border overflow-hidden ${line.matched_item ? 'border-yellow-600/50' : 'border-zinc-800/50'}`}>
+                    {/* Hlavný riadok importu */}
+                    {line.matched_item && (
+                      <div className="bg-yellow-600/10 border-b border-yellow-600/30 px-3 py-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-lg">⚠️ Zhoda v sklade</span>
+                          <span className="text-yellow-300 text-[10px] font-black uppercase">{line.matched_item.name}</span>
+                          <span className="text-yellow-600 text-[9px]">· {parseFloat(line.matched_item.quantity).toFixed(0)} {line.matched_item.unit} na sklade</span>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button type="button" onClick={() => updateImportLine(i, 'merge_action', 'add')}
+                            className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${line.merge_action === 'add' ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>
+                            + Pridať k existujúcemu
+                          </button>
+                          <button type="button" onClick={() => updateImportLine(i, 'merge_action', 'new')}
+                            className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase transition-all ${line.merge_action === 'new' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>
+                            Vytvoriť nový
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* Existujúci diel — porovnanie cien */}
+                    {line.matched_item && (
+                      <div className="grid grid-cols-[130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 items-center px-3 py-2 bg-zinc-900/60 border-b border-zinc-800/50">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest col-span-2">Existujúce ceny:</span>
+                        <span className="text-center text-[10px] font-black text-zinc-500">{parseFloat(line.matched_item.quantity).toFixed(0)}</span>
+                        <span className="text-[10px] font-black text-zinc-400">{parseFloat(line.matched_item.purchase_price).toFixed(2)} €</span>
+                        <span className="text-[10px] font-black text-zinc-400 text-center">{(parseFloat(line.matched_item.purchase_price) * 1.23).toFixed(2)} €</span>
+                        <span className="text-[10px] font-black text-zinc-400">{parseFloat(line.matched_item.sale_price).toFixed(2)} €</span>
+                        <span className="text-[10px] font-black text-zinc-500">{line.matched_item.unit}</span>
+                        <span />
+                        <span />
+                      </div>
+                    )}
+                    {/* Nový import riadok */}
+                    <div className={`grid grid-cols-1 md:grid-cols-[130px_160px_60px_100px_80px_100px_50px_110px_28px] gap-2 items-center p-3 ${line.matched_item ? (line.merge_action === 'add' ? 'bg-green-900/10' : 'bg-blue-900/10') : 'bg-black/30'}`}>
+                      <input type="text" placeholder="Číslo dielu" value={line.part_number}
+                        onChange={e => updateImportLine(i, 'part_number', e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-yellow-300 font-black text-xs outline-none transition-all" />
+                      <input type="text" placeholder="Názov dielu" value={line.name}
+                        onChange={e => updateImportLine(i, 'name', e.target.value)}
+                        required={!line.matched_item || line.merge_action === 'new'}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all" />
+                      <input type="number" min="0.001" step="0.001" value={line.quantity}
+                        onChange={e => updateImportLine(i, 'quantity', e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
+                      <div className="relative">
+                        <input type="number" min="0" step="0.01" value={line.purchase_price}
+                          onChange={e => updateImportLine(i, 'purchase_price', e.target.value)}
+                          className={`w-full bg-zinc-900 border p-2.5 pr-5 rounded-xl font-black text-xs outline-none transition-all ${line.matched_item && parseFloat(line.purchase_price) !== parseFloat(line.matched_item.purchase_price) ? 'border-yellow-600/60 text-yellow-300' : 'border-zinc-800 text-white'}`} />
+                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
+                      </div>
+                      <div className="bg-zinc-900/40 border border-zinc-800/50 p-2.5 rounded-xl text-center">
+                        <span className="text-zinc-400 font-black text-xs">
+                          {line.purchase_price_with_vat
+                            ? `${parseFloat(line.purchase_price_with_vat).toFixed(2)} €`
+                            : line.purchase_price
+                              ? `${(parseFloat(line.purchase_price) * 1.23).toFixed(2)} €`
+                              : '—'}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input type="number" min="0" step="0.01" value={line.sale_price}
+                          onChange={e => updateImportLine(i, 'sale_price', e.target.value)}
+                          placeholder="—"
+                          className={`w-full bg-zinc-900 border p-2.5 pr-5 rounded-xl font-black text-xs outline-none transition-all ${line.matched_item && parseFloat(line.sale_price) !== parseFloat(line.matched_item.sale_price) ? 'border-yellow-600/60 text-yellow-300' : 'border-red-600/30 text-red-400 focus:border-red-600'}`} />
+                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
+                      </div>
+                      <select value={line.unit} onChange={e => updateImportLine(i, 'unit', e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all">
+                        <option value="ks">ks</option>
+                        <option value="l">l</option>
+                        <option value="sada">sada</option>
+                        <option value="m">m</option>
+                        <option value="kg">kg</option>
+                      </select>
+                      <input type="text" placeholder="DL číslo" value={line.dodaci_list || ''}
+                        onChange={e => updateImportLine(i, 'dodaci_list', e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-500 p-2.5 rounded-xl text-yellow-400 font-black text-xs outline-none transition-all" />
+                      <button type="button" onClick={() => removeImportLine(i)}
+                        className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs">✕</button>
                     </div>
-                    {/* S DPH - readonly náhľad */}
-                    <div className="bg-zinc-900/40 border border-zinc-800/50 p-2.5 rounded-xl text-center">
-                      <span className="text-zinc-400 font-black text-xs">
-                        {line.purchase_price_with_vat
-                          ? `${parseFloat(line.purchase_price_with_vat).toFixed(2)} €`
-                          : line.purchase_price
-                            ? `${(parseFloat(line.purchase_price) * 1.23).toFixed(2)} €`
-                            : '—'}
-                      </span>
-                    </div>
-                    {/* Pult bez DPH */}
-                    <div className="relative">
-                      <input type="number" min="0" step="0.01" value={line.sale_price}
-                        onChange={e => updateImportLine(i, 'sale_price', e.target.value)}
-                        placeholder="—"
-                        className="w-full bg-zinc-900 border border-red-600/30 focus:border-red-600 p-2.5 pr-5 rounded-xl text-red-400 font-black text-xs outline-none transition-all" />
-                      <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-600 text-[9px] font-black">€</span>
-                    </div>
-                    <select value={line.unit} onChange={e => updateImportLine(i, 'unit', e.target.value)}
-                      disabled={!!line.existing_id}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 p-2.5 rounded-xl text-white font-black text-xs outline-none cursor-pointer transition-all disabled:opacity-40">
-                      <option value="ks">ks</option>
-                      <option value="l">l</option>
-                      <option value="sada">sada</option>
-                      <option value="m">m</option>
-                      <option value="kg">kg</option>
-                    </select>
-                    {/* Dodací list */}
-                    <input type="text" placeholder="DL číslo" value={line.dodaci_list || ''}
-                      onChange={e => updateImportLine(i, 'dodaci_list', e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-yellow-500 p-2.5 rounded-xl text-yellow-400 font-black text-xs outline-none transition-all" />
-                    <button type="button" onClick={() => removeImportLine(i)}
-                      className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs">✕</button>
                   </div>
                 ))}
 
