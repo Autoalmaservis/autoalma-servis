@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { fetchWithAuth } from '@/app/lib/apiHelpers';
@@ -74,7 +74,7 @@ export default function DatabazaPage() {
     fetchImportHistory();
   }, []);
 
-  const nd = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const nd = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
   // ---- ÚKONY ----
   const fetchUkony = async () => {
@@ -485,6 +485,39 @@ export default function DatabazaPage() {
             ))}
           </div>
 
+          {/* HODNOTA SKLADU — vždy viditeľná */}
+          {(() => {
+            const nakupBezDph = warehouseItems.reduce((s, w) => s + parseFloat(w.purchase_price) * parseFloat(w.quantity), 0);
+            const pultBezDph = warehouseItems.reduce((s, w) => s + parseFloat(w.sale_price) * parseFloat(w.quantity), 0);
+            return (
+              <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] p-5">
+                <div className="flex flex-wrap gap-6 items-center justify-between">
+                  <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest">
+                    Celkom položiek na sklade: <span className="text-white text-sm ml-1">{warehouseItems.length}</span>
+                  </span>
+                  <div className="flex flex-wrap gap-6">
+                    <div className="text-right">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Nákup bez DPH</p>
+                      <p className="text-lg font-black text-white">{nakupBezDph.toFixed(2)} €</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-amber-500 mb-0.5">Nákup s DPH</p>
+                      <p className="text-lg font-black text-amber-300">{(nakupBezDph * 1.23).toFixed(2)} €</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Pult bez DPH</p>
+                      <p className="text-lg font-black text-zinc-300">{pultBezDph.toFixed(2)} €</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[8px] font-black uppercase tracking-widest text-green-500 mb-0.5">Pult s DPH</p>
+                      <p className="text-lg font-black text-green-300">{(pultBezDph * 1.23).toFixed(2)} €</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ZOZNAM SKLADU */}
           {warehouseSubTab === 'zoznam' && (
             <>
@@ -557,37 +590,6 @@ export default function DatabazaPage() {
                 </div>
               )}
 
-              {(() => {
-                const nakupBezDph = filteredWarehouse.reduce((s, w) => s + parseFloat(w.purchase_price) * parseFloat(w.quantity), 0);
-                const pultBezDph = filteredWarehouse.reduce((s, w) => s + parseFloat(w.sale_price) * parseFloat(w.quantity), 0);
-                return (
-                  <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] p-5 mt-2">
-                    <div className="flex flex-wrap gap-6 items-center justify-between">
-                      <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest">
-                        Celkom položiek: <span className="text-white text-sm ml-1">{filteredWarehouse.length}</span>
-                      </span>
-                      <div className="flex flex-wrap gap-6">
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Nákup bez DPH</p>
-                          <p className="text-lg font-black text-white">{nakupBezDph.toFixed(2)} €</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-amber-500 mb-0.5">Nákup s DPH</p>
-                          <p className="text-lg font-black text-amber-300">{(nakupBezDph * 1.23).toFixed(2)} €</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Pult bez DPH</p>
-                          <p className="text-lg font-black text-zinc-300">{pultBezDph.toFixed(2)} €</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[8px] font-black uppercase tracking-widest text-green-500 mb-0.5">Pult s DPH</p>
-                          <p className="text-lg font-black text-green-300">{(pultBezDph * 1.23).toFixed(2)} €</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
             </>
           )}
 
