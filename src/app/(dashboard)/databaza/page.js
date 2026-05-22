@@ -547,8 +547,10 @@ export default function DatabazaPage() {
                         </button>
                         <button onClick={() => openSkladEdit(w)}
                           className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
-                        <button onClick={() => deleteSkladItem(w.id)}
-                          className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">🗑️</button>
+                        {parseFloat(w.quantity) <= 0 && (
+                          <button onClick={() => deleteSkladItem(w.id)}
+                            className="p-2.5 bg-red-600/20 border border-red-600/40 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all text-xs" title="Vymazať (0 ks na sklade)">🗑️</button>
+                        )}
                       </div>
                     </div>
                   ))}
