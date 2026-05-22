@@ -47,7 +47,7 @@ export default function DetailZakazkyPage() {
 
   // Editácia položiek
   const [editingItemId, setEditingItemId] = useState(null);
-  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks', worker_id: '' });
+  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks', worker_id: '', mechanic_hours: '' });
   const [editItemVatStr, setEditItemVatStr] = useState('');
   const [newItemVatStr, setNewItemVatStr] = useState('');
 
@@ -69,6 +69,7 @@ export default function DetailZakazkyPage() {
     type: 'Materiál',
     rateType: 'M1',
     worker_id: '',
+    mechanic_hours: '',
   });
 
   // --- REAL-TIME ODBERY (Postrážené, aby nič nevypadlo) ---
@@ -239,7 +240,7 @@ export default function DetailZakazkyPage() {
 
   const fetchItems = async () => {
     try {
-      const { data, error } = await supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type, worker_id').eq('job_id', id).order('type', { ascending: false }).order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type, worker_id, mechanic_hours').eq('job_id', id).order('type', { ascending: false }).order('created_at', { ascending: true });
       if (error) throw error;
       if (data) setItems(data);
     } catch (err) { console.error("Chyba položiek:", err.message); }
@@ -374,19 +375,22 @@ export default function DetailZakazkyPage() {
 
   const openEditItem = (item) => {
     setEditingItemId(item.id);
-    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit, worker_id: item.worker_id || '' });
+    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit, worker_id: item.worker_id || '', mechanic_hours: item.mechanic_hours != null ? String(item.mechanic_hours) : '' });
     setEditItemVatStr((parseFloat(item.unit_price) * 1.23).toFixed(2));
   };
 
   const saveEditItem = async (itemId) => {
     if (!await ensureAuth()) return;
     const item = items.find(i => i.id === itemId);
+    const isUkon = item?.type === 'Úkon';
+    const isPraca = item?.type === 'Práca';
     const { error } = await supabase.from('job_items').update({
       name: editItemForm.name,
       quantity: parseFloat(editItemForm.quantity) || 1,
       unit_price: parseFloat(editItemForm.unit_price) || 0,
       unit: editItemForm.unit,
-      worker_id: item?.type === 'Práca' ? (editItemForm.worker_id || null) : null,
+      worker_id: (isPraca || isUkon) ? (editItemForm.worker_id || null) : null,
+      mechanic_hours: isUkon ? (parseFloat(editItemForm.mechanic_hours) || null) : null,
     }).eq('id', itemId);
     if (!error) { setEditingItemId(null); fetchItems(); }
     else alert('Chyba pri ukladaní: ' + error.message);
@@ -596,11 +600,16 @@ export default function DetailZakazkyPage() {
 
     if (!isPraca && !isUkon) syncToCatalog(itemToSave);
 
-    const { rateType: _rt, worker_id: _wid, ...itemForDb } = itemToSave;
-    const { error } = await supabase.from('job_items').insert([{ ...itemForDb, job_id: id, worker_id: isPraca ? (newItem.worker_id || null) : null }]);
+    const { rateType: _rt, worker_id: _wid, mechanic_hours: _mh, ...itemForDb } = itemToSave;
+    const { error } = await supabase.from('job_items').insert([{
+      ...itemForDb,
+      job_id: id,
+      worker_id: (isPraca || isUkon) ? (newItem.worker_id || null) : null,
+      mechanic_hours: isUkon ? (parseFloat(newItem.mechanic_hours) || null) : null,
+    }]);
     if (!error) {
       if (!isPraca && !isUkon) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
-      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: newItem.worker_id });
+      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: (isPraca || isUkon) ? newItem.worker_id : '', mechanic_hours: isUkon ? newItem.mechanic_hours : '' });
       setUkonSearch('');
       fetchItems();
     }
@@ -931,7 +940,7 @@ export default function DetailZakazkyPage() {
                         <input type="text" value={editItemForm.name}
                           onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
                           className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs font-black uppercase italic outline-none focus:border-blue-500" />
-                        {item.type === 'Práca' && (
+                        {(item.type === 'Práca' || item.type === 'Úkon') && (
                           <select
                             className="w-full mt-1.5 bg-black border border-yellow-600/40 p-2 rounded-lg text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer"
                             value={editItemForm.worker_id || ''}
@@ -942,6 +951,16 @@ export default function DetailZakazkyPage() {
                               <option key={e.id} value={e.id}>{e.name}</option>
                             ))}
                           </select>
+                        )}
+                        {item.type === 'Úkon' && (
+                          <input
+                            type="number" min="0" step="any"
+                            placeholder="Čas mechanika (hod)"
+                            value={editItemForm.mechanic_hours}
+                            onChange={e => setEditItemForm(p => ({...p, mechanic_hours: e.target.value}))}
+                            onFocus={e => e.target.select()}
+                            className="w-full mt-1.5 bg-black border border-yellow-600/30 p-2 rounded-lg text-white text-[9px] font-black outline-none focus:border-yellow-500 placeholder:text-zinc-600"
+                          />
                         )}
                       </td>
                       <td className="p-3">
@@ -985,9 +1004,10 @@ export default function DetailZakazkyPage() {
                       <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
                       <td className="p-4 font-black uppercase text-xs tracking-tight">
                         {item.name}
-                        {item.type === 'Práca' && item.worker_id && (
+                        {(item.type === 'Práca' || item.type === 'Úkon') && item.worker_id && (
                           <span className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
                             ↳ {employees.find(e => e.id === item.worker_id)?.name || ''}
+                            {item.type === 'Úkon' && item.mechanic_hours != null && ` · ${item.mechanic_hours}h`}
                           </span>
                         )}
                       </td>
@@ -1050,7 +1070,7 @@ export default function DetailZakazkyPage() {
                       </select>
                     )}
                   </div>
-                  {newItem.type === 'Práca' && (
+                  {(newItem.type === 'Práca' || newItem.type === 'Úkon') && (
                     <select
                       className="bg-zinc-900 border border-yellow-600/50 p-2 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer w-full"
                       value={newItem.worker_id || ''}
@@ -1061,6 +1081,16 @@ export default function DetailZakazkyPage() {
                         <option key={e.id} value={e.id}>{e.name}</option>
                       ))}
                     </select>
+                  )}
+                  {newItem.type === 'Úkon' && (
+                    <input
+                      type="number" min="0" step="any"
+                      placeholder="Čas mechanika (hod)"
+                      value={newItem.mechanic_hours}
+                      onChange={e => setNewItem({ ...newItem, mechanic_hours: e.target.value })}
+                      onFocus={e => e.target.select()}
+                      className="bg-zinc-900 border border-yellow-600/30 p-2 rounded-xl text-white text-[9px] font-black outline-none focus:border-yellow-500 w-full placeholder:text-zinc-600"
+                    />
                   )}
                   </div>
                   </td>
@@ -1255,7 +1285,7 @@ export default function DetailZakazkyPage() {
 
         <JobPhotos jobId={id} />
 
-        <MechanicSplits jobId={id} zakazka={zakazka} items={items} employees={employees} />
+        <MechanicSplits items={items} employees={employees} />
 
         <div className="no-print font-bold space-y-4">
             {zakazka.status !== 'Dokončené' && zakazka.status !== 'Archivované' && (

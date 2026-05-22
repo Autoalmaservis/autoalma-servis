@@ -108,7 +108,7 @@ export default function StatistikyPage() {
       { data: payouts },
     ] = await Promise.all([
       supabase.from('invoices').select('total_amount, is_official, created_at').gte('created_at', from).lte('created_at', to),
-      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, job_items(quantity, unit_price, type, worker_id)').gte('created_at', from).lte('created_at', to),
+      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, status, job_items(quantity, unit_price, type, worker_id, mechanic_hours)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
       supabase.from('kasa_entries').select('employee_id, amount').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate),
     ]);
 
@@ -135,24 +135,26 @@ export default function StatistikyPage() {
     });
 
     (jobs || []).forEach(job => {
-      const pracaItems = (job.job_items || []).filter(i => i.type === 'Práca');
-      const hasPerItemWorker = pracaItems.some(i => i.worker_id);
+      const workItems = (job.job_items || []).filter(i => (i.type === 'Práca' || i.type === 'Úkon') && i.worker_id);
+      const hasPerItemWorker = workItems.length > 0;
 
       if (hasPerItemWorker) {
         const jobMechanics = new Set();
-        pracaItems.forEach(item => {
-          const wid = item.worker_id || job.assigned_worker_id;
-          if (!wid) return;
+        workItems.forEach(item => {
+          const wid = item.worker_id;
+          const hours = item.type === 'Práca' ? (Number(item.quantity) || 0) : (Number(item.mechanic_hours) || 0);
+          if (!wid || !hours) return;
           if (!empMap[wid]) {
             const emp = employees.find(e => e.id === wid);
             empMap[wid] = { id: wid, name: emp?.name || 'Neznámy', color: emp?.color || '#666', hourlyRate: Number(emp?.hourly_rate) || 0, hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
           }
-          empMap[wid].hours += (item.quantity || 0);
+          empMap[wid].hours += hours;
           empMap[wid].jobRevenue += (item.quantity || 0) * (item.unit_price || 0);
           jobMechanics.add(wid);
         });
         jobMechanics.forEach(wid => { if (empMap[wid]) empMap[wid].jobCount += 1; });
       } else {
+        const pracaItems = (job.job_items || []).filter(i => i.type === 'Práca');
         const totalWorkHours = pracaItems.reduce((s, i) => s + (i.quantity || 0), 0);
         const totalWorkRevenue = pracaItems.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0);
         const splits = job.mechanic_splits && job.mechanic_splits.length > 0 ? job.mechanic_splits : null;
@@ -192,19 +194,20 @@ export default function StatistikyPage() {
     // Zákazky pre vybraného mechanika
     if (selMech) {
       const filtered = (jobs || []).filter(j => {
-        const pracaItems = (j.job_items || []).filter(i => i.type === 'Práca');
-        if (pracaItems.some(i => i.worker_id)) {
-          return pracaItems.some(i => (i.worker_id || j.assigned_worker_id) === selMech);
-        }
+        const workItems = (j.job_items || []).filter(i => (i.type === 'Práca' || i.type === 'Úkon') && i.worker_id);
+        if (workItems.length > 0) return workItems.some(i => i.worker_id === selMech);
         const splits = j.mechanic_splits && j.mechanic_splits.length > 0 ? j.mechanic_splits : null;
         return splits ? splits.some(s => s.employee_id === selMech) : j.assigned_worker_id === selMech;
       });
       setMechJobs(filtered.map(j => {
-        const pracaItems = (j.job_items || []).filter(i => i.type === 'Práca');
-        if (pracaItems.some(i => i.worker_id)) {
-          const myItems = pracaItems.filter(i => (i.worker_id || j.assigned_worker_id) === selMech);
-          return { ...j, workHours: myItems.reduce((s, i) => s + (i.quantity || 0), 0), workRevenue: myItems.reduce((s, i) => s + (i.quantity || 0) * (i.unit_price || 0), 0) };
+        const workItems = (j.job_items || []).filter(i => (i.type === 'Práca' || i.type === 'Úkon') && i.worker_id);
+        if (workItems.length > 0) {
+          const myItems = workItems.filter(i => i.worker_id === selMech);
+          const workHours = myItems.reduce((s, i) => s + (i.type === 'Práca' ? (Number(i.quantity) || 0) : (Number(i.mechanic_hours) || 0)), 0);
+          const workRevenue = myItems.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);
+          return { ...j, workHours, workRevenue };
         }
+        const pracaItems = (j.job_items || []).filter(i => i.type === 'Práca');
         const splits = j.mechanic_splits && j.mechanic_splits.length > 0 ? j.mechanic_splits : null;
         const split = splits ? splits.find(s => s.employee_id === selMech) : null;
         const totalWH = pracaItems.reduce((s, i) => s + (i.quantity || 0), 0);
