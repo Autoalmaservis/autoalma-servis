@@ -310,8 +310,8 @@ export default function KlientiPage() {
   };
 
 
-  const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[Ě€-ÍŻ]/g, '');
-  const stripDia = s => s ? s.normalize('NFD').replace(/[Ě€-ÍŻ]/g, '') : s;
+  const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const stripDia = s => s ? s.normalize('NFD').replace(/[̀-ͯ]/g, '') : s;
   const filteredKlienti = klienti.filter(k => {
     const s = nd(searchTerm);
     return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
