@@ -29,6 +29,7 @@ export default function KalendarPage() {
   const [workEnd, setWorkEnd] = useState('17:00');
 
   const [selectedDate, setSelectedDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('10:00');
   const [plate, setPlate] = useState('');
@@ -324,7 +325,7 @@ export default function KalendarPage() {
     setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork('');
     setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
     setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
-    
+    setEndDate('');
     setSelectionMode('ask');
     setIsModalOpen(true);
   };
@@ -336,7 +337,9 @@ export default function KalendarPage() {
     const isBlocking = selectionMode === 'block';
     
     const finalStart = `${selectedDate}T${startTime}:00`;
-    const finalEnd = `${selectedDate}T${endTime}:00`;
+    // Pre BLOK: ak je zadaný endDate, použijeme ho; inak rovnaký deň
+    const finalEndDate = (isBlocking && endDate) ? endDate : selectedDate;
+    const finalEnd = `${finalEndDate}T${endTime}:00`;
 
     const reservationData = {
       // Ak potvrdzujeme flexi termín, odstránime značku FLEXI z titulku
@@ -409,7 +412,10 @@ export default function KalendarPage() {
     if (!ecv) return;
     setVehicleLookupLoading(true);
     try {
-      const res = await fetch(`/api/vehicle-lookup?ecv=${ecv}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/vehicle-lookup?ecv=${ecv}`, {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
+      });
       const result = await res.json();
       if (result?.vehicle) {
         const v = result.vehicle;
@@ -433,45 +439,38 @@ export default function KalendarPage() {
     e.preventDefault();
     setClientModalLoading(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: clientForm.email.trim(),
-        password: clientForm.password,
-        options: { data: { full_name: clientForm.full_name, role: 'zakaznik' } }
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/admin/create-zakaznik', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          full_name: clientForm.full_name,
+          email: clientForm.email.trim(),
+          password: clientForm.password,
+          phone: clientForm.phone,
+          clientType: clientForm.clientType,
+          company_name: clientForm.company_name,
+          ico: clientForm.ico,
+          dic: clientForm.dic,
+          ic_dph: clientForm.ic_dph,
+          address: clientForm.address,
+          city: clientForm.city,
+          zip: clientForm.zip,
+          country: clientForm.country,
+          vehicle: plate ? {
+            license_plate: plate,
+            brand_model: `${vehicleForm.brand} ${vehicleForm.model}`.trim(),
+            vin: vehicleForm.vin,
+            year_produced: vehicleForm.year ? parseInt(vehicleForm.year) : null,
+            engine_volume: vehicleForm.engine_volume ? parseInt(vehicleForm.engine_volume) : null,
+            engine_power: vehicleForm.engine_power ? parseInt(vehicleForm.engine_power) : null,
+            fuel_type: vehicleForm.fuel_type,
+            mileage: vehicleForm.mileage ? parseInt(vehicleForm.mileage) : 0,
+          } : null,
+        }),
       });
-      if (authError) throw authError;
-      const userId = authData.user?.id;
-
-      await supabase.from('user_profiles').insert([{
-        id: userId,
-        full_name: clientForm.full_name,
-        email: clientForm.email.trim(),
-        phone: clientForm.phone,
-        role: 'zakaznik',
-        company_name: clientForm.clientType === 'Firma' ? clientForm.company_name : null,
-        ico: clientForm.clientType === 'Firma' ? clientForm.ico : null,
-        dic: clientForm.clientType === 'Firma' ? clientForm.dic : null,
-        ic_dph: clientForm.clientType === 'Firma' ? clientForm.ic_dph : null,
-        address: clientForm.address,
-        city: clientForm.city,
-        zip: clientForm.zip,
-        country: clientForm.country,
-      }]);
-
-      if (plate) {
-        await supabase.from('vehicles').insert([{
-          owner_id: userId,
-          owner_name: clientForm.full_name,
-          owner_email: clientForm.email.trim(),
-          license_plate: plate.toUpperCase(),
-          brand_model: `${vehicleForm.brand} ${vehicleForm.model}`.trim(),
-          vin_number: vehicleForm.vin ? vehicleForm.vin.toUpperCase() : '',
-          year_produced: vehicleForm.year ? parseInt(vehicleForm.year) : null,
-          engine_volume: vehicleForm.engine_volume ? parseInt(vehicleForm.engine_volume) : null,
-          engine_power: vehicleForm.engine_power ? parseInt(vehicleForm.engine_power) : null,
-          fuel_type: vehicleForm.fuel_type,
-          mileage: vehicleForm.mileage ? parseInt(vehicleForm.mileage) : 0,
-        }]);
-      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Chyba pri vytváraní klienta');
 
       fetchWithAuth('/api/send-welcome-email', {
         method: 'POST',
@@ -480,8 +479,8 @@ export default function KalendarPage() {
       }).catch(() => {});
 
       const displayName = clientForm.clientType === 'Firma' ? (clientForm.company_name || clientForm.full_name) : clientForm.full_name;
-      setCarData({ license_plate: plate, brand_model: `${vehicleForm.brand} ${vehicleForm.model}`.trim(), vin_number: vehicleForm.vin, owner_name: displayName, owner_id: userId });
-      setTempCustomerContact({ phone: clientForm.phone, email: clientForm.email.trim(), customerName: displayName, userId });
+      setCarData({ license_plate: plate, brand_model: `${vehicleForm.brand} ${vehicleForm.model}`.trim(), vin_number: vehicleForm.vin, owner_name: displayName, owner_id: json.userId });
+      setTempCustomerContact({ phone: clientForm.phone, email: clientForm.email.trim(), customerName: displayName, userId: json.userId });
       setSelectedClientName(displayName);
       setIsKnown(true);
       setShowClientModal(false);
@@ -729,23 +728,58 @@ export default function KalendarPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 h-full font-bold">
                   <form onSubmit={saveReservation} className="p-4 md:p-12 space-y-4 md:space-y-8 border-r border-zinc-900 font-bold overflow-y-auto">
                     <div className="bg-zinc-900/30 p-4 md:p-6 rounded-xl md:rounded-[2rem] border border-zinc-800 space-y-4 md:space-y-6">
-                      <div>
-                        <label className="block text-[9px] font-black text-red-500 mb-2 ml-1 tracking-widest uppercase font-bold">Dátum opravy</label>
-                        <div className="relative group">
-                          <input
-                            required
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold pr-10 cursor-pointer text-sm"
-                          />
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-lg">📅</div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 md:gap-6 font-bold">
-                        <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none text-sm" />
-                        <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none text-sm" />
-                      </div>
+                      {selectionMode === 'block' ? (
+                        /* BLOK: od dátumu+čas DO dátumu+čas */
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase">Od dátumu</label>
+                              <div className="relative">
+                                <input required type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
+                                  className="w-full bg-black border border-zinc-800 p-3 md:p-4 rounded-xl text-white font-black outline-none focus:border-red-600 transition-all cursor-pointer text-sm" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase">Do dátumu</label>
+                              <div className="relative">
+                                <input type="date" value={endDate} min={selectedDate} onChange={(e) => setEndDate(e.target.value)}
+                                  className="w-full bg-black border border-zinc-800 p-3 md:p-4 rounded-xl text-white font-black outline-none focus:border-red-600 transition-all cursor-pointer text-sm" />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 md:gap-6">
+                            <div>
+                              <label className="block text-[9px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase">Od času</label>
+                              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-4 rounded-xl text-white font-bold outline-none text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase">Do času</label>
+                              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-4 rounded-xl text-white font-bold outline-none text-sm" />
+                            </div>
+                          </div>
+                          {endDate && endDate > selectedDate && (
+                            <p className="text-[10px] text-amber-500 font-black uppercase tracking-widest">
+                              🗓 Blokovanie od {selectedDate} {startTime} do {endDate} {endTime}
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        /* OBJEDNÁVKA: jeden deň */
+                        <>
+                          <div>
+                            <label className="block text-[9px] font-black text-red-500 mb-2 ml-1 tracking-widest uppercase font-bold">Dátum opravy</label>
+                            <div className="relative group">
+                              <input required type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
+                                className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all font-bold pr-10 cursor-pointer text-sm" />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-lg">📅</div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 md:gap-6 font-bold">
+                            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none text-sm" />
+                            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none text-sm" />
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {selectionMode === 'order' && (

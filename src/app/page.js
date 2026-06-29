@@ -47,6 +47,11 @@ export default function HomePage() {
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', plate: '', vehicle: '', year: '', message: '' });
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingForm, setBookingForm] = useState({ name: '', phone: '', email: '', plate: '', date: '', time: '08:00', description: '' });
+  const [bookingSending, setBookingSending] = useState(false);
+  const [bookingSent, setBookingSent] = useState(false);
+  const [bookingError, setBookingError] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -68,6 +73,33 @@ export default function HomePage() {
       .single()
       .then(({ data }) => { if (data?.value) setCennik(JSON.parse(data.value)); });
   }, []);
+
+  const handleBookingSubmit = async (e) => {
+    e.preventDefault();
+    setBookingSending(true);
+    setBookingError('');
+    try {
+      const startDt = `${bookingForm.date}T${bookingForm.time}:00`;
+      // predpokladáme 1 hod termin
+      const endDt = `${bookingForm.date}T${String(parseInt(bookingForm.time.split(':')[0]) + 1).padStart(2, '0')}:${bookingForm.time.split(':')[1]}:00`;
+      const contactInfo = `${bookingForm.name}${bookingForm.phone ? ' · ' + bookingForm.phone : ''}${bookingForm.email ? ' · ' + bookingForm.email : ''}`;
+      const { error } = await supabase.from('calendar_events').insert({
+        title: bookingForm.name || 'Online objednávka',
+        plate_number: bookingForm.plate.toUpperCase() || 'NEZNÁMA',
+        start_datetime: startDt,
+        end_datetime: endDt,
+        status: 'Čaká na schválenie',
+        is_confirmed: false,
+        issue_description: (bookingForm.description ? bookingForm.description + '\n' : '') + contactInfo,
+      });
+      if (error) throw error;
+      setBookingSent(true);
+      setBookingForm({ name: '', phone: '', email: '', plate: '', date: '', time: '08:00', description: '' });
+    } catch (err) {
+      setBookingError('Objednávku sa nepodarilo uložiť. Zavolajte nám: 0940 449 449');
+    }
+    setBookingSending(false);
+  };
 
   const handleContactSubmit = async (e) => {
     e.preventDefault();
@@ -233,14 +265,22 @@ export default function HomePage() {
           </div>
         </div>
 
-        <Link
-          href="/login"
-          className="bg-red-600 hover:bg-red-500 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all shadow-2xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-105"
-        >
-          Aktivovať Moju Garáž — zadarmo
-        </Link>
-        <p className="text-zinc-400 text-[9px] font-black uppercase tracking-widest mt-4">
-          Vytvorí vám ju servis po prvej návšteve
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <button
+            onClick={() => { setShowBookingModal(true); setBookingSent(false); setBookingError(''); }}
+            className="bg-red-600 hover:bg-red-500 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all shadow-2xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-105"
+          >
+            📅 Objednať sa online
+          </button>
+          <Link
+            href="/login"
+            className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all"
+          >
+            🏎️ Aktivovať Moju Garáž
+          </Link>
+        </div>
+        <p className="text-zinc-500 text-[9px] font-black uppercase tracking-widest mt-4">
+          Objednajte sa bez registrácie · Garáž dáva prístup k stavu opravy
         </p>
       </section>
 
@@ -608,6 +648,106 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* BOOKING MODAL */}
+      {showBookingModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setShowBookingModal(false)}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-zinc-900">
+              <div>
+                <h2 className="font-black uppercase italic tracking-tighter text-xl text-white">Objednať sa</h2>
+                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mt-0.5">Bez registrácie · Potvrdíme telefonicky</p>
+              </div>
+              <button onClick={() => setShowBookingModal(false)} className="w-10 h-10 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-all flex items-center justify-center font-black">✕</button>
+            </div>
+
+            {bookingSent ? (
+              <div className="p-8 text-center">
+                <div className="text-5xl mb-4">✅</div>
+                <h3 className="font-black uppercase italic tracking-tighter text-xl text-white mb-2">Objednávka odoslaná!</h3>
+                <p className="text-zinc-400 text-sm font-bold mb-6">Potvrdíme vám termín telefonicky alebo e-mailom.</p>
+                <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest mb-6">
+                  Chcete vidieť stav opravy naživo? Aktivujte si Moju Garáž.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button onClick={() => setShowBookingModal(false)} className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-2xl uppercase text-xs tracking-widest transition-all">Zavrieť</button>
+                  <Link href="/login" onClick={() => setShowBookingModal(false)} className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-black py-4 rounded-2xl uppercase text-xs tracking-widest transition-all text-center">🏎️ Aktivovať Moju Garáž</Link>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleBookingSubmit} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 mb-1.5 ml-1 tracking-widest uppercase">Meno a priezvisko *</label>
+                    <input required type="text" value={bookingForm.name} onChange={e => setBookingForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="Ján Novák"
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 mb-1.5 ml-1 tracking-widest uppercase">Telefón *</label>
+                    <input required type="tel" value={bookingForm.phone} onChange={e => setBookingForm(f => ({ ...f, phone: e.target.value }))}
+                      placeholder="09XX XXX XXX"
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 mb-1.5 ml-1 tracking-widest uppercase">E-mail</label>
+                    <input type="email" value={bookingForm.email} onChange={e => setBookingForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="vas@email.sk"
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 mb-1.5 ml-1 tracking-widest uppercase">ŠPZ vozidla</label>
+                    <input type="text" value={bookingForm.plate} onChange={e => setBookingForm(f => ({ ...f, plate: e.target.value.toUpperCase() }))}
+                      placeholder="BA 123 AB"
+                      className="w-full bg-white text-black border-none p-3 rounded-xl font-black text-sm tracking-widest outline-none uppercase" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-red-500 mb-1.5 ml-1 tracking-widest uppercase">Požadovaný dátum *</label>
+                    <input required type="date" value={bookingForm.date} min={new Date().toISOString().split('T')[0]}
+                      onChange={e => setBookingForm(f => ({ ...f, date: e.target.value }))}
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all cursor-pointer" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-zinc-500 mb-1.5 ml-1 tracking-widest uppercase">Čas</label>
+                    <input type="time" value={bookingForm.time} min="07:00" max="17:00"
+                      onChange={e => setBookingForm(f => ({ ...f, time: e.target.value }))}
+                      className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-black text-zinc-500 mb-1.5 ml-1 tracking-widest uppercase">Popis závady / čo potrebujete</label>
+                  <textarea value={bookingForm.description} onChange={e => setBookingForm(f => ({ ...f, description: e.target.value }))}
+                    placeholder="Napr. Výmena oleja, škrípe predná brzdička..."
+                    rows={3}
+                    className="w-full bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-bold outline-none text-sm resize-none transition-all" />
+                </div>
+
+                {bookingError && <p className="text-red-500 text-xs font-black text-center">{bookingError}</p>}
+
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
+                  <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                    💡 Chcete vidieť stav opravy naživo, schvaľovať práce online a mať faktúry po ruke?{' '}
+                    <Link href="/login" onClick={() => setShowBookingModal(false)} className="text-red-500 hover:text-red-400 transition-colors">Aktivujte si Moju Garáž</Link>
+                    {' '}— vytvorí vám ju servis po prvej návšteve.
+                  </p>
+                </div>
+
+                <button type="submit" disabled={bookingSending}
+                  className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-black py-4 rounded-2xl uppercase text-xs tracking-widest transition-all shadow-lg shadow-red-600/20">
+                  {bookingSending ? 'Odosielam...' : '📅 Odoslať objednávku'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* FOOTER */}
       <footer className="py-8 px-6 border-t border-zinc-900 flex flex-col md:flex-row items-center justify-between gap-4">
