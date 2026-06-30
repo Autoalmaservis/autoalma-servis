@@ -43,20 +43,6 @@ export async function GET(request) {
 
     try {
       const data = JSON.parse(rawText);
-      // API vracia [false, "Error: Your IP is not authorized..."] pri blokovanej IP
-      if (Array.isArray(data)) {
-        const msg = String(data[1] || '');
-        if (msg.includes('IP') || msg.includes('not authorized')) {
-          console.error('vehicle-lookup: IP not whitelisted at databazavozidiel.sk');
-          return NextResponse.json({ error: 'IP adresa servera nie je autorizovaná v databazavozidiel.sk — kontaktujte podporu' }, { status: 403 });
-        }
-        if (data[0] === false) {
-          return NextResponse.json({ error: msg || 'Vozidlo sa nenašlo' }, { status: 404 });
-        }
-        // [true, {vehicle: ...}] alebo [true, {...}]
-        const payload = data[1];
-        return NextResponse.json(typeof payload === 'object' && payload !== null ? payload : { vehicle: payload });
-      }
       return NextResponse.json(data);
     } catch {
       console.error('vehicle-lookup: unexpected response format for EČV', cleaned);
