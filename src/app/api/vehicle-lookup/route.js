@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await sb.auth.getUser(token);
+  return !!user;
+}
 
 export async function GET(request) {
+  if (!await isAuthenticated(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const { searchParams } = new URL(request.url);
   const ecv = searchParams.get('ecv');
 
   if (!ecv) return NextResponse.json({ error: 'Chýba EČV' }, { status: 400 });
 
-  const cleaned = ecv.replace(/\s+/g, '').toUpperCase();
+  const cleaned = ecv.replace(/[^A-Z0-9]/gi, '').toUpperCase();
   if (!/^[A-Z0-9]{2,10}$/.test(cleaned)) {
     return NextResponse.json({ error: 'Neplatný formát EČV' }, { status: 400 });
   }
@@ -31,6 +43,20 @@ export async function GET(request) {
 
     try {
       const data = JSON.parse(rawText);
+      // API vracia [false, "Error: Your IP is not authorized..."] pri blokovanej IP
+      if (Array.isArray(data)) {
+        const msg = String(data[1] || '');
+        if (msg.includes('IP') || msg.includes('not authorized')) {
+          console.error('vehicle-lookup: IP not whitelisted at databazavozidiel.sk');
+          return NextResponse.json({ error: 'IP adresa servera nie je autorizovaná v databazavozidiel.sk — kontaktujte podporu' }, { status: 403 });
+        }
+        if (data[0] === false) {
+          return NextResponse.json({ error: msg || 'Vozidlo sa nenašlo' }, { status: 404 });
+        }
+        // [true, {vehicle: ...}] alebo [true, {...}]
+        const payload = data[1];
+        return NextResponse.json(typeof payload === 'object' && payload !== null ? payload : { vehicle: payload });
+      }
       return NextResponse.json(data);
     } catch {
       console.error('vehicle-lookup: unexpected response format for EČV', cleaned);

@@ -47,13 +47,15 @@ export default function DetailZakazkyPage() {
 
   // Editácia položiek
   const [editingItemId, setEditingItemId] = useState(null);
-  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks', worker_id: '', mechanic_hours: '' });
+  const [editItemForm, setEditItemForm] = useState({ name: '', quantity: 1, unit_price: 0, unit: 'ks', worker_id: '', mechanic_hours: '', mechanic_splits: [{ worker_id: '', hours: '' }] });
   const [editItemVatStr, setEditItemVatStr] = useState('');
   const [newItemVatStr, setNewItemVatStr] = useState('');
 
   const [showFormSelector, setShowFormSelector] = useState(false);
   const [editingMileage, setEditingMileage] = useState(false);
   const [mileageInput, setMileageInput] = useState('');
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -70,6 +72,7 @@ export default function DetailZakazkyPage() {
     rateType: 'M1',
     worker_id: '',
     mechanic_hours: '',
+    mechanic_splits: [{ worker_id: '', hours: '' }],
   });
 
   // --- REAL-TIME ODBERY (Postrážené, aby nič nevypadlo) ---
@@ -101,6 +104,18 @@ export default function DetailZakazkyPage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Keď sa načíta zákazka, predvyplní mechanika v novej položke
+  useEffect(() => {
+    if (zakazka?.assigned_worker_id) {
+      setNewItem(prev => {
+        if (prev.mechanic_splits.length === 1 && !prev.mechanic_splits[0].worker_id) {
+          return { ...prev, mechanic_splits: [{ worker_id: zakazka.assigned_worker_id, hours: prev.mechanic_splits[0].hours || '' }] };
+        }
+        return prev;
+      });
+    }
+  }, [zakazka?.assigned_worker_id]);
 
   const ensureAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -240,7 +255,7 @@ export default function DetailZakazkyPage() {
 
   const fetchItems = async () => {
     try {
-      const { data, error } = await supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type, worker_id, mechanic_hours').eq('job_id', id).order('type', { ascending: false }).order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('job_items').select('id, job_id, name, quantity, unit, unit_price, type, worker_id, mechanic_hours, mechanic_splits').eq('job_id', id).order('type', { ascending: false }).order('created_at', { ascending: true });
       if (error) throw error;
       if (data) setItems(data);
     } catch (err) { console.error("Chyba položiek:", err.message); }
@@ -375,22 +390,58 @@ export default function DetailZakazkyPage() {
 
   const openEditItem = (item) => {
     setEditingItemId(item.id);
-    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit, worker_id: item.worker_id || '', mechanic_hours: item.mechanic_hours != null ? String(item.mechanic_hours) : '' });
+    const splits = item.mechanic_splits?.length > 0
+      ? item.mechanic_splits
+      : (item.worker_id ? [{ worker_id: item.worker_id, hours: '' }] : [{ worker_id: '', hours: '' }]);
+    setEditItemForm({ name: item.name, quantity: item.quantity, unit_price: parseFloat(item.unit_price), unit: item.unit, worker_id: item.worker_id || '', mechanic_hours: item.mechanic_hours != null ? String(item.mechanic_hours) : '', mechanic_splits: splits });
     setEditItemVatStr((parseFloat(item.unit_price) * 1.23).toFixed(2));
   };
+
+  const updateEditSplit = (idx, field, val) =>
+    setEditItemForm(p => { const s = [...p.mechanic_splits]; s[idx] = { ...s[idx], [field]: val }; return { ...p, mechanic_splits: s }; });
+  const addEditSplit = () => setEditItemForm(p => ({ ...p, mechanic_splits: [...p.mechanic_splits, { worker_id: '', hours: '' }] }));
+  const removeEditSplit = (idx) => setEditItemForm(p => ({ ...p, mechanic_splits: p.mechanic_splits.filter((_, i) => i !== idx) }));
+
+  const updateNewSplit = (idx, field, val) =>
+    setNewItem(p => {
+      const s = [...p.mechanic_splits];
+      s[idx] = { ...s[idx], [field]: val };
+      const upd = { ...p, mechanic_splits: s };
+      // Pre Práca: quantity = súčet hodín mechanikov
+      if (p.type === 'Práca' && field === 'hours') {
+        const total = s.reduce((sum, sp) => sum + (Number(sp.hours) || 0), 0);
+        if (total > 0) upd.quantity = total;
+      }
+      return upd;
+    });
+  const addNewSplit = () => setNewItem(p => ({ ...p, mechanic_splits: [...p.mechanic_splits, { worker_id: '', hours: '' }] }));
+  const removeNewSplit = (idx) => setNewItem(p => {
+    const s = p.mechanic_splits.filter((_, i) => i !== idx);
+    const upd = { ...p, mechanic_splits: s };
+    if (p.type === 'Práca') {
+      const total = s.reduce((sum, sp) => sum + (Number(sp.hours) || 0), 0);
+      if (total > 0) upd.quantity = total;
+    }
+    return upd;
+  });
 
   const saveEditItem = async (itemId) => {
     if (!await ensureAuth()) return;
     const item = items.find(i => i.id === itemId);
     const isUkon = item?.type === 'Úkon';
     const isPraca = item?.type === 'Práca';
+    const validSplits = editItemForm.mechanic_splits.filter(s => s.worker_id && Number(s.hours) > 0);
+    const editSplitsWithWorker = (isPraca || isUkon) ? editItemForm.mechanic_splits.filter(s => s.worker_id) : [];
+    const editPrimaryWorker = validSplits.length >= 1 ? validSplits[0].worker_id
+      : (editSplitsWithWorker.length >= 1 ? editSplitsWithWorker[0].worker_id : null);
     const { error } = await supabase.from('job_items').update({
       name: editItemForm.name,
       quantity: parseFloat(editItemForm.quantity) || 1,
       unit_price: parseFloat(editItemForm.unit_price) || 0,
       unit: editItemForm.unit,
-      worker_id: (isPraca || isUkon) ? (editItemForm.worker_id || null) : null,
+      worker_id: (isPraca || isUkon) ? editPrimaryWorker : null,
       mechanic_hours: isUkon ? (parseFloat(editItemForm.mechanic_hours) || null) : null,
+      mechanic_splits: (isPraca || isUkon) && validSplits.length > 1 ? validSplits : null,
     }).eq('id', itemId);
     if (!error) { setEditingItemId(null); fetchItems(); }
     else alert('Chyba pri ukladaní: ' + error.message);
@@ -410,6 +461,17 @@ export default function DetailZakazkyPage() {
     }
   };
 
+  const savePhone = async () => {
+    if (!await ensureAuth()) return;
+    const { error } = await supabase.from('job_tickets').update({ customer_phone: phoneInput }).eq('id', id);
+    if (error) { alert('Chyba: ' + error.message); return; }
+    setZakazka(prev => ({ ...prev, customer_phone: phoneInput }));
+    if (zakazka.customer_id) {
+      supabase.from('user_profiles').update({ phone: phoneInput }).eq('id', zakazka.customer_id).then(() => {});
+    }
+    setEditingPhone(false);
+  };
+
   const updateJobStatus = async (newStatus) => {
     const { error } = await supabase.from('job_tickets').update({ status: newStatus, updated_at: new Date() }).eq('id', id);
     if (!error) setZakazka(prev => ({ ...prev, status: newStatus }));
@@ -422,7 +484,15 @@ export default function DetailZakazkyPage() {
     const selectedEmp = employees.find(e => e.id === employeeId);
     if (!selectedEmp) return;
     const { error } = await supabase.from('job_tickets').update({ assigned_worker_id: employeeId, technician_name: selectedEmp.name, updated_at: new Date() }).eq('id', id);
-    if (!error) setZakazka(prev => ({ ...prev, assigned_worker_id: employeeId, technician_name: selectedEmp.name }));
+    if (!error) {
+      setZakazka(prev => ({ ...prev, assigned_worker_id: employeeId, technician_name: selectedEmp.name }));
+      setNewItem(prev => ({
+        ...prev,
+        mechanic_splits: prev.mechanic_splits.length === 1
+          ? [{ ...prev.mechanic_splits[0], worker_id: employeeId }]
+          : prev.mechanic_splits,
+      }));
+    }
   };
 
   // --- UPRAVENÁ FUNKCIA FINALIZÁCIE S ADRESAMI A SPLATNOSŤOU ---
@@ -600,16 +670,23 @@ export default function DetailZakazkyPage() {
 
     if (!isPraca && !isUkon) syncToCatalog(itemToSave);
 
-    const { rateType: _rt, worker_id: _wid, mechanic_hours: _mh, ...itemForDb } = itemToSave;
+    const { rateType: _rt, worker_id: _wid, mechanic_hours: _mh, mechanic_splits: _mspl, ...itemForDb } = itemToSave;
+    const validSplits = newItem.mechanic_splits.filter(s => s.worker_id && Number(s.hours) > 0);
+    // Pre Práca: aj split iba s worker_id (bez hodín) je platný — hodiny berieme z quantity
+    const splitsWithWorker = (isPraca || isUkon) ? newItem.mechanic_splits.filter(s => s.worker_id) : [];
+    const primaryWorker = validSplits.length >= 1 ? validSplits[0].worker_id
+      : (splitsWithWorker.length >= 1 ? splitsWithWorker[0].worker_id : null);
     const { error } = await supabase.from('job_items').insert([{
       ...itemForDb,
       job_id: id,
-      worker_id: (isPraca || isUkon) ? (newItem.worker_id || null) : null,
+      worker_id: (isPraca || isUkon) ? primaryWorker : null,
       mechanic_hours: isUkon ? (parseFloat(newItem.mechanic_hours) || null) : null,
+      mechanic_splits: (isPraca || isUkon) && validSplits.length > 1 ? validSplits : null,
     }]);
     if (!error) {
       if (!isPraca && !isUkon) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
-      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: (isPraca || isUkon) ? newItem.worker_id : '', mechanic_hours: isUkon ? newItem.mechanic_hours : '' });
+      const keepWorker = newItem.mechanic_splits[0]?.worker_id || '';
+      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: keepWorker, mechanic_hours: isUkon ? newItem.mechanic_hours : '', mechanic_splits: [{ worker_id: keepWorker, hours: '' }] });
       setUkonSearch('');
       fetchItems();
     }
@@ -820,7 +897,28 @@ export default function DetailZakazkyPage() {
               <div className="bg-black/30 p-8 rounded-3xl border border-zinc-800 space-y-4">
                 <div>
                   <p className="text-2xl font-black uppercase italic tracking-tighter leading-none">{zakazka.customer_name}</p>
-                  <p className="text-xs font-bold text-zinc-500 mt-1">{zakazka.customer_phone} | {zakazka.customer_email}</p>
+                  <div className="text-xs font-bold text-zinc-500 mt-1 flex items-center gap-1 flex-wrap">
+                    {editingPhone ? (
+                      <span className="inline-flex items-center gap-1">
+                        <input
+                          type="text" autoFocus
+                          value={phoneInput}
+                          onChange={e => setPhoneInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') savePhone(); if (e.key === 'Escape') setEditingPhone(false); }}
+                          className="bg-black border border-red-600 rounded-lg px-2 py-0.5 text-white text-xs font-bold outline-none w-36"
+                        />
+                        <button onClick={savePhone} className="text-green-500 font-black text-xs">✓</button>
+                        <button onClick={() => setEditingPhone(false)} className="text-zinc-500 font-black text-xs">✕</button>
+                      </span>
+                    ) : (
+                      <button onClick={() => { setPhoneInput(zakazka.customer_phone || ''); setEditingPhone(true); }} className="hover:text-white transition-colors group inline-flex items-center gap-1">
+                        {zakazka.customer_phone || '—'}
+                        <span className="text-zinc-700 group-hover:text-zinc-400 text-[9px] opacity-0 group-hover:opacity-100 transition-opacity">✏️</span>
+                      </button>
+                    )}
+                    <span className="text-zinc-700">|</span>
+                    <span>{zakazka.customer_email}</span>
+                  </div>
                 </div>
                 {(zakazka.ico || zakazka.company_name) && (
                   <div className="pt-4 border-t border-zinc-800/50 text-[10px] uppercase font-bold text-zinc-400">
@@ -941,25 +1039,40 @@ export default function DetailZakazkyPage() {
                           onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
                           className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs font-black uppercase italic outline-none focus:border-blue-500" />
                         {(item.type === 'Práca' || item.type === 'Úkon') && (
-                          <select
-                            className="w-full mt-1.5 bg-black border border-yellow-600/40 p-2 rounded-lg text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer"
-                            value={editItemForm.worker_id || ''}
-                            onChange={e => setEditItemForm(p => ({...p, worker_id: e.target.value}))}
-                          >
-                            <option value="">— Mechanik (voliteľné) —</option>
-                            {employees.map(e => (
-                              <option key={e.id} value={e.id}>{e.name}</option>
+                          <div className="mt-1.5 space-y-1">
+                            {editItemForm.mechanic_splits.map((split, idx) => (
+                              <div key={idx} className="flex gap-1 items-center">
+                                <select
+                                  value={split.worker_id}
+                                  onChange={e => updateEditSplit(idx, 'worker_id', e.target.value)}
+                                  className="flex-1 bg-black border border-yellow-600/40 p-1.5 rounded-lg text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer"
+                                >
+                                  <option value="">— Mechanik —</option>
+                                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                                </select>
+                                <input
+                                  type="number" min="0" step="any" placeholder="h"
+                                  value={split.hours}
+                                  onChange={e => updateEditSplit(idx, 'hours', e.target.value)}
+                                  onFocus={e => e.target.select()}
+                                  className="w-14 bg-black border border-yellow-600/30 p-1.5 rounded-lg text-white text-[9px] font-black text-center outline-none focus:border-yellow-500"
+                                />
+                                {editItemForm.mechanic_splits.length > 1 && (
+                                  <button type="button" onClick={() => removeEditSplit(idx)} className="text-red-500 hover:text-red-400 font-black text-xs w-4 shrink-0">✕</button>
+                                )}
+                              </div>
                             ))}
-                          </select>
+                            <button type="button" onClick={addEditSplit} className="text-[8px] font-black text-yellow-600 hover:text-yellow-400 uppercase tracking-widest">+ Mechanik</button>
+                          </div>
                         )}
                         {item.type === 'Úkon' && (
                           <input
                             type="number" min="0" step="any"
-                            placeholder="Čas mechanika (hod)"
+                            placeholder="hod/ks (norma)"
                             value={editItemForm.mechanic_hours}
                             onChange={e => setEditItemForm(p => ({...p, mechanic_hours: e.target.value}))}
                             onFocus={e => e.target.select()}
-                            className="w-full mt-1.5 bg-black border border-yellow-600/30 p-2 rounded-lg text-white text-[9px] font-black outline-none focus:border-yellow-500 placeholder:text-zinc-600"
+                            className="w-full mt-1 bg-black border border-zinc-700 p-1.5 rounded-lg text-white text-[9px] font-black outline-none focus:border-zinc-500 placeholder:text-zinc-600"
                           />
                         )}
                       </td>
@@ -1004,11 +1117,22 @@ export default function DetailZakazkyPage() {
                       <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
                       <td className="p-4 font-black uppercase text-xs tracking-tight">
                         {item.name}
-                        {(item.type === 'Práca' || item.type === 'Úkon') && item.worker_id && (
-                          <span className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
-                            ↳ {employees.find(e => e.id === item.worker_id)?.name || ''}
-                            {item.type === 'Úkon' && item.mechanic_hours != null && ` · ${item.mechanic_hours}h`}
-                          </span>
+                        {(item.type === 'Práca' || item.type === 'Úkon') && (
+                          <>
+                            {item.mechanic_splits?.length > 1 ? (
+                              item.mechanic_splits.filter(s => s.worker_id && Number(s.hours) > 0).map((s, si) => (
+                                <span key={si} className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
+                                  ↳ {employees.find(e => e.id === s.worker_id)?.name || s.worker_id} · {Number(s.hours).toFixed(1)}h
+                                </span>
+                              ))
+                            ) : item.worker_id ? (
+                              <span className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
+                                ↳ {employees.find(e => e.id === item.worker_id)?.name || ''}
+                                {item.type === 'Úkon' && item.mechanic_hours != null && ` · ${item.mechanic_hours}h/ks`}
+                                {item.mechanic_splits?.[0]?.hours && ` · ${Number(item.mechanic_splits[0].hours).toFixed(1)}h`}
+                              </span>
+                            ) : null}
+                          </>
                         )}
                       </td>
                       <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
@@ -1071,25 +1195,47 @@ export default function DetailZakazkyPage() {
                     )}
                   </div>
                   {(newItem.type === 'Práca' || newItem.type === 'Úkon') && (
-                    <select
-                      className="bg-zinc-900 border border-yellow-600/50 p-2 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer w-full"
-                      value={newItem.worker_id || ''}
-                      onChange={(e) => setNewItem({ ...newItem, worker_id: e.target.value })}
-                    >
-                      <option value="">— Mechanik (voliteľné) —</option>
-                      {employees.map(e => (
-                        <option key={e.id} value={e.id}>{e.name}</option>
+                    <div className="space-y-1.5">
+                      {newItem.mechanic_splits.map((split, idx) => (
+                        <div key={idx} className="flex gap-1.5 items-center">
+                          <select
+                            value={split.worker_id}
+                            onChange={e => updateNewSplit(idx, 'worker_id', e.target.value)}
+                            className="flex-1 bg-zinc-900 border border-yellow-600/50 p-2 rounded-xl text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer"
+                          >
+                            <option value="">— Mechanik —</option>
+                            {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                          </select>
+                          <input
+                            type="number" min="0" step="any" placeholder="hod"
+                            value={split.hours}
+                            onChange={e => updateNewSplit(idx, 'hours', e.target.value)}
+                            onFocus={e => e.target.select()}
+                            className="w-16 bg-zinc-900 border border-yellow-600/30 p-2 rounded-xl text-white text-[9px] font-black text-center outline-none focus:border-yellow-500"
+                          />
+                          {newItem.mechanic_splits.length > 1 && (
+                            <button type="button" onClick={() => removeNewSplit(idx)} className="text-red-500 hover:text-red-400 font-black text-xs w-5 shrink-0">✕</button>
+                          )}
+                        </div>
                       ))}
-                    </select>
+                      <button type="button" onClick={addNewSplit} className="text-[9px] font-black text-yellow-600 hover:text-yellow-400 uppercase tracking-widest">+ Mechanik</button>
+                      {(() => {
+                        const total = newItem.type === 'Práca' ? (Number(newItem.quantity) || 0) : ((Number(newItem.mechanic_hours) || 0) * (Number(newItem.quantity) || 1));
+                        const allocated = newItem.mechanic_splits.reduce((s, sp) => s + (Number(sp.hours) || 0), 0);
+                        if (total > 0 && allocated > 0 && Math.abs(total - allocated) > 0.05)
+                          return <p className="text-[8px] text-orange-400 font-black uppercase">{allocated.toFixed(1)}/{total.toFixed(1)}h alok.</p>;
+                        return null;
+                      })()}
+                    </div>
                   )}
                   {newItem.type === 'Úkon' && (
                     <input
                       type="number" min="0" step="any"
-                      placeholder="Čas mechanika (hod)"
+                      placeholder="hod/ks (norma)"
                       value={newItem.mechanic_hours}
                       onChange={e => setNewItem({ ...newItem, mechanic_hours: e.target.value })}
                       onFocus={e => e.target.select()}
-                      className="bg-zinc-900 border border-yellow-600/30 p-2 rounded-xl text-white text-[9px] font-black outline-none focus:border-yellow-500 w-full placeholder:text-zinc-600"
+                      className="bg-zinc-900 border border-zinc-700 p-2 rounded-xl text-white text-[9px] font-black outline-none focus:border-zinc-500 w-full placeholder:text-zinc-600"
                     />
                   )}
                   </div>
@@ -1111,7 +1257,7 @@ export default function DetailZakazkyPage() {
                         />
                         {/* Custom dropdown */}
                         {showItemDropdown && newItem.type === 'Materiál' && (
-                          <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
+                          <div className="absolute z-[100] top-full left-0 min-w-[380px] mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
                             {(() => {
                               const q = nd(newItem.name);
                               const wFiltered = warehouseItems.filter(w =>
@@ -1130,7 +1276,7 @@ export default function DetailZakazkyPage() {
                                         <button key={w.id} type="button" onMouseDown={() => selectWarehouseItem(w)}
                                           className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40 last:border-0">
                                           <div className="min-w-0">
-                                            <span className="text-white font-black text-xs uppercase italic block truncate">{w.name}</span>
+                                            <span className="text-white font-black text-xs uppercase italic block break-words">{w.name}</span>
                                             {w.part_number && <span className="text-yellow-400 text-[9px] font-black">{w.part_number}</span>}
                                           </div>
                                           <div className="flex items-center gap-2 shrink-0">
@@ -1149,7 +1295,7 @@ export default function DetailZakazkyPage() {
                                       {cFiltered.map((c, i) => (
                                         <button key={i} type="button" onMouseDown={() => selectCatalogItem(c)}
                                           className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40 last:border-0">
-                                          <span className="text-zinc-300 font-black text-xs uppercase italic truncate">{c.name}</span>
+                                          <span className="text-zinc-300 font-black text-xs uppercase italic break-words">{c.name}</span>
                                           <span className="text-zinc-400 font-black text-xs shrink-0">{parseFloat(c.unit_price).toFixed(2)} €</span>
                                         </button>
                                       ))}
@@ -1165,7 +1311,7 @@ export default function DetailZakazkyPage() {
                         )}
                         {/* Úkon dropdown */}
                         {newItem.type === 'Úkon' && showItemDropdown && (
-                          <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-zinc-950 border border-purple-600/40 rounded-2xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
+                          <div className="absolute z-[100] top-full left-0 min-w-[380px] mt-1 bg-zinc-950 border border-purple-600/40 rounded-2xl overflow-hidden shadow-2xl max-h-72 overflow-y-auto">
                             {(() => {
                               const q = nd(newItem.name);
                               const filtered = serviceActions.filter(u => nd(u.name).includes(q)).slice(0, 10);
@@ -1185,7 +1331,7 @@ export default function DetailZakazkyPage() {
                                         setShowItemDropdown(false);
                                       }}
                                       className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40 last:border-0">
-                                      <span className="text-purple-200 font-black text-xs uppercase italic truncate">{u.name}</span>
+                                      <span className="text-purple-200 font-black text-xs uppercase italic break-words">{u.name}</span>
                                       <div className="shrink-0 text-right">
                                         <span className="text-white font-black text-xs block">{parseFloat(u.unit_price).toFixed(2)} €</span>
                                         <span className="text-zinc-500 text-[9px]">{u.unit}</span>
@@ -1209,7 +1355,20 @@ export default function DetailZakazkyPage() {
                     </div>
                   </td>
                   <td className="p-3">
-                    <input type="number" min="0" step="any" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: e.target.value})} onFocus={e => e.target.select()} />
+                    <input type="number" min="0" step="any" className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white text-center text-xs font-bold" value={newItem.quantity}
+                      onChange={(e) => {
+                        const qty = e.target.value;
+                        const isPraca = newItem.type === 'Práca';
+                        const singleSplit = newItem.mechanic_splits.length === 1;
+                        setNewItem(prev => ({
+                          ...prev,
+                          quantity: qty,
+                          mechanic_splits: (isPraca && singleSplit)
+                            ? [{ ...prev.mechanic_splits[0], hours: qty }]
+                            : prev.mechanic_splits,
+                        }));
+                      }}
+                      onFocus={e => e.target.select()} />
                   </td>
                   <td className="p-3 w-48">
                     <div className="space-y-1.5">
