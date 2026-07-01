@@ -43,6 +43,9 @@ export async function GET(request) {
 
     try {
       const data = JSON.parse(rawText);
+      if (data?.message?.toLowerCase().includes('quota')) {
+        return NextResponse.json({ error: 'Kvóta API databazavozidiel.sk je vyčerpaná — dobite kredity na webe' }, { status: 402 });
+      }
       return NextResponse.json(data);
     } catch {
       console.error('vehicle-lookup: unexpected response format for EČV', cleaned);
