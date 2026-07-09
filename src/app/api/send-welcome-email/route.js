@@ -11,14 +11,12 @@ async function isAuthenticated(request) {
 }
 
 export async function POST(request) {
+  if (!await isAuthenticated(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { email, name, password, createdByAdmin } = body;
-
-    // Admin-created accounts (with credentials) require authentication
-    if (createdByAdmin && !await isAuthenticated(request)) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     if (!email) return Response.json({ error: 'Chýba e-mail' }, { status: 400 });
 

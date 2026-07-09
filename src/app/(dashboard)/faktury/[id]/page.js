@@ -90,20 +90,24 @@ export default function DetailFakturyPage() {
 
   useEffect(() => {
     if (!inv || !myCompany.bank || !inv.is_official) return;
-    fetch('/api/generate-qr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        iban: myCompany.bank,
-        amount: inv.total_amount,
-        variableSymbol: String(inv.invoice_number).replace(/\D/g, ''),
-        beneficiaryName: myCompany.name,
-        paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim(),
-      }),
-    })
-      .then(r => r.json())
-      .then(d => { if (d.qrDataUrl) setQrDataUrl(d.qrDataUrl); else console.error('QR chyba:', d.error); })
-      .catch(e => console.error('QR fetch chyba:', e));
+    const fetchQr = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      fetch('/api/generate-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          iban: myCompany.bank,
+          amount: inv.total_amount,
+          variableSymbol: String(inv.invoice_number).replace(/\D/g, ''),
+          beneficiaryName: myCompany.name,
+          paymentNote: `Oprava vozidla ${inv.car_details?.plate || ''}`.trim(),
+        }),
+      })
+        .then(r => r.json())
+        .then(d => { if (d.qrDataUrl) setQrDataUrl(d.qrDataUrl); else console.error('QR chyba:', d.error); })
+        .catch(e => console.error('QR fetch chyba:', e));
+    };
+    fetchQr();
   }, [inv, myCompany.bank]);
 
   const handlePrint = () => window.print();

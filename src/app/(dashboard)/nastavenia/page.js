@@ -45,10 +45,15 @@ export default function NastaveniaPage() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newHourlyRate, setNewHourlyRate] = useState('');
-  
+
+  // Stavy pre reset hesla
+  const [resetPwValue, setResetPwValue] = useState('');
+  const [resetPwLoading, setResetPwLoading] = useState(false);
+  const [resetPwStatus, setResetPwStatus] = useState('');
+
   // Stavy pre MODÁLNE OKNO (Editácia zamestnanca)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', password: '', hourly_rate: '' });
+  const [editForm, setEditForm] = useState({ id: '', name: '', role: '', color: '', email: '', hourly_rate: '' });
 
   // Stavy pre pracovnú dobu
   const [workStart, setWorkStart] = useState('07:00');
@@ -223,28 +228,25 @@ export default function NastaveniaPage() {
       return;
     }
     setLoading(true);
-    const emailToSave = newEmail.toLowerCase().trim();
-
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: emailToSave,
-        password: newPassword,
-      });
-      if (authError) throw new Error("Chyba Auth: " + authError.message);
-
-      const { error: dbError } = await supabase.from('employees').insert([
-        {
-          id: authData.user.id,
-          name: newName,
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/admin/create-employee', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          email: newEmail.toLowerCase().trim(),
+          password: newPassword,
           role: newRole,
           color: newColor,
-          email: emailToSave,
-          password: newPassword,
-          active: true,
-          hourly_rate: parseFloat(newHourlyRate) || 0,
-        }
-      ]);
-      if (dbError) throw dbError;
+          hourly_rate: newHourlyRate,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
       setNewName(''); setNewEmail(''); setNewPassword(''); setNewColor('#dc2626'); setNewHourlyRate('');
       alert("Mechanik vytvorený!");
@@ -263,9 +265,10 @@ export default function NastaveniaPage() {
         role: emp.role,
         color: emp.color,
         email: emp.email || '',
-        password: emp.password || '',
         hourly_rate: emp.hourly_rate != null ? String(emp.hourly_rate) : '',
     });
+    setResetPwValue('');
+    setResetPwStatus('');
     setIsEditModalOpen(true);
   };
 
@@ -278,16 +281,44 @@ export default function NastaveniaPage() {
         role: editForm.role,
         color: editForm.color,
         email: editForm.email.toLowerCase().trim(),
-        password: editForm.password,
         hourly_rate: parseFloat(editForm.hourly_rate) || 0,
       })
       .eq('id', editForm.id);
-    
+
     if (!error) {
       setIsEditModalOpen(false);
       fetchData();
     } else {
       alert("Chyba pri aktualizácii: " + error.message);
+    }
+  };
+
+  const handleResetPassword = async (userId) => {
+    if (!resetPwValue || resetPwValue.length < 6) {
+      alert('Heslo musí mať aspoň 6 znakov');
+      return;
+    }
+    setResetPwLoading(true);
+    setResetPwStatus('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ userId, newPassword: resetPwValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setResetPwStatus('Heslo zmenené ✓');
+      setResetPwValue('');
+      setTimeout(() => setResetPwStatus(''), 3000);
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    } finally {
+      setResetPwLoading(false);
     }
   };
 
@@ -397,7 +428,7 @@ export default function NastaveniaPage() {
           onClick={() => router.push('/nastavenia/import-export')}
           className="px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 text-zinc-500 hover:text-white hover:bg-zinc-800"
         >
-          Sync & Backup 🔄
+          Export / Import 📦
         </button>
 
         <button 
@@ -714,7 +745,6 @@ export default function NastaveniaPage() {
                       <div>
                         <p className="font-black uppercase text-sm tracking-tight text-white italic">{emp.name}</p>
                         <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{emp.role} • {emp.email}</p>
-                        <p className="text-[9px] font-mono text-zinc-600 mt-0.5 tracking-widest">🔑 {emp.password || '—'}</p>
                         {emp.hourly_rate > 0 && <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-0.5">💰 {emp.hourly_rate} €/hod</p>}
                       </div>
                     </div>
@@ -744,7 +774,27 @@ export default function NastaveniaPage() {
             <form onSubmit={handleUpdateEmployee} className="space-y-4">
               <input required type="text" value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} placeholder="Meno" className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-bold outline-none" />
               <input required type="email" value={editForm.email} onChange={(e) => setEditForm({...editForm, email: e.target.value})} placeholder="Email" className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none" />
-              <input type="text" value={editForm.password} onChange={(e) => setEditForm({...editForm, password: e.target.value})} placeholder="Heslo (nechajte prázdne ak nemeníte)" className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-mono tracking-widest" />
+              <div className="space-y-2">
+                <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1">Obnoviť heslo</p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={resetPwValue}
+                    onChange={(e) => setResetPwValue(e.target.value)}
+                    placeholder="Nové heslo (min. 6 znakov)"
+                    className="flex-grow bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleResetPassword(editForm.id)}
+                    disabled={resetPwLoading || !resetPwValue}
+                    className="px-5 py-2 bg-amber-600/20 border border-amber-600/30 text-amber-400 font-black text-[9px] uppercase rounded-2xl hover:bg-amber-600/30 transition-all disabled:opacity-30"
+                  >
+                    {resetPwLoading ? '...' : 'Reset'}
+                  </button>
+                </div>
+                {resetPwStatus && <p className="text-[9px] font-black text-green-400 ml-1">{resetPwStatus}</p>}
+              </div>
               <select value={editForm.role} onChange={(e) => setEditForm({...editForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-bold">
                 <option value="mechanik">Mechanik</option>
                 <option value="diagnostik">Diagnostik / Elektrikár</option>

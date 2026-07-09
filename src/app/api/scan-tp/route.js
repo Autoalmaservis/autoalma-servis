@@ -3,8 +3,20 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createClient } from '@supabase/supabase-js';
+
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await sb.auth.getUser(token);
+  return !!user;
+}
 
 export async function POST(req) {
+  if (!await isAuthenticated(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const apiKey = process.env.GOOGLE_AI_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'Skenovanie TP nie je nakonfigurované' }, { status: 503 });

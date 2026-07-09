@@ -4,16 +4,28 @@ export default function MechanicSplits({ items, employees }) {
   const summary = (() => {
     const map = {};
     (items || []).forEach(item => {
-      if (!item.worker_id) return;
-      let hours = 0;
-      if (item.type === 'Práca') hours = Number(item.quantity) || 0;
-      else if (item.type === 'Úkon') hours = Number(item.mechanic_hours) || 0;
-      if (!hours) return;
-      if (!map[item.worker_id]) {
-        const emp = (employees || []).find(e => e.id === item.worker_id);
-        map[item.worker_id] = { name: emp?.name || 'Neznámy', color: emp?.color || '#888', hours: 0 };
+      const splits = item.mechanic_splits;
+      if (splits && splits.length > 0) {
+        splits.forEach(split => {
+          const hours = Number(split.hours) || 0;
+          if (!hours || !split.worker_id) return;
+          if (!map[split.worker_id]) {
+            const emp = (employees || []).find(e => e.id === split.worker_id);
+            map[split.worker_id] = { name: emp?.name || 'Neznámy', color: emp?.color || '#888', hours: 0 };
+          }
+          map[split.worker_id].hours += hours;
+        });
+      } else if (item.worker_id) {
+        let hours = 0;
+        if (item.type === 'Práca') hours = Number(item.quantity) || 0;
+        else if (item.type === 'Úkon') hours = (Number(item.mechanic_hours) || 0) * (Number(item.quantity) || 1);
+        if (!hours) return;
+        if (!map[item.worker_id]) {
+          const emp = (employees || []).find(e => e.id === item.worker_id);
+          map[item.worker_id] = { name: emp?.name || 'Neznámy', color: emp?.color || '#888', hours: 0 };
+        }
+        map[item.worker_id].hours += hours;
       }
-      map[item.worker_id].hours += hours;
     });
     return Object.values(map).sort((a, b) => b.hours - a.hours);
   })();

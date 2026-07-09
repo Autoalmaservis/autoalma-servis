@@ -33,8 +33,14 @@ export default function VerejnaPonukaPage() {
       fetchOffer();
       fetchMyCompanySettings();
     }
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAdmin(!!session);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+      setIsAdmin(profile?.role === 'admin');
     });
   }, [id]);
 
@@ -58,34 +64,43 @@ export default function VerejnaPonukaPage() {
   };
 
   const fetchOffer = async () => {
-    const { data } = await supabase
-      .from('price_offers')
-      .select(`*, job_tickets (*, id, customer_id, customer_name, customer_phone, customer_email, address, city, car_brand_model, plate_number, vin_number, mileage)`)
-      .eq('id', id)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('price_offers')
+        .select(`*, job_tickets (*, id, customer_id, customer_name, customer_phone, customer_email, address, city, car_brand_model, plate_number, vin_number, mileage)`)
+        .eq('id', id)
+        .single();
 
-    if (data) {
-      const ticketData = Array.isArray(data.job_tickets) ? data.job_tickets[0] : data.job_tickets;
-      setOffer({ ...data, job_tickets: ticketData });
+      if (error) {
+        console.error('fetchOffer error:', error);
+      }
 
-      const raw = data.items_json;
-      let parsedItems, parsedDiscount = null;
-      if (Array.isArray(raw)) {
-        parsedItems = raw;
-      } else {
-        parsedItems = raw?.items || [];
-        parsedDiscount = raw?.discount || null;
+      if (data) {
+        const ticketData = Array.isArray(data.job_tickets) ? data.job_tickets[0] : data.job_tickets;
+        setOffer({ ...data, job_tickets: ticketData });
+
+        const raw = data.items_json;
+        let parsedItems, parsedDiscount = null;
+        if (Array.isArray(raw)) {
+          parsedItems = raw;
+        } else {
+          parsedItems = raw?.items || [];
+          parsedDiscount = raw?.discount || null;
+        }
+        if (parsedDiscount) {
+          setDiscountType(parsedDiscount.type || 'pct');
+          setDiscountValue(parsedDiscount.value || '');
+        }
+        setItems(parsedItems.map(item => ({
+          ...item,
+          is_selected: item.is_selected !== undefined ? item.is_selected : true
+        })));
       }
-      if (parsedDiscount) {
-        setDiscountType(parsedDiscount.type || 'pct');
-        setDiscountValue(parsedDiscount.value || '');
-      }
-      setItems(parsedItems.map(item => ({
-        ...item,
-        is_selected: item.is_selected !== undefined ? item.is_selected : true
-      })));
+    } catch (err) {
+      console.error('fetchOffer exception:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const toggleGroup = (groupName) => {
@@ -159,13 +174,14 @@ export default function VerejnaPonukaPage() {
     if (!confirm(message)) return;
 
     const finalStatus = selectedCount === 0 ? 'Zamietnuté' : 'Schválené';
-    const { error } = await supabase.from('price_offers').update({ status: finalStatus, items_json: items }).eq('id', id);
+    const res = await fetch('/api/ponuka-response', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ offerId: id, status: finalStatus, items }),
+    });
+    const error = res.ok ? null : await res.json();
 
     if (!error) {
-      if (offer?.job_id || offer?.job_tickets?.id) {
-        const jobId = offer.job_id || offer.job_tickets.id;
-        await supabase.from('job_tickets').update({ status: finalStatus === 'Schválené' ? 'Prebieha' : 'Ponuka zamietnutá' }).eq('id', jobId);
-      }
       const targetUserId = offer?.job_tickets?.customer_id;
       if (targetUserId) {
         await supabase.from('notifications').insert([{
@@ -207,21 +223,21 @@ export default function VerejnaPonukaPage() {
     <div className="min-h-screen bg-zinc-950 text-white p-4 md:p-12 font-sans font-bold">
 
       {/* TOP BAR */}
-      <div className="max-w-4xl mx-auto mb-6 flex justify-between items-center no-print">
-        <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black tracking-widest shadow-xl">
+      <div className="max-w-4xl mx-auto mb-4 flex justify-between items-center no-print">
+        <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-4 py-2.5 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black tracking-widest shadow-xl">
           ← Späť
         </button>
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-2 items-center">
           {isAdmin && hasUnsavedChanges && (
             <button
               onClick={saveChangesToDb}
               disabled={savingChanges}
-              className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-6 py-3 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-xl transition-all"
+              className="bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-4 py-2.5 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-xl transition-all"
             >
-              {savingChanges ? 'Ukladám...' : '💾 Uložiť zmeny'}
+              {savingChanges ? 'Ukladám...' : '💾 Uložiť'}
             </button>
           )}
-          <button onClick={() => window.print()} className="bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-xl flex items-center gap-2">
+          <button onClick={() => window.print()} className="hidden md:flex bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-xl items-center gap-2">
             🖨️ Tlačiť ponuku
           </button>
         </div>
@@ -235,7 +251,7 @@ export default function VerejnaPonukaPage() {
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto bg-zinc-900 border border-zinc-800 rounded-[3rem] overflow-hidden shadow-2xl printable-area">
+      <div className="max-w-4xl mx-auto bg-zinc-900 border border-zinc-800 rounded-[2rem] md:rounded-[3rem] overflow-hidden shadow-2xl printable-area">
 
         {/* PRINT HEADER */}
         <div className="hidden print-block">
@@ -284,62 +300,58 @@ export default function VerejnaPonukaPage() {
         </div>
 
         {/* WEB HEADER */}
-        <div className="bg-blue-600 p-10 flex justify-between items-center text-white header-bg no-print">
-          <div className="flex items-center gap-6">
-            <img src={myCompany.logo_url || '/autoalma logo.png'} alt="Logo" className="w-20 h-auto brightness-0 invert" />
+        <div className="bg-blue-600 p-5 md:p-10 flex justify-between items-center text-white header-bg no-print">
+          <div className="flex items-center gap-3 md:gap-6">
+            <img src={myCompany.logo_url || '/autoalma logo.png'} alt="Logo" className="w-12 md:w-20 h-auto brightness-0 invert" />
             <div>
-              <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none">Cenová ponuka</h1>
-              <p className="text-blue-100 text-[10px] uppercase tracking-[0.3em] mt-2 font-black italic">#{id.slice(0, 8)}</p>
+              <h1 className="text-xl md:text-4xl font-black uppercase italic tracking-tighter leading-none">Cenová ponuka</h1>
+              <p className="text-blue-100 text-[9px] uppercase tracking-[0.15em] mt-1 font-black italic">#{id.slice(0, 8)}</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-[9px] uppercase opacity-70">Platnosť ponuky do:</p>
-            <p className="text-xl font-black">{dateExpiry.toLocaleDateString('sk-SK')}</p>
+          <div className="text-right shrink-0">
+            <p className="text-[8px] uppercase opacity-70">Platnosť do:</p>
+            <p className="text-sm md:text-xl font-black">{dateExpiry.toLocaleDateString('sk-SK')}</p>
           </div>
         </div>
 
-        <div className="p-10 space-y-10 bg-zinc-900 print-p-0">
+        <div className="p-4 md:p-10 space-y-6 md:space-y-10 bg-zinc-900 print-p-0">
 
           {/* INFO O KLIENTOVI */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 border-b border-zinc-800 pb-10 no-print">
-            <div className="space-y-4">
+          <div className="flex justify-between items-start gap-4 border-b border-zinc-800 pb-5 md:pb-10 no-print">
+            <div className="space-y-1">
               <h4 className="text-blue-500 text-[10px] uppercase tracking-widest">Odberateľ</h4>
-              <div>
-                <p className="text-2xl font-black uppercase italic leading-none">{offer.job_tickets?.customer_name}</p>
-                <p className="text-xs text-zinc-400 mt-1">{offer.job_tickets?.customer_phone}</p>
-              </div>
+              <p className="text-lg md:text-2xl font-black uppercase italic leading-tight">{offer.job_tickets?.customer_name}</p>
+              <p className="text-xs text-zinc-400">{offer.job_tickets?.customer_phone}</p>
             </div>
-            <div className="space-y-4 md:text-right">
+            <div className="space-y-1 text-right">
               <h4 className="text-blue-500 text-[10px] uppercase tracking-widest">Vozidlo</h4>
-              <div>
-                <p className="text-2xl font-black uppercase italic leading-none">{offer.job_tickets?.car_brand_model}</p>
-                <p className="text-sm font-black text-white mt-1">ŠPZ: {offer.job_tickets?.plate_number}</p>
-              </div>
+              <p className="text-lg md:text-2xl font-black uppercase italic leading-tight">{offer.job_tickets?.car_brand_model}</p>
+              <p className="text-sm font-black text-white">ŠPZ: {offer.job_tickets?.plate_number}</p>
             </div>
           </div>
 
           {/* POLOŽKY */}
-          <div className="space-y-8">
+          <div className="space-y-4 md:space-y-8">
             <div className="flex justify-between items-end no-print">
-              <p className="text-[10px] text-blue-500 uppercase tracking-[0.2em] italic font-black">Rozpis navrhovaných prác a materiálu:</p>
-              <p className="text-[10px] text-zinc-500 uppercase">Dátum: {dateCreated.toLocaleDateString('sk-SK')}</p>
+              <p className="text-[9px] md:text-[10px] text-blue-500 uppercase tracking-[0.1em] md:tracking-[0.2em] italic font-black">Navrhované práce a materiál:</p>
+              <p className="text-[9px] md:text-[10px] text-zinc-500 uppercase shrink-0 ml-2">Dátum: {dateCreated.toLocaleDateString('sk-SK')}</p>
             </div>
 
             {Object.keys(groupedItems).map((groupName) => {
               const isSelected = groupedItems[groupName].every(i => i.is_selected);
               return (
-                <div key={groupName} className={`rounded-[2.5rem] border-2 transition-all duration-300 overflow-hidden print-no-round print-border-thin ${isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-zinc-800 bg-black/20 opacity-40 no-print'}`}>
-                  <div className={`p-5 flex justify-between items-center transition-all duration-300 print-bg-gray ${isSelected ? 'bg-blue-600/20' : 'bg-zinc-800/30'}`}>
-                    <h3 className={`font-black uppercase italic tracking-wider print-text-black ${isSelected ? 'text-white' : 'text-zinc-500'}`}>📂 {groupName}</h3>
+                <div key={groupName} className={`rounded-[1.5rem] md:rounded-[2.5rem] border-2 transition-all duration-300 overflow-hidden print-no-round print-border-thin ${isSelected ? 'border-blue-600 bg-blue-600/5' : 'border-zinc-800 bg-black/20 opacity-40 no-print'}`}>
+                  <div className={`p-3 md:p-5 flex justify-between items-center gap-2 transition-all duration-300 print-bg-gray ${isSelected ? 'bg-blue-600/20' : 'bg-zinc-800/30'}`}>
+                    <h3 className={`font-black uppercase italic tracking-wide text-sm md:text-base print-text-black truncate ${isSelected ? 'text-white' : 'text-zinc-500'}`}>📂 {groupName}</h3>
                     <button
                       disabled={responded || offer.status !== 'Odoslané'}
                       onClick={() => toggleGroup(groupName)}
-                      className={`px-6 py-2 rounded-2xl text-[10px] font-black uppercase transition-all duration-300 no-print ${isSelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500'}`}
+                      className={`px-3 md:px-6 py-1.5 md:py-2 rounded-xl md:rounded-2xl text-[9px] md:text-[10px] font-black uppercase transition-all duration-300 shrink-0 no-print ${isSelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500'}`}
                     >
-                      {isSelected ? 'Vybraté ✓' : 'Vynechať ✕'}
+                      {isSelected ? '✓ Vybraté' : '✕ Vynechať'}
                     </button>
                   </div>
-                  <div className="p-6 space-y-3 print-p-2">
+                  <div className="p-4 md:p-6 space-y-3 print-p-2">
                     {groupedItems[groupName].map((item) => (
                       editingItemId === item.id ? (
                         <div key={item.id} className="bg-blue-600/10 border border-blue-500/40 rounded-2xl p-4 space-y-3 no-print">
@@ -463,15 +475,15 @@ export default function VerejnaPonukaPage() {
           )}
 
           {/* SUMA */}
-          <div className={`p-6 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-2 shadow-lg print-no-round print-p-4 print-border-thick ${discountAmount > 0 ? 'bg-green-600 text-white border-2 border-green-500' : 'bg-white text-black border border-zinc-200'}`}>
-            <div className="text-left">
+          <div className={`p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] flex flex-row justify-between items-center gap-2 shadow-lg print-no-round print-p-4 print-border-thick ${discountAmount > 0 ? 'bg-green-600 text-white border-2 border-green-500' : 'bg-white text-black border border-zinc-200'}`}>
+            <div>
               <span className="text-sm font-black uppercase italic leading-none block">Celková suma s DPH:</span>
-              <span className={`text-[8px] uppercase font-black tracking-widest mt-1 block ${discountAmount > 0 ? 'opacity-70' : 'opacity-40'}`}>
-                Sadzba DPH 23%{discountAmount > 0 ? ` · Pred zľavou: ${baseTotal.toFixed(2)} €` : ''}
+              <span className={`text-[8px] uppercase font-black tracking-wide mt-1 block ${discountAmount > 0 ? 'opacity-70' : 'opacity-40'}`}>
+                DPH 23%{discountAmount > 0 ? ` · Bez zľavy: ${baseTotal.toFixed(2)} €` : ''}
               </span>
             </div>
-            <div className="text-right">
-              <p className="text-4xl font-black italic leading-none tracking-tighter print-text-2xl">{finalTotal.toFixed(2)}€</p>
+            <div className="text-right shrink-0">
+              <p className="text-3xl md:text-4xl font-black italic leading-none tracking-tighter print-text-2xl">{finalTotal.toFixed(2)}€</p>
             </div>
           </div>
 

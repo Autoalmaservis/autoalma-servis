@@ -78,20 +78,70 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
     setExistingScheduled(prev => prev.filter(r => r.id !== remId));
   };
 
+  const [editableHours, setEditableHours] = useState([]);
+
+  useEffect(() => {
+    const map = {};
+    (items || []).forEach(item => {
+      const splits = item.mechanic_splits;
+      if (splits && splits.length > 0) {
+        splits.forEach(split => {
+          const h = Number(split.hours) || 0;
+          if (!h || !split.worker_id) return;
+          if (!map[split.worker_id]) {
+            const emp = (employees || []).find(e => e.id === split.worker_id);
+            map[split.worker_id] = { worker_id: split.worker_id, name: emp?.name || 'Neznámy', color: emp?.color || '#888', computed: 0 };
+          }
+          map[split.worker_id].computed += h;
+        });
+      } else if (item.worker_id) {
+        let h = 0;
+        if (item.type === 'Práca') h = Number(item.quantity) || 0;
+        else if (item.type === 'Úkon') h = (Number(item.mechanic_hours) || 0) * (Number(item.quantity) || 1);
+        if (!h) return;
+        if (!map[item.worker_id]) {
+          const emp = (employees || []).find(e => e.id === item.worker_id);
+          map[item.worker_id] = { worker_id: item.worker_id, name: emp?.name || 'Neznámy', color: emp?.color || '#888', computed: 0 };
+        }
+        map[item.worker_id].computed += h;
+      }
+    });
+    setEditableHours(Object.values(map).sort((a, b) => b.computed - a.computed).map(r => ({ ...r, hours: String(r.computed.toFixed(2)) })));
+  }, [items, employees]);
+
+  const unallocatedItems = (items || []).filter(item => {
+    if (item.type !== 'Práca' && item.type !== 'Úkon') return false;
+    const totalH = item.type === 'Práca' ? (Number(item.quantity) || 0) : ((Number(item.mechanic_hours) || 0) * (Number(item.quantity) || 1));
+    if (!totalH) return false;
+    const splits = item.mechanic_splits;
+    if (splits && splits.length > 0) {
+      const assigned = splits.reduce((s, sp) => s + (Number(sp.hours) || 0), 0);
+      return Math.abs(totalH - assigned) > 0.05;
+    }
+    return !item.worker_id;
+  });
+
+  const totalHoursAll = editableHours.reduce((s, r) => s + (Number(r.hours) || 0), 0);
+  const hasManualEdit = editableHours.some(r => Math.abs(Number(r.hours) - r.computed) > 0.001);
+
   const totalWorkHours = items.filter(i => i.type === 'Práca').reduce((a, i) => a + Number(i.quantity), 0);
-  const existingSplits = zakazka.mechanic_splits || [];
-  const splitTotal = existingSplits.reduce((a, s) => a + Number(s.hours), 0);
-  const hoursBalanced = totalWorkHours === 0 || Math.abs(totalWorkHours - splitTotal) <= 0.001;
+  const hoursBalanced = unallocatedItems.length === 0;
 
   const handleCompleteWithActions = async () => {
     if (!hoursBalanced && !hoursConfirmed) { setHoursConfirmed(true); return; }
     setCompleteSaving(true);
     try {
-      if (totalWorkHours > 0 && existingSplits.length === 0 && zakazka.assigned_worker_id) {
+      if (editableHours.length > 0) {
+        const finalSplits = editableHours.filter(r => Number(r.hours) > 0).map(r => ({
+          employee_id: r.worker_id,
+          name: r.name,
+          hours: Number(r.hours) || 0,
+        }));
+        await supabase.from('job_tickets').update({ mechanic_splits: finalSplits }).eq('id', zakazka.id);
+      } else if (zakazka.assigned_worker_id) {
         const emp = employees.find(e => e.id === zakazka.assigned_worker_id);
         if (emp) {
-          const autoSplit = [{ employee_id: emp.id, name: emp.name, hours: totalWorkHours }];
-          await supabase.from('job_tickets').update({ mechanic_splits: autoSplit }).eq('id', zakazka.id);
+          await supabase.from('job_tickets').update({ mechanic_splits: [{ employee_id: emp.id, name: emp.name, hours: totalWorkHours }] }).eq('id', zakazka.id);
         }
       }
       if (completeSendMsg && completeMsg.trim()) {
@@ -434,45 +484,54 @@ export default function CompletionModal({ zakazka, items = [], employees = [], o
         </div>
 
         {/* === SEKCIA: HODINY MECHANIKOV === */}
-        {totalWorkHours > 0 && (
-          <div className="border-t border-zinc-800 pt-6 mx-8 mb-2 space-y-3">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Hodiny zo zákazky</h3>
-            <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-2">
-              {existingSplits.length > 0 ? (
-                existingSplits.map(s => (
-                  <div key={s.employee_id} className="flex justify-between items-center text-sm">
-                    <span className="font-black uppercase italic">{s.name}</span>
-                    <span className="font-black text-yellow-400">{Number(s.hours).toFixed(2)} hod</span>
-                  </div>
-                ))
-              ) : (
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-black uppercase italic text-zinc-300">
-                    {zakazka.technician_name || 'Priradený mechanik'}
-                  </span>
-                  <span className="font-black text-green-400">{totalWorkHours.toFixed(2)} hod</span>
-                </div>
-              )}
-              <div className="border-t border-zinc-700 pt-2 flex justify-between items-center text-[10px] font-black uppercase">
-                <span className="text-zinc-500">Spolu zo zákazky</span>
-                <span className={hoursBalanced ? 'text-green-400' : 'text-orange-400'}>
-                  {existingSplits.length > 0 ? splitTotal.toFixed(2) : totalWorkHours.toFixed(2)} / {totalWorkHours.toFixed(2)} hod
-                  {hoursBalanced ? ' ✓' : ' ⚠'}
-                </span>
-              </div>
-            </div>
-            {existingSplits.length === 0 && (
-              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">Hodiny sa automaticky priradia mechanikovi zákazky</p>
-            )}
-            {hoursConfirmed && !hoursBalanced && (
-              <div className="bg-orange-500/10 border border-orange-500/40 rounded-2xl p-4">
-                <p className="text-orange-400 font-black text-[10px] uppercase tracking-widest">
-                  ⚠ Hodiny nie sú správne rozdelené ({splitTotal.toFixed(2)} hod ≠ {totalWorkHours.toFixed(2)} hod). Naozaj chcete uzavrieť zákazku?
-                </p>
-              </div>
-            )}
+        <div className="border-t border-zinc-800 pt-6 mx-8 mb-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-yellow-400">Hodiny mechanikov</h3>
+            <span className="text-[10px] font-black text-zinc-500">Spolu: <span className="text-white">{totalHoursAll.toFixed(2)} hod</span></span>
           </div>
-        )}
+
+          {unallocatedItems.length > 0 && (
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-3 space-y-1">
+              <p className="text-orange-400 text-[9px] font-black uppercase tracking-widest">⚠ Položky s nepriradenými hodinami:</p>
+              {unallocatedItems.map(item => (
+                <p key={item.id} className="text-orange-300 text-[9px] font-bold">· {item.name}</p>
+              ))}
+            </div>
+          )}
+
+          {editableHours.length > 0 ? (
+            <div className="space-y-2">
+              {editableHours.map((row, idx) => (
+                <div key={row.worker_id} className="flex items-center gap-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl px-4 py-3">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
+                  <span className="flex-1 text-sm font-black uppercase italic">{row.name}</span>
+                  <span className="text-zinc-600 text-[8px] font-black">({row.computed.toFixed(2)}h)</span>
+                  <input
+                    type="number" min="0" step="0.25"
+                    value={row.hours}
+                    onChange={e => setEditableHours(prev => prev.map((r, i) => i === idx ? { ...r, hours: e.target.value } : r))}
+                    onFocus={e => e.target.select()}
+                    className="w-20 bg-black border border-yellow-600/40 p-2 rounded-xl text-white text-sm font-black text-center outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-zinc-500 text-[9px] font-black">hod</span>
+                </div>
+              ))}
+              {hasManualEdit && (
+                <p className="text-yellow-500 text-[9px] font-black uppercase tracking-widest">Hodiny boli manuálne upravené</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">Žiadne hodiny — priraďte mechanikov k položkám zákazky</p>
+          )}
+
+          {hoursConfirmed && !hoursBalanced && (
+            <div className="bg-orange-500/10 border border-orange-500/40 rounded-2xl p-4">
+              <p className="text-orange-400 font-black text-[10px] uppercase tracking-widest">
+                ⚠ Niektoré položky nemajú priradených mechanikov. Naozaj uzavrieť?
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Akčné tlačidlá */}
         <div className="p-8 border-t border-zinc-800 flex gap-4">

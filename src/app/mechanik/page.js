@@ -24,6 +24,13 @@ export default function MechanikPage() {
   const [blockNote, setBlockNote] = useState('');
   const [blockLoading, setBlockLoading] = useState(false);
 
+  // Zmena hesla
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwStatus, setPwStatus] = useState('');
+
   useEffect(() => { init(); }, []);
 
   const init = async () => {
@@ -73,6 +80,22 @@ export default function MechanikPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/mechanik/login');
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (pwNew !== pwConfirm) { setPwStatus('Heslá sa nezhodujú'); return; }
+    if (pwNew.length < 6) { setPwStatus('Heslo musí mať aspoň 6 znakov'); return; }
+    setPwLoading(true);
+    setPwStatus('');
+    const { error } = await supabase.auth.updateUser({ password: pwNew });
+    if (error) {
+      setPwStatus('Chyba: ' + error.message);
+    } else {
+      setPwStatus('Heslo úspešne zmenené ✓');
+      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+    }
+    setPwLoading(false);
   };
 
   const createBlok = async (e) => {
@@ -171,6 +194,7 @@ export default function MechanikPage() {
           { key: 'completed', label: `✓ Dokončené (${completedJobs.length})` },
           { key: 'kalendar',  label: '📅 Môj Kalendár' },
           { key: 'volno',     label: '🏖️ Voľno' },
+          { key: 'heslo',     label: '🔑 Heslo' },
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             className={`flex-1 min-w-[130px] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === t.key ? 'bg-red-600 text-white shadow-lg' : 'text-zinc-300 hover:text-white'}`}>
@@ -448,6 +472,52 @@ export default function MechanikPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== TAB: ZMENA HESLA ===== */}
+      {activeTab === 'heslo' && (
+        <div className="max-w-md mx-auto">
+          <div className="bg-zinc-950 border border-zinc-800 p-8 rounded-[2.5rem] shadow-2xl">
+            <h2 className="text-xl font-black uppercase italic tracking-tighter text-white mb-2">Zmena <span className="text-red-600">hesla</span></h2>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-8">Nové heslo bude aktívne okamžite</p>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 block mb-1">Nové heslo</label>
+                <input
+                  type="password"
+                  value={pwNew}
+                  onChange={e => setPwNew(e.target.value)}
+                  placeholder="Minimálne 6 znakov"
+                  required
+                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 transition-all font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest ml-1 block mb-1">Potvrdiť nové heslo</label>
+                <input
+                  type="password"
+                  value={pwConfirm}
+                  onChange={e => setPwConfirm(e.target.value)}
+                  placeholder="Zopakujte heslo"
+                  required
+                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 transition-all font-mono"
+                />
+              </div>
+              {pwStatus && (
+                <p className={`text-[10px] font-black uppercase tracking-widest ${pwStatus.includes('✓') ? 'text-green-400' : 'text-red-400'}`}>
+                  {pwStatus}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={pwLoading}
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-5 rounded-2xl uppercase text-[10px] tracking-widest transition-all disabled:opacity-40 mt-4"
+              >
+                {pwLoading ? 'Meníme...' : 'Zmeniť heslo'}
+              </button>
+            </form>
           </div>
         </div>
       )}

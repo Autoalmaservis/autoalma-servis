@@ -29,7 +29,10 @@ export default function PridatAutoPage() {
     }
     setApiLoading(true);
     try {
-      const res = await fetch(`/api/vehicle-lookup?ecv=${formData.plate_number.toUpperCase().replace(/\s/g, '')}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/vehicle-lookup?ecv=${formData.plate_number.toUpperCase().replace(/\s/g, '')}`, {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
+      });
       const result = await res.json();
       
       // Upravené na tvoj reálny JSON ("vehicle")
@@ -65,9 +68,10 @@ export default function PridatAutoPage() {
     if (!file) return;
     setApiLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append('image', file);
-      const res = await fetch('/api/scan-tp', { method: 'POST', body: formData });
+      const res = await fetch('/api/scan-tp', { method: 'POST', body: formData, headers: { 'Authorization': `Bearer ${session?.access_token}` } });
       const json = await res.json();
       if (!res.ok || !json.data) throw new Error(json.error || 'Chyba AI');
       const carData = json.data;

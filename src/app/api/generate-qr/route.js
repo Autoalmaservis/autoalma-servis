@@ -1,6 +1,15 @@
 import { compress } from 'lzma1';
 import QRCode from 'qrcode';
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await sb.auth.getUser(token);
+  return !!user;
+}
 
 // CRC32 lookup table (IEEE 802.3 polynomial)
 const CRC32_TABLE = (() => {
@@ -93,6 +102,9 @@ function encodePayBySquare100(iban, amount, vs, note) {
 }
 
 export async function POST(req) {
+  if (!await isAuthenticated(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { iban, amount, variableSymbol, beneficiaryName, paymentNote } = await req.json();
 

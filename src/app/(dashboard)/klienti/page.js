@@ -17,6 +17,7 @@ export default function KlientiPage() {
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isCarModalOpen, setIsCarModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [historyModal, setHistoryModal] = useState(null);
   
   const [clientForm, setClientForm] = useState({ 
     customer_name: '', customer_phone: '', customer_email: '',
@@ -116,7 +117,12 @@ export default function KlientiPage() {
       ...(klientObj._customerId ? [`owner_id.eq.${klientObj._customerId}`] : []),
     ].join(',');
     const { data: ticketCars } = ticketOrParts ? await supabase.from('job_tickets').select('*, job_items(*)').or(ticketOrParts) : { data: [] };
-    const { data: webCars } = vehicleOrParts ? await supabase.from('vehicles').select('*').or(vehicleOrParts) : { data: [] };
+    let { data: webCars } = vehicleOrParts ? await supabase.from('vehicles').select('*').or(vehicleOrParts) : { data: [] };
+    if (!webCars?.length && klientObj.all_plates?.length) {
+      const plateParts = klientObj.all_plates.map(p => `license_plate.eq.${p}`).join(',');
+      const { data: plateCars } = plateParts ? await supabase.from('vehicles').select('*').or(plateParts) : { data: [] };
+      webCars = plateCars;
+    }
 
     let finalVehicles = [];
     if (webCars) {
@@ -140,7 +146,10 @@ export default function KlientiPage() {
     if (!carForm.plate_number) { alert("Zadajte ŠPZ!"); return; }
     setApiLoading(true);
     try {
-      const res = await fetch(`/api/vehicle-lookup?ecv=${carForm.plate_number.toUpperCase().replace(/\s/g, '')}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/vehicle-lookup?ecv=${carForm.plate_number.toUpperCase().replace(/\s/g, '')}`, {
+        headers: { 'Authorization': `Bearer ${session?.access_token}` },
+      });
       const result = await res.json();
       if (result && result.vehicle) {
         const v = result.vehicle;
@@ -166,9 +175,10 @@ export default function KlientiPage() {
     if (!file) return;
     setApiLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const formData = new FormData();
       formData.append('image', file);
-      const res = await fetch('/api/scan-tp', { method: 'POST', body: formData });
+      const res = await fetch('/api/scan-tp', { method: 'POST', body: formData, headers: { 'Authorization': `Bearer ${session?.access_token}` } });
       const json = await res.json();
       if (!res.ok || !json.data) throw new Error(json.error || 'Chyba AI');
       const carData = json.data;
@@ -217,42 +227,59 @@ export default function KlientiPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      let userId = clientForm.id;
-      if (!editMode && clientForm.password) {
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: clientForm.customer_email, password: clientForm.password,
-          options: { data: { full_name: clientForm.customer_name, role: 'zakaznik' } }
-        });
-        if (authError) throw authError;
-        userId = authData.user?.id;
-      }
-      const profilePayload = {
-        id: userId, full_name: clientForm.customer_name, company_name: clientForm.company_name,
-        phone: clientForm.customer_phone, email: clientForm.customer_email, address: clientForm.address,
-        city: clientForm.city, zip: clientForm.zip, ico: clientForm.ico, dic: clientForm.dic,
-        ic_dph: clientForm.ic_dph, role: 'zakaznik'
-      };
-      let res;
       if (editMode) {
-        const { id: _id, ...updatePayload } = profilePayload;
-        res = await supabase.from('user_profiles').update(updatePayload).eq('id', clientForm.id);
+        const updatePayload = {
+          full_name: clientForm.customer_name, company_name: clientForm.company_name,
+          phone: clientForm.customer_phone, email: clientForm.customer_email,
+          address: clientForm.address, city: clientForm.city, zip: clientForm.zip,
+          ico: clientForm.ico, dic: clientForm.dic, ic_dph: clientForm.ic_dph, role: 'zakaznik'
+        };
+        let res = await supabase.from('user_profiles').update(updatePayload).eq('id', clientForm.id);
         if (!res.error && res.count === 0) {
           res = await supabase.from('user_profiles').update(updatePayload).eq('email', clientForm.customer_email);
         }
-      } else { res = await supabase.from('user_profiles').insert([profilePayload]); }
-      if (res.error) throw res.error;
-
-      if (!editMode && clientForm.customer_email) {
-        fetchWithAuth('/api/send-welcome-email', {
+        if (res.error) throw res.error;
+        // Sync telefónu do všetkých zákaziek tohto klienta
+        if (clientForm.customer_phone && clientForm.id) {
+          supabase.from('job_tickets').update({ customer_phone: clientForm.customer_phone }).eq('customer_id', clientForm.id).then(() => {});
+        }
+      } else {
+        // Nový klient — použij admin API, ktoré nevysiela Supabase confirm email (obchádza rate limit)
+        const res = await fetchWithAuth('/api/admin/create-zakaznik', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            full_name: clientForm.customer_name,
             email: clientForm.customer_email,
-            name: clientForm.customer_name,
             password: clientForm.password,
-            createdByAdmin: true,
+            phone: clientForm.customer_phone,
+            clientType: clientForm.client_type,
+            company_name: clientForm.company_name,
+            ico: clientForm.ico,
+            dic: clientForm.dic,
+            ic_dph: clientForm.ic_dph,
+            address: clientForm.address,
+            city: clientForm.city,
+            zip: clientForm.zip,
           }),
-        }).catch(() => {});
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Nepodarilo sa vytvoriť klienta');
+        }
+
+        if (clientForm.customer_email) {
+          fetchWithAuth('/api/send-welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: clientForm.customer_email,
+              name: clientForm.customer_name,
+              password: clientForm.password,
+              createdByAdmin: true,
+            }),
+          }).catch(() => {});
+        }
       }
 
       setIsClientModalOpen(false);
@@ -367,10 +394,15 @@ export default function KlientiPage() {
                   <div key={v.id} className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-[3.5rem] relative shadow-xl">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                        <div>
-                          <div className="flex items-center gap-3 mb-6">
+                          <div className="flex items-center gap-3 mb-6 flex-wrap">
                             <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-2xl tracking-widest shadow-2xl uppercase">{v.plate_number}</span>
                             <button onClick={() => openEditCarModal(v)} className="bg-zinc-800 hover:bg-white border border-zinc-700 text-white hover:text-black p-2.5 rounded-xl transition-all text-xs font-bold">✏️</button>
                             <button onClick={() => handleDeleteCar(v)} className="bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-2.5 rounded-xl transition-all text-xs font-bold">🗑️</button>
+                            {v.full_history?.length > 0 && (
+                              <button onClick={() => setHistoryModal(v)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white px-3 py-2 rounded-xl transition-all text-[9px] font-black uppercase tracking-widest">
+                                📋 História ({v.full_history.length})
+                              </button>
+                            )}
                           </div>
                           <h3 className="text-3xl font-black uppercase italic mb-4">{v.car_brand_model}</h3>
                           <div className="space-y-2 bg-black/40 p-5 rounded-2xl border border-zinc-800 text-[11px] font-black uppercase tracking-widest text-zinc-400 italic">
@@ -447,6 +479,55 @@ export default function KlientiPage() {
                 <button type="submit" disabled={apiLoading} className="flex-[2] bg-red-600 text-white font-black py-6 rounded-3xl uppercase text-xs tracking-widest hover:bg-red-500 transition-all shadow-xl">Uložiť technické zmeny</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTÓRIA ZÁKAZIEK */}
+      {historyModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 overflow-hidden font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[3rem] w-full max-w-3xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-start mb-6 shrink-0">
+              <div>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter">História zákaziek</h2>
+                <p className="text-xs text-zinc-500 font-black uppercase mt-1 tracking-widest">
+                  {historyModal.plate_number} · {historyModal.car_brand_model}
+                </p>
+              </div>
+              <button onClick={() => setHistoryModal(null)} className="text-zinc-600 hover:text-white font-black text-xl leading-none ml-4 mt-1">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+              {historyModal.full_history?.length > 0 ? historyModal.full_history.map((h) => (
+                <div key={h.id} className="bg-black/50 border border-zinc-800 p-6 rounded-3xl">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{new Date(h.created_at).toLocaleDateString('sk-SK')}</p>
+                      <p className={`text-sm font-black uppercase italic mt-0.5 ${h.status === 'Dokončené' ? 'text-green-500' : h.status === 'Prebieha' ? 'text-amber-500' : 'text-zinc-300'}`}>{h.status}</p>
+                      {h.complaints && (
+                        <p className="text-[10px] text-zinc-400 mt-1.5 font-normal normal-case not-italic leading-relaxed max-w-sm">{h.complaints}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                      <p className="text-lg font-black text-white">{h.total_price?.toFixed(2)} €</p>
+                      <Link href={`/zakazky/${h.id}`} className="text-[9px] font-black uppercase text-red-600 hover:text-red-400 transition-colors tracking-widest">→ Otvoriť zákazku</Link>
+                    </div>
+                  </div>
+                  {h.job_items?.length > 0 && (
+                    <div className="border-t border-zinc-800 pt-3 space-y-1.5">
+                      {h.job_items.map((item, i) => (
+                        <div key={i} className="flex justify-between text-[10px] font-bold text-zinc-400 uppercase gap-4">
+                          <span className={`${item.type === 'Práca' ? 'text-blue-400' : item.type === 'Úkon' ? 'text-purple-400' : 'text-orange-400'}`}>{item.type}</span>
+                          <span className="flex-1 text-zinc-300 normal-case not-italic font-black break-words">{item.name}</span>
+                          <span className="shrink-0 text-white font-mono">{item.quantity} {item.unit} × {parseFloat(item.unit_price).toFixed(2)}€</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )) : (
+                <p className="text-center text-zinc-600 uppercase font-black text-xs py-10 tracking-widest">Žiadna história návštev</p>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -10,7 +10,7 @@ export default function ImportExportPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', msg: '' });
 
-  // Import CSV state
+  // Stav importu CSV
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importStep, setImportStep] = useState(1);
   const [importSystem, setImportSystem] = useState(null);
@@ -30,6 +30,7 @@ export default function ImportExportPage() {
   const [deletingBatch, setDeletingBatch] = useState(null);
   const klientyFileRef = useRef(null);
   const vozidlaFileRef = useRef(null);
+  const kontaktyFileRef = useRef(null);
 
   // --- EXPORT TABUĽKY (DataCard) ---
   const exportTable = async (tableName, fileName) => {
@@ -209,15 +210,15 @@ export default function ImportExportPage() {
       reader.readAsArrayBuffer(file);
     });
 
-    const [klientyRows, vozidlaRows, [{ data: customersData }, { data: webProfiles }, { data: vehiclesData }]] = await Promise.all([
+    const [klientyRows, vozidlaRows, [{ data: customersData }, { data: vehiclesData }]] = await Promise.all([
       parseFile(klientyFile),
       vozidlaFile ? parseFile(vozidlaFile) : Promise.resolve([]),
       Promise.all([
         supabase.from('customers').select('full_name, company_name, phone, email'),
-        supabase.from('user_profiles').select('full_name, company_name, email, phone').or('role.eq.zakaznik,role.eq.klient'),
         supabase.from('vehicles').select('license_plate'),
       ]),
     ]);
+    const webProfiles = [];
 
     if (!klientyRows.length) { alert('Súbor Klienty je prázdny alebo sa nepodarilo načítať.'); return; }
     const missingCols = ['ID', 'MENO1', 'ULICA', 'MESTO'].filter(c => !(c in klientyRows[0]));
@@ -275,7 +276,8 @@ export default function ImportExportPage() {
     (vozidlaRows || []).forEach(row => {
       const owner = clientMap[row.ID_ODBER];
       if (!owner) return;
-      const spz = row.SPZ?.trim().toUpperCase().replace(/\s/g, '');
+      const spzRaw = row.SPZ_P?.trim() || row.SPZ?.trim() || '';
+      const spz = spzRaw.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (!spz) return;
       const casOprava = parseAzsoftDate(row.CAS_OPRAVA);
       if (casOprava && (!owner.lastActivity || casOprava > owner.lastActivity)) owner.lastActivity = casOprava;
@@ -320,7 +322,10 @@ export default function ImportExportPage() {
     for (const v of item.vehicles) {
       let brand_model = '', vin_number = '';
       try {
-        const res = await fetch(`/api/vehicle-lookup?ecv=${encodeURIComponent(v.license_plate)}`);
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/vehicle-lookup?ecv=${encodeURIComponent(v.license_plate)}`, {
+          headers: { 'Authorization': `Bearer ${session?.access_token}` },
+        });
         const json = await res.json();
         if (json?.vehicle) {
           brand_model = [json.vehicle.znacka, json.vehicle.obch_nazov].filter(Boolean).join(' ');
@@ -331,6 +336,7 @@ export default function ImportExportPage() {
         license_plate: v.license_plate,
         brand_model: brand_model || null,
         vin_number: vin_number || null,
+        owner_id: customerData.id,
         owner_name: item.displayName,
         owner_email: item.client.email || null,
         owner_phone: item.client.phone || null,
@@ -383,11 +389,60 @@ export default function ImportExportPage() {
     setImportStep(4);
   };
 
+  const [cleanupDate, setCleanupDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
+
+  const deleteByDate = async () => {
+    if (!cleanupDate) return;
+    const confirmed = window.confirm(`Naozaj vymazať VŠETKÝCH zákazníkov a ich vozidlá vytvorené od ${cleanupDate}?\n\nTáto akcia je nevratná.`);
+    if (!confirmed) return;
+    setCleanupLoading(true);
+    setCleanupResult(null);
+    try {
+      const fromTs = new Date(cleanupDate).toISOString();
+      // Načítaj zákazníkov vytvorených od dátumu
+      const { data: custsToDelete, error: fetchErr } = await supabase
+        .from('customers')
+        .select('id, email, full_name')
+        .gte('created_at', fromTs);
+      if (fetchErr) throw fetchErr;
+      const ids = (custsToDelete || []).map(c => c.id);
+      let deletedVCount = 0;
+      if (ids.length > 0) {
+        // Zmaž vozidlá cez owner_id (FK)
+        const { data: dV1 } = await supabase.from('vehicles').delete().in('owner_id', ids).select('id');
+        deletedVCount += dV1?.length ?? 0;
+        // Zmaž aj osirotené vozidlá cez email/meno (import bez owner_id)
+        const emails = (custsToDelete || []).map(c => c.email).filter(Boolean);
+        const names = (custsToDelete || []).map(c => c.full_name).filter(Boolean);
+        if (emails.length) {
+          const { data: dV2 } = await supabase.from('vehicles').delete().in('owner_email', emails).select('id');
+          deletedVCount += dV2?.length ?? 0;
+        }
+        if (names.length) {
+          const { data: dV3 } = await supabase.from('vehicles').delete().in('owner_name', names).select('id');
+          deletedVCount += dV3?.length ?? 0;
+        }
+        const { error: delErr } = await supabase.from('customers').delete().in('id', ids);
+        if (delErr) throw delErr;
+      }
+      setCleanupResult({ deleted: ids.length, vehicles: deletedVCount });
+    } catch (err) {
+      setCleanupResult({ error: err.message });
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
   const deleteImportBatch = async (batch) => {
     setDeletingBatch(batch.id);
     try {
       for (const cid of batch.customerIds) {
-        const { data: cust } = await supabase.from('customers').select('full_name, phone, email').eq('id', cid).single();
+        // Zmaž vozidlá cez owner_id (FK) — najspoľahlivejšie
+        await supabase.from('vehicles').delete().eq('owner_id', cid);
+        // Fallback: zmaž osirotené vozidlá cez email/meno
+        const { data: cust } = await supabase.from('customers').select('full_name, email').eq('id', cid).single();
         if (cust) {
           if (cust.email) await supabase.from('vehicles').delete().eq('owner_email', cust.email);
           if (cust.full_name) await supabase.from('vehicles').delete().eq('owner_name', cust.full_name);
@@ -438,13 +493,14 @@ export default function ImportExportPage() {
         ic_dph: retryForm.ic_dph || null,
         client_type: isFirma ? 'Firma' : 'Osoba',
       };
-      const { error } = await supabase.from('customers').insert([customerPayload]);
+      const { data: newCustomer, error } = await supabase.from('customers').insert([customerPayload]).select('id').single();
       if (error) throw error;
 
       const ownerName = retryForm.company_name || retryForm.full_name || retryForm._displayName;
       for (const v of (retryForm._vehicles || [])) {
         await supabase.from('vehicles').insert([{
           license_plate: v.license_plate,
+          owner_id: newCustomer.id,
           owner_name: ownerName,
           owner_email: retryForm.email || null,
           delete_requested: false,
@@ -468,16 +524,134 @@ export default function ImportExportPage() {
     }
   };
 
+  const downloadKontaktyTemplate = () => {
+    const template = [
+      { Meno: 'Ján Novák', Firma: '', Telefon: '0900 000 000', Email: 'jan.novak@email.sk', Adresa: 'Hlavná 1', Mesto: 'Bratislava', PSC: '811 01', ICO: '', DIC: '', IC_DPH: '', Typ: 'Osoba', SPZ: 'BA123AB', Znacka_model: 'Škoda Octavia 2.0 TDI', VIN: '', Rok: 2018, Palivo: 'Diesel', KM: 87000 },
+      { Meno: 'Ján Novák', Firma: '', Telefon: '0900 000 000', Email: 'jan.novak@email.sk', Adresa: 'Hlavná 1', Mesto: 'Bratislava', PSC: '811 01', ICO: '', DIC: '', IC_DPH: '', Typ: 'Osoba', SPZ: 'BA456CD', Znacka_model: 'VW Golf 1.6 TDI', VIN: '', Rok: 2020, Palivo: 'Diesel', KM: 45000 },
+      { Meno: '', Firma: 'ABC servis s.r.o.', Telefon: '0911 111 111', Email: 'info@abcservis.sk', Adresa: 'Priemyselná 5', Mesto: 'Košice', PSC: '040 01', ICO: '12345678', DIC: '2012345678', IC_DPH: 'SK2012345678', Typ: 'Firma', SPZ: 'KE789EF', Znacka_model: 'BMW 320d', VIN: 'WBA12345678901234', Rok: 2022, Palivo: 'Diesel', KM: 25000 },
+      { Meno: 'Peter Horváth', Firma: '', Telefon: '0902 222 333', Email: 'peter@email.sk', Adresa: '', Mesto: 'Žilina', PSC: '010 01', ICO: '', DIC: '', IC_DPH: '', Typ: 'Osoba', SPZ: '', Znacka_model: '', VIN: '', Rok: '', Palivo: '', KM: '' },
+    ];
+    const ws = XLSX.utils.json_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Kontakty');
+    XLSX.writeFile(wb, 'Vzor_import_kontaktov.xlsx');
+  };
+
+  const importKontakty = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = null;
+    setLoading(true);
+    setStatus({ type: '', msg: '' });
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      if (!data.length) throw new Error('Súbor je prázdny');
+
+      // Načítaj existujúce záznamy z DB pre deduplikáciu
+      const [{ data: existingCustomers }, { data: existingVehicles }] = await Promise.all([
+        supabase.from('customers').select('email, phone, full_name, company_name'),
+        supabase.from('vehicles').select('license_plate'),
+      ]);
+      const existingEmails = new Set((existingCustomers || []).map(c => c.email).filter(Boolean).map(e => e.toLowerCase()));
+      const existingPhones = new Set((existingCustomers || []).map(c => c.phone).filter(Boolean).map(p => p.replace(/\s/g, '')));
+      const existingNames = new Set((existingCustomers || []).flatMap(c => [c.full_name, c.company_name].filter(Boolean).map(n => n.toLowerCase())));
+      const existingPlates = new Set((existingVehicles || []).map(v => v.license_plate).filter(Boolean));
+
+      const custMap = {};
+      data.forEach(r => {
+        const email = (r.Email || r.email || '').toString().toLowerCase().trim();
+        const phone = (r.Telefon || r.telefon || '').toString().replace(/\s/g, '');
+        const name  = (r.Meno || r.meno || r.Firma || r.firma || '').toString().trim();
+        const key   = email || phone || name || `_${Math.random()}`;
+        if (!custMap[key]) {
+          const isDuplicate = (email && existingEmails.has(email)) || (phone && existingPhones.has(phone)) || (name && existingNames.has(name.toLowerCase()));
+          custMap[key] = {
+            payload: {
+              full_name: r.Meno || r.meno || null,
+              company_name: r.Firma || r.firma || null,
+              phone: phone || null,
+              email: email || null,
+              address: r.Adresa || r.adresa || null,
+              city: r.Mesto || r.mesto || null,
+              zip: r.PSC ? String(r.PSC) : null,
+              ico: r.ICO ? String(r.ICO) : null,
+              dic: r.DIC ? String(r.DIC) : null,
+              ic_dph: r.IC_DPH ? String(r.IC_DPH) : null,
+              client_type: (r.Typ || r.typ || '').toString().toLowerCase().includes('firm') ? 'Firma' : 'Osoba',
+            },
+            vehicles: [],
+            displayName: name || email,
+            email, phone,
+            isDuplicate,
+          };
+        }
+        const spz = (r.SPZ || r.spz || '').toString().trim().toUpperCase().replace(/\s/g, '');
+        if (spz) {
+          custMap[key].vehicles.push({
+            license_plate: spz,
+            brand_model: r.Znacka_model || r.znacka_model || null,
+            vin_number: r.VIN || r.vin || null,
+            year_produced: r.Rok ? parseInt(r.Rok) || null : null,
+            fuel_type: r.Palivo || r.palivo || null,
+            mileage: r.KM ? parseInt(r.KM) || null : null,
+            _isDupPlate: existingPlates.has(spz),
+          });
+        }
+      });
+
+      const entries = Object.values(custMap).filter(c => c.payload.full_name || c.payload.company_name || c.payload.phone || c.payload.email);
+      if (!entries.length) throw new Error('Žiadne platné záznamy — skontrolujte hlavičky stĺpcov');
+
+      let custCount = 0, vehCount = 0, skipCust = 0, skipVeh = 0;
+      for (const { payload, vehicles, displayName, email, isDuplicate } of entries) {
+        if (isDuplicate) { skipCust++; continue; }
+        const { data: newCust, error: cErr } = await supabase.from('customers').insert([payload]).select('id').single();
+        if (cErr) throw new Error('Klienti: ' + cErr.message);
+        custCount++;
+        for (const v of vehicles) {
+          if (v._isDupPlate) { skipVeh++; continue; }
+          const { _isDupPlate, ...vData } = v;
+          await supabase.from('vehicles').insert([{
+            ...vData,
+            owner_id: newCust.id,
+            owner_name: displayName || null,
+            owner_email: email || null,
+          }]);
+          vehCount++;
+          existingPlates.add(v.license_plate);
+        }
+      }
+      const skipMsg = (skipCust > 0 || skipVeh > 0) ? ` (preskočených: ${skipCust} klientov, ${skipVeh} vozidiel — duplikáty)` : '';
+      setStatus({ type: 'success', msg: `Importovaných ${custCount} kontaktov${vehCount > 0 ? ` a ${vehCount} vozidiel` : ''}${skipMsg}.` });
+    } catch (err) {
+      setStatus({ type: 'error', msg: 'Chyba pri importe: ' + err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-8 md:p-12 min-h-screen bg-black text-white font-bold">
       <div className="max-w-5xl mx-auto">
 
-        <header className="mb-12 flex justify-between items-center">
+        <header className="mb-12 flex justify-between items-center gap-4">
           <div>
             <h1 className="text-4xl font-black uppercase italic tracking-tighter text-white">Dátové <span className="text-red-600">Centrum</span></h1>
             <p className="text-zinc-500 text-xs font-black uppercase tracking-widest mt-2 italic">Hromadný Import / Export systému AutoAlma</p>
           </div>
-          <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black">← Späť</button>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              disabled={importHistory.length === 0}
+              className="bg-zinc-900 border border-zinc-700 hover:border-zinc-500 disabled:opacity-30 px-5 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black flex items-center gap-2"
+            >
+              📋 História importov
+              {importHistory.length > 0 && <span className="bg-zinc-700 text-zinc-300 text-[9px] px-1.5 py-0.5 rounded-lg font-black">{importHistory.length}</span>}
+            </button>
+            <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-[10px] uppercase font-black">← Späť</button>
+          </div>
         </header>
 
         {status.msg && (
@@ -514,58 +688,146 @@ export default function ImportExportPage() {
           </div>
         </div>
 
-        {/* SEKCIA 2: Partneri — Pokročilý Import / Export */}
-        <div className="mt-10">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 mb-6">Partneri — Pokročilý Import / Export</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={exportPartneri}
-              disabled={loading}
-              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 py-6 px-5 rounded-[2rem] text-left transition-all group"
-            >
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 group-hover:text-zinc-300">Export</p>
-              <p className="text-sm font-black uppercase italic text-white">Partneri (.xlsx)</p>
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">Klienti + vozidlá</p>
-            </button>
-            <button
-              onClick={exportMigracia}
-              disabled={loading}
-              className="bg-zinc-900 border border-amber-800/40 hover:border-amber-600/60 py-6 px-5 rounded-[2rem] text-left transition-all group"
-            >
-              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2 group-hover:text-amber-500">Export</p>
-              <p className="text-sm font-black uppercase italic text-amber-400">Migrácia</p>
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">6 tabuliek (záloha)</p>
-            </button>
-            <button
-              onClick={openImport}
-              disabled={loading}
-              className="bg-zinc-900 border border-red-800/40 hover:border-red-600/60 py-6 px-5 rounded-[2rem] text-left transition-all group"
-            >
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-700 mb-2 group-hover:text-red-500">Import</p>
-              <p className="text-sm font-black uppercase italic text-white">CSV (AZSoft)</p>
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">Klienti + vozidlá</p>
-            </button>
+        {/* SEKCIA 2: AutoAlma Export / záloha */}
+        <div className="mt-10 bg-zinc-900/40 border border-zinc-800 rounded-[2.5rem] p-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-600 mb-1">AutoAlma</p>
+              <h2 className="text-lg font-black uppercase italic tracking-tighter text-white">Export zálohy systému</h2>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wide mt-1">Kompletná záloha všetkých dát (6 tabuliek)</p>
+            </div>
             <button
               onClick={() => setIsHistoryOpen(true)}
               disabled={importHistory.length === 0}
-              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-600 disabled:opacity-30 py-6 px-5 rounded-[2rem] text-left transition-all group"
+              className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 rounded-2xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all"
             >
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-2 group-hover:text-zinc-300">História</p>
-              <p className="text-sm font-black uppercase italic text-white">Importy</p>
-              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">{importHistory.length} záznamov</p>
+              História ({importHistory.length})
             </button>
+          </div>
+          <button
+            onClick={exportMigracia}
+            disabled={loading}
+            className="bg-black/40 border border-amber-800/40 hover:border-amber-600/60 py-6 px-6 rounded-[1.5rem] text-left transition-all group w-full md:w-auto"
+          >
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2 group-hover:text-amber-500">Export</p>
+            <p className="text-base font-black uppercase italic text-amber-400">Záloha systému (.xlsx)</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">Klienti · Vozidlá · Zákazky · Položky · Úkony · Faktúry</p>
+          </button>
+        </div>
+
+        {/* SEKCIA 3: Import z AZSoft */}
+        <div className="mt-6 bg-zinc-900/40 border border-zinc-800 rounded-[2.5rem] p-8">
+          <div className="mb-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600 mb-1">Import z iného systému</p>
+            <h2 className="text-lg font-black uppercase italic tracking-tighter text-white">AZSoft</h2>
+            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wide mt-1">Import klientov a vozidiel z AZSoft autoservisného systému</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <button
+              onClick={openImport}
+              disabled={loading}
+              className="bg-black/40 border border-red-800/40 hover:border-red-600/60 py-6 px-6 rounded-[1.5rem] text-left transition-all group"
+            >
+              <p className="text-[10px] font-black uppercase tracking-widest text-red-700 mb-2 group-hover:text-red-500">Import</p>
+              <p className="text-base font-black uppercase italic text-white">CSV (AZSoft)</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">Odberatelia.csv + Vozidla.csv</p>
+            </button>
+            <div className="text-[10px] text-zinc-600 font-bold space-y-1.5">
+              <p className="text-zinc-400 font-black uppercase tracking-widest text-[9px] mb-2">Postup exportu z AZSoft:</p>
+              <p>1. Číselníky → Odberatelia → Export → CSV (oddeľovač <span className="text-white font-mono">;</span>)</p>
+              <p>2. Zákazky → Vozidlá → Export → CSV (oddeľovač <span className="text-white font-mono">;</span>)</p>
+              <p>3. Nahraj oba súbory naraz v importnom dialógu</p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-12 bg-zinc-900/30 border border-zinc-800 p-8 rounded-[3rem] italic">
-          <h3 className="text-red-600 font-black uppercase text-[10px] tracking-widest mb-4">⚠️ Dôležité inštrukcie</h3>
-          <ul className="text-[11px] text-zinc-500 space-y-2 uppercase font-black leading-relaxed">
-            <li>• Pri systémovom importe musí byť v Exceli prvý riadok s presnými názvami stĺpcov ako v DB.</li>
-            <li>• Import klientov prebieha podľa emailu (ak email existuje, údaje sa aktualizujú).</li>
-            <li>• Import vozidiel prebieha podľa ŠPZ.</li>
-            <li>• CSV import (AZSoft) — formát Klienty.csv + Vozidla.csv s oddeľovačom bodkočiarka (;).</li>
-            <li>• Pred hromadným importom odporúčame spraviť Export migrácia (zálohu) aktuálneho stavu.</li>
-          </ul>
+        {/* SEKCIA 4: Import kontaktov z tabuľky */}
+        <div className="mt-6 bg-zinc-900/40 border border-zinc-800 rounded-[2.5rem] p-8">
+          <div className="mb-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 mb-1">Hromadný import</p>
+            <h2 className="text-lg font-black uppercase italic tracking-tighter text-white">Import kontaktov z tabuľky</h2>
+            <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wide mt-1">Nahraj Excel súbor s kontaktmi — stĺpce musia mať presné názvy</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div className="space-y-3">
+              <label className={`flex items-center gap-4 bg-black/40 border border-blue-800/40 hover:border-blue-600/60 py-5 px-6 rounded-[1.5rem] transition-all group cursor-pointer ${loading ? 'opacity-40 pointer-events-none' : ''}`}>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-1 group-hover:text-blue-500">Import</p>
+                  <p className="text-base font-black uppercase italic text-white">Kontakty (.xlsx / .csv)</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mt-1">Excel alebo CSV s kontaktmi</p>
+                </div>
+                <input ref={kontaktyFileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={importKontakty} disabled={loading} />
+              </label>
+              <button
+                onClick={downloadKontaktyTemplate}
+                className="w-full py-3 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 rounded-2xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all"
+              >
+                ⬇ Stiahnuť vzor tabuľky (.xlsx)
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Príklad štruktúry súboru:</p>
+              <p className="text-[9px] text-zinc-600 font-bold mb-3">Zákazník s viac vozidlami = viac riadkov s rovnakým emailom/telefónom</p>
+              <table className="text-[8px] font-mono border-collapse">
+                <thead>
+                  <tr className="bg-zinc-800">
+                    {['Meno','Firma','Telefon','Email','Mesto','Typ','SPZ','Znacka_model','VIN','Rok','Palivo','KM'].map(h => (
+                      <th key={h} className={`px-2 py-1.5 text-left font-black border border-zinc-700 whitespace-nowrap ${['SPZ','Znacka_model','VIN','Rok','Palivo','KM'].includes(h) ? 'text-amber-500' : 'text-zinc-300'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-zinc-900/50">
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">Ján Novák</td>
+                    <td className="px-2 py-1 text-zinc-600 border border-zinc-800"></td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">0900000000</td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">jan@email.sk</td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">Bratislava</td>
+                    <td className="px-2 py-1 text-blue-400 border border-zinc-800">Osoba</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">BA123AB</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">Škoda Octavia</td>
+                    <td className="px-2 py-1 text-zinc-600 border border-zinc-800"></td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">2018</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">Diesel</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">87000</td>
+                  </tr>
+                  <tr className="bg-zinc-900/30">
+                    <td className="px-2 py-1 text-zinc-400 border border-zinc-800">Ján Novák</td>
+                    <td className="px-2 py-1 text-zinc-600 border border-zinc-800"></td>
+                    <td className="px-2 py-1 text-zinc-400 border border-zinc-800">0900000000</td>
+                    <td className="px-2 py-1 text-zinc-400 border border-zinc-800">jan@email.sk</td>
+                    <td className="px-2 py-1 text-zinc-400 border border-zinc-800">Bratislava</td>
+                    <td className="px-2 py-1 text-zinc-600 border border-zinc-800">Osoba</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">BA456CD</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">VW Golf</td>
+                    <td className="px-2 py-1 text-zinc-600 border border-zinc-800"></td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">2020</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">Diesel</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">45000</td>
+                  </tr>
+                  <tr className="bg-zinc-900/50">
+                    <td className="px-2 py-1 text-zinc-600 border border-zinc-800"></td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">ABC s.r.o.</td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">0911111111</td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">info@abc.sk</td>
+                    <td className="px-2 py-1 text-zinc-300 border border-zinc-800">Košice</td>
+                    <td className="px-2 py-1 text-blue-400 border border-zinc-800">Firma</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">KE789EF</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">BMW 320d</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">WBA123...</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">2022</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">Diesel</td>
+                    <td className="px-2 py-1 text-amber-300 border border-zinc-800">25000</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="flex gap-4 mt-3 text-[9px] font-bold">
+                <span className="text-zinc-300">⬜ Kontaktné údaje</span>
+                <span className="text-amber-400">🟨 Vozidlo (nepovinné)</span>
+                <span className="text-zinc-500 italic">Prázdna SPZ = kontakt bez vozidla</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -778,6 +1040,40 @@ export default function ImportExportPage() {
           </div>
         </div>
       )}
+
+      {/* CLEANUP PODĽA DÁTUMU */}
+      <div className="bg-zinc-900/50 border border-red-900/40 p-6 rounded-[2rem] mt-4">
+        <h3 className="text-sm font-black uppercase italic tracking-tighter text-red-500 mb-1">Vymazať importované záznamy</h3>
+        <p className="text-[9px] text-zinc-600 uppercase font-black tracking-widest mb-4">Zmaže všetkých zákazníkov a ich vozidlá vytvorené od zadaného dátumu</p>
+        <div className="flex gap-3 items-center flex-wrap">
+          <input
+            type="date"
+            value={cleanupDate}
+            onChange={e => setCleanupDate(e.target.value)}
+            className="bg-black border border-zinc-700 text-white text-xs font-black px-4 py-3 rounded-xl focus:outline-none focus:border-red-600"
+          />
+          <button
+            onClick={deleteByDate}
+            disabled={cleanupLoading}
+            className="bg-red-600/10 border border-red-600/40 text-red-500 font-black px-5 py-3 rounded-xl text-[10px] uppercase hover:bg-red-600/20 transition-all disabled:opacity-40"
+          >
+            {cleanupLoading ? 'Mažem...' : 'Vymazať od tohto dátumu'}
+          </button>
+          {cleanupResult && !cleanupResult.error && cleanupResult.deleted > 0 && (
+            <span className="text-green-400 text-[10px] font-black uppercase tracking-widest">
+              ✓ Vymazaných {cleanupResult.deleted} zákazníkov, {cleanupResult.vehicles} vozidiel
+            </span>
+          )}
+          {cleanupResult && !cleanupResult.error && cleanupResult.deleted === 0 && (
+            <span className="text-yellow-400 text-[10px] font-black uppercase tracking-widest">
+              ⚠ Nič sa nezmazalo — chýbajú práva alebo záznamy neexistujú
+            </span>
+          )}
+          {cleanupResult?.error && (
+            <span className="text-red-400 text-[10px] font-black uppercase tracking-widest">Chyba: {cleanupResult.error}</span>
+          )}
+        </div>
+      </div>
 
       {/* HISTÓRIA IMPORTOV */}
       {isHistoryOpen && (
