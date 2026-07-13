@@ -1226,47 +1226,49 @@ export default function DatabazaPage() {
             </form>
 
             {/* HISTÓRIA SPOTREBY */}
-            {(() => {
-              const spotrebaHistory = importHistory.filter(b => b.batch_type === 'spotreba');
-              if (!spotrebaHistory.length) return null;
-              return (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between pt-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-purple-500">Vydané do spotreby</p>
-                    <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">{spotrebaHistory.length} záznamov</span>
-                  </div>
-                  {spotrebaHistory.map(batch => (
-                    <div key={batch.id} className="bg-zinc-950 border border-purple-500/20 rounded-[2rem] p-5">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-purple-400">
-                              {new Date(batch.import_date || batch.created_at).toLocaleDateString('sk-SK')}
-                            </span>
-                            {batch.doc_number && (
-                              <span className="text-sm font-black uppercase italic text-white">{batch.doc_number}</span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {(batch.items_json || []).map((item, idx) => (
-                              <span key={idx} className="text-[9px] font-black uppercase bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg text-purple-300">
-                                {item.name} <span className="text-purple-500">×{item.quantity}</span>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => revertImport(batch)}
-                          disabled={revertingId === batch.id}
-                          className="shrink-0 bg-red-600/10 hover:bg-red-600 border border-red-600/30 hover:border-red-600 text-red-500 hover:text-white font-black px-5 py-3 rounded-2xl uppercase text-[9px] tracking-widest transition-all disabled:opacity-50">
-                          {revertingId === batch.id ? 'Vraciam...' : '↩ Zrušiť'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-purple-500">História vydanej spotreby</p>
+                <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">
+                  {importHistory.filter(b => b.batch_type === 'spotreba').length} záznamov
+                </span>
+              </div>
+              {importHistory.filter(b => b.batch_type === 'spotreba').length === 0 ? (
+                <div className="py-10 text-center border-2 border-dashed border-zinc-900 rounded-[2rem] text-zinc-600 font-black uppercase text-xs tracking-widest italic">
+                  Zatiaľ žiadna spotreba
                 </div>
-              );
-            })()}
+              ) : (
+                importHistory.filter(b => b.batch_type === 'spotreba').map(batch => (
+                  <div key={batch.id} className="bg-zinc-950 border border-purple-500/20 rounded-[2rem] p-5">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-purple-400">
+                            {new Date(batch.import_date || batch.created_at).toLocaleDateString('sk-SK')}
+                          </span>
+                          {batch.doc_number && (
+                            <span className="text-sm font-black uppercase italic text-white">{batch.doc_number}</span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {(batch.items_json || []).map((item, idx) => (
+                            <span key={idx} className="text-[9px] font-black uppercase bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg text-purple-300">
+                              {item.name} <span className="text-purple-500">×{item.quantity}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => revertImport(batch)}
+                        disabled={revertingId === batch.id}
+                        className="shrink-0 bg-red-600/10 hover:bg-red-600 border border-red-600/30 hover:border-red-600 text-red-500 hover:text-white font-black px-5 py-3 rounded-2xl uppercase text-[9px] tracking-widest transition-all disabled:opacity-50">
+                        {revertingId === batch.id ? 'Vraciam...' : '↩ Zrušiť'}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
             </div>
           )}
         </div>
