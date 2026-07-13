@@ -129,13 +129,14 @@ export default function StatistikyPage() {
       });
     }
 
-    // Materiál a práca zo zákaziek
-    let materialRevenue = 0, laborRevenue = 0;
+    // Materiál, práca a úkony zo zákaziek
+    let materialRevenue = 0, laborRevenue = 0, ukonRevenue = 0;
     (jobs || []).forEach(job => {
       (job.job_items || []).forEach(item => {
         const val = (item.quantity || 0) * (item.unit_price || 0);
         if (item.type === 'Materiál') materialRevenue += val;
         else if (item.type === 'Práca') laborRevenue += val;
+        else if (item.type === 'Úkon') ukonRevenue += val;
       });
     });
 
@@ -282,7 +283,7 @@ export default function StatistikyPage() {
       jobCount: (jobs || []).length,
       totalHours, mechanicStats, maxHours,
       avgInvoice: officialInv.length ? invoiceRevenue / officialInv.length : 0,
-      tasksTotal, tasksCompleted,
+      tasksTotal, tasksCompleted, ukonRevenue,
     });
 
     // Trend — posledných 6 mesiacov
@@ -436,8 +437,8 @@ export default function StatistikyPage() {
               value={selMech ? fmtH(selMechData?.hours || 0) : fmtH(stats.totalHours)}
               sub={selMech ? `${selMechData?.jobCount || 0} zákaziek` : `${stats.mechanicStats.length} mechanikov`}
             />
-            <KpiCard icon="✅" color="green" label="Úkony" value={stats.tasksTotal.toString()}
-              sub={stats.tasksTotal > 0 ? `${stats.tasksCompleted} splnených (${Math.round(stats.tasksCompleted / stats.tasksTotal * 100)}%)` : 'žiadne úkony'} />
+            <KpiCard icon="✅" color="green" label="Úkony" value={fmt(stats.ukonRevenue)}
+              sub={stats.tasksTotal > 0 ? `${stats.tasksTotal} úkonov (${stats.tasksCompleted} splnených)` : 'žiadne úkony'} />
           </div>
 
           {/* DETAIL MECHANIKA */}
