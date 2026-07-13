@@ -108,7 +108,7 @@ export default function StatistikyPage() {
       { data: payouts },
     ] = await Promise.all([
       supabase.from('invoices').select('total_amount, is_official, created_at').gte('created_at', from).lte('created_at', to),
-      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, status, job_items(quantity, unit_price, type, worker_id, mechanic_hours, mechanic_splits), job_tasks(id, is_completed)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
+      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, status, job_items(quantity, unit_price, type, worker_id, mechanic_hours, mechanic_splits)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
       supabase.from('kasa_entries').select('employee_id, amount').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate),
     ]);
 
@@ -118,14 +118,16 @@ export default function StatistikyPage() {
     const invoiceRevenue = officialInv.reduce((s, i) => s + (i.total_amount || 0), 0);
     const draftRevenue   = draftInv.reduce((s, i) => s + (i.total_amount || 0), 0);
 
-    // Úkony
+    // Úkony — separátny query podľa job_id (bezpečnejšie ako nested select)
+    const jobIds = (jobs || []).map(j => j.id);
     let tasksTotal = 0, tasksCompleted = 0;
-    (jobs || []).forEach(job => {
-      (job.job_tasks || []).forEach(task => {
+    if (jobIds.length > 0) {
+      const { data: tasks } = await supabase.from('job_tasks').select('id, is_completed').in('job_id', jobIds);
+      (tasks || []).forEach(task => {
         tasksTotal++;
         if (task.is_completed) tasksCompleted++;
       });
-    });
+    }
 
     // Materiál a práca zo zákaziek
     let materialRevenue = 0, laborRevenue = 0;
