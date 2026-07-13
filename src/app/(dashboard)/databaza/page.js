@@ -248,6 +248,11 @@ export default function DatabazaPage() {
     item: { id: w.id, name: w.name, qty: '', new_purchase_price: '', note: '', current_quantity: w.quantity }
   });
 
+  const openSkladSpotreba = (w) => setSkladModal({
+    mode: 'spotreba_item',
+    item: { id: w.id, name: w.name, unit: w.unit, purchase_price: w.purchase_price, qty: '', note: '', current_quantity: w.quantity }
+  });
+
   const saveSkladItem = async (e) => {
     e.preventDefault();
     const item = skladModal.item;
@@ -287,6 +292,29 @@ export default function DatabazaPage() {
     await supabase.from('warehouse_items').update(updatePayload).eq('id', item.id);
     setSkladModal(null);
     fetchWarehouse();
+  };
+
+  const doSkladSpotreba = async (e) => {
+    e.preventDefault();
+    const { item } = skladModal;
+    const qty = parseFloat(item.qty) || 0;
+    if (qty <= 0) return;
+    const note = ['Spotreba', item.note.trim() || null].filter(Boolean).join(': ');
+    await supabase.from('warehouse_movements').insert([{ item_id: item.id, movement_type: 'out', quantity: qty, note }]);
+    const newQty = Math.max(0, parseFloat(item.current_quantity) - qty);
+    await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', item.id);
+    const totalWithoutVat = qty * (parseFloat(item.purchase_price) || 0);
+    await supabase.from('import_batches').insert([{
+      doc_number: item.note.trim() || null,
+      supplier: null,
+      import_date: new Date().toISOString().slice(0, 10),
+      total_without_vat: totalWithoutVat,
+      total_with_vat: totalWithoutVat * 1.23,
+      items_json: [{ item_id: item.id, name: item.name, part_number: null, quantity: qty, purchase_price: parseFloat(item.purchase_price) || 0, sale_price: 0 }],
+      batch_type: 'spotreba',
+    }]);
+    setSkladModal(null);
+    await Promise.all([fetchWarehouse(), fetchImportHistory()]);
   };
 
   const deleteSkladItem = async (id) => {
@@ -702,6 +730,10 @@ export default function DatabazaPage() {
                         <button onClick={() => openNaskladnit(w)} title="Naskladniť"
                           className="p-2.5 bg-green-600/20 border border-green-600/30 text-green-400 rounded-xl hover:bg-green-600 hover:text-white transition-all text-xs font-black px-3">
                           + Sklad
+                        </button>
+                        <button onClick={() => openSkladSpotreba(w)} title="Vydať do spotreby"
+                          className="p-2.5 bg-purple-600/20 border border-purple-600/30 text-purple-400 rounded-xl hover:bg-purple-600 hover:text-white transition-all text-xs font-black px-3">
+                          🔧
                         </button>
                         <button onClick={() => openSkladEdit(w)}
                           className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
@@ -1681,6 +1713,57 @@ export default function DatabazaPage() {
                     <button type="submit"
                       className="flex-[2] bg-green-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-green-500 transition-all shadow-xl">
                       ✓ Naskladniť
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+
+            {skladModal.mode === 'spotreba_item' && (
+              <>
+                <h2 className="text-2xl font-black uppercase italic mb-2 tracking-tighter text-center">Vydať do <span className="text-purple-500">spotreby</span></h2>
+                <p className="text-purple-400 font-black uppercase text-sm italic text-center mb-6 tracking-widest">{skladModal.item.name}</p>
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl px-5 py-3 flex justify-between items-center mb-6">
+                  <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Aktuálny stav</span>
+                  <span className={`font-black text-lg px-3 py-1 rounded-lg border ${qtyColor(skladModal.item.current_quantity)}`}>
+                    {parseFloat(skladModal.item.current_quantity).toFixed(2)} {skladModal.item.unit}
+                  </span>
+                </div>
+                <form onSubmit={doSkladSpotreba} className="space-y-5">
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Množstvo na vydanie</label>
+                    <input required type="number" min="0.001" step="0.001" value={skladModal.item.qty}
+                      onChange={e => setSkladModal(m => ({ ...m, item: { ...m.item, qty: e.target.value } }))}
+                      className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-purple-500 text-center text-2xl transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Dôvod spotreby (voliteľné)</label>
+                    <input type="text" value={skladModal.item.note}
+                      onChange={e => setSkladModal(m => ({ ...m, item: { ...m.item, note: e.target.value } }))}
+                      placeholder="napr. Oprava servisného vozidla"
+                      className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-500 transition-all" />
+                  </div>
+                  {parseFloat(skladModal.item.qty) > 0 && (() => {
+                    const newQty = parseFloat(skladModal.item.current_quantity) - parseFloat(skladModal.item.qty);
+                    const over = newQty < 0;
+                    return (
+                      <div className={`rounded-2xl px-5 py-3 flex justify-between items-center border ${over ? 'bg-red-500/10 border-red-500/30' : 'bg-purple-500/10 border-purple-500/30'}`}>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${over ? 'text-red-400' : 'text-purple-400'}`}>
+                          {over ? '⚠ Nedostatok na sklade!' : 'Stav po výdaji'}
+                        </span>
+                        <span className={`font-black text-lg ${over ? 'text-red-400' : 'text-purple-300'}`}>
+                          {Math.max(0, newQty).toFixed(2)} {skladModal.item.unit}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex gap-3 pt-4">
+                    <button type="button" onClick={() => setSkladModal(null)}
+                      className="flex-1 bg-zinc-800 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">Zrušiť</button>
+                    <button type="submit"
+                      disabled={parseFloat(skladModal.item.qty) > parseFloat(skladModal.item.current_quantity)}
+                      className="flex-[2] bg-purple-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-purple-500 transition-all shadow-xl disabled:opacity-40">
+                      🔧 Potvrdiť vydanie
                     </button>
                   </div>
                 </form>
