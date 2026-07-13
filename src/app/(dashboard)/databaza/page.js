@@ -54,6 +54,12 @@ export default function DatabazaPage() {
   const [vratkaHeader, setVratkaHeader] = useState({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
   const [vratkaSaving, setVratkaSaving] = useState(false);
 
+  // --- SPOTREBA ---
+  const [spotrebaLines, setSpotrebaLines] = useState([emptySpotrebaLine()]);
+  const [spotrebaNote, setSpotrebaNote] = useState('');
+  const [spotrebaDate, setSpotrebaDate] = useState(new Date().toISOString().slice(0, 10));
+  const [spotrebaSaving, setSpotrebaSaving] = useState(false);
+
   // --- SORT SKLAD ---
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -63,6 +69,10 @@ export default function DatabazaPage() {
   }
 
   function emptyVratkaLine() {
+    return { part_number: '', name: '', quantity: 1, matched_item: null };
+  }
+
+  function emptySpotrebaLine() {
     return { part_number: '', name: '', quantity: 1, matched_item: null };
   }
 
@@ -195,15 +205,17 @@ export default function DatabazaPage() {
   };
 
   const revertImport = async (batch) => {
-    const isReturn = batch.batch_type === 'vratka';
-    const label = isReturn ? 'vratku' : 'import';
-    if (!confirm(`Naozaj zrušiť ${label} "${batch.doc_number || batch.supplier || 'bez názvu'}"?\n\n${isReturn ? 'Množstvo sa vráti späť na sklad.' : 'Z každého dielu sa odráta naskladnené množstvo.'}`)) return;
+    const isOut = batch.batch_type === 'vratka' || batch.batch_type === 'spotreba';
+    const labelMap = { vratka: 'vratku', spotreba: 'spotrebu', import: 'import' };
+    const label = labelMap[batch.batch_type] || 'import';
+    const confirmMsg = isOut ? 'Množstvo sa vráti späť na sklad.' : 'Z každého dielu sa odráta naskladnené množstvo.';
+    if (!confirm(`Naozaj zrušiť ${label} "${batch.doc_number || batch.supplier || batch.note || 'bez názvu'}"?\n\n${confirmMsg}`)) return;
     setRevertingId(batch.id);
     for (const item of (batch.items_json || [])) {
       if (!item.item_id || item.quantity <= 0) continue;
       const existing = warehouseItems.find(w => w.id === item.item_id);
       if (!existing) continue;
-      if (isReturn) {
+      if (isOut) {
         await supabase.from('warehouse_items').update({ quantity: parseFloat(existing.quantity) + item.quantity }).eq('id', item.item_id);
       } else {
         const newQty = Math.max(0, parseFloat(existing.quantity) - item.quantity);
@@ -419,6 +431,53 @@ export default function DatabazaPage() {
     setWarehouseSubTab('historia');
   };
 
+  // ---- SPOTREBA ----
+  const updateSpotrebaLine = (i, field, value) =>
+    setSpotrebaLines(l => l.map((line, idx) => {
+      if (idx !== i) return line;
+      const updated = { ...line, [field]: value };
+      if (field === 'part_number') {
+        const pn = value.trim().toLowerCase();
+        updated.matched_item = pn ? (warehouseItems.find(w => w.part_number && w.part_number.trim().toLowerCase() === pn) || null) : null;
+        if (updated.matched_item) updated.name = updated.matched_item.name;
+      }
+      return updated;
+    }));
+
+  const submitSpotreba = async (e) => {
+    e.preventDefault();
+    setSpotrebaSaving(true);
+    const batchItems = [];
+    for (const line of spotrebaLines) {
+      const qty = parseFloat(line.quantity) || 0;
+      if (qty <= 0 || !line.matched_item) continue;
+      const item = line.matched_item;
+      const note = ['Spotreba', spotrebaNote.trim() || null].filter(Boolean).join(': ');
+      await supabase.from('warehouse_movements').insert([{ item_id: item.id, movement_type: 'out', quantity: qty, note }]);
+      const newQty = Math.max(0, parseFloat(item.quantity) - qty);
+      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', item.id);
+      batchItems.push({ item_id: item.id, name: item.name, part_number: item.part_number || null, quantity: qty, purchase_price: parseFloat(item.purchase_price) || 0, sale_price: parseFloat(item.sale_price) || 0 });
+    }
+    if (batchItems.length > 0) {
+      const totalWithoutVat = batchItems.reduce((s, i) => s + i.quantity * i.purchase_price, 0);
+      await supabase.from('import_batches').insert([{
+        doc_number: spotrebaNote.trim() || null,
+        supplier: null,
+        import_date: spotrebaDate,
+        total_without_vat: totalWithoutVat,
+        total_with_vat: totalWithoutVat * 1.23,
+        items_json: batchItems,
+        batch_type: 'spotreba',
+      }]);
+    }
+    setSpotrebaSaving(false);
+    setSpotrebaLines([emptySpotrebaLine()]);
+    setSpotrebaNote('');
+    setSpotrebaDate(new Date().toISOString().slice(0, 10));
+    await Promise.all([fetchWarehouse(), fetchImportHistory()]);
+    setWarehouseSubTab('historia');
+  };
+
   // ---- PDF IMPORT ----
   const handlePdfUpload = async (e) => {
     const file = e.target.files[0];
@@ -539,7 +598,8 @@ export default function DatabazaPage() {
               { key: 'zoznam', label: '📋 Zoznam skladu' },
               { key: 'import', label: '📥 Import dodacieho listu' },
               { key: 'vratka', label: '📤 Vratka' },
-              { key: 'historia', label: '📜 História importov' },
+              { key: 'spotreba', label: '🔧 Spotreba' },
+              { key: 'historia', label: '📜 História' },
             ].map(st => (
               <button key={st.key}
                 onClick={() => setWarehouseSubTab(st.key)}
@@ -680,6 +740,8 @@ export default function DatabazaPage() {
                           <div className="flex items-center gap-3 flex-wrap">
                             {batch.batch_type === 'vratka' ? (
                               <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg">📤 Vratka</span>
+                            ) : batch.batch_type === 'spotreba' ? (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg">🔧 Spotreba</span>
                             ) : (
                               <span className="text-[9px] font-black uppercase tracking-widest text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg">📥 Naskladnenie</span>
                             )}
@@ -723,7 +785,7 @@ export default function DatabazaPage() {
                           disabled={revertingId === batch.id}
                           className="shrink-0 bg-red-600/10 hover:bg-red-600 border border-red-600/30 hover:border-red-600 text-red-500 hover:text-white font-black px-5 py-3 rounded-2xl uppercase text-[9px] tracking-widest transition-all disabled:opacity-50"
                         >
-                          {revertingId === batch.id ? 'Vraciam...' : batch.batch_type === 'vratka' ? '↩ Zrušiť vratku' : '↩ Vrátiť import'}
+                          {revertingId === batch.id ? 'Vraciam...' : batch.batch_type === 'vratka' ? '↩ Zrušiť vratku' : batch.batch_type === 'spotreba' ? '↩ Zrušiť spotrebu' : '↩ Vrátiť import'}
                         </button>
                       </div>
                     </div>
@@ -1035,6 +1097,97 @@ export default function DatabazaPage() {
                 <button type="submit" disabled={vratkaSaving || !vratkaLines.some(l => l.matched_item && parseFloat(l.quantity) > 0)}
                   className="flex-[3] bg-orange-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-orange-500 transition-all shadow-xl disabled:opacity-50">
                   {vratkaSaving ? 'Spracovávam...' : '📤 Potvrdiť vratku'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* SPOTREBA */}
+          {warehouseSubTab === 'spotreba' && (
+            <form onSubmit={submitSpotreba} className="space-y-6">
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-[2rem] px-6 py-4 flex items-center gap-4">
+                <span className="text-2xl">🔧</span>
+                <p className="text-purple-300 text-xs font-bold leading-relaxed">
+                  Vydajte diely do internej spotreby (oprava vozidla servisu, réžia...). Množstvo sa odráta zo skladu.
+                </p>
+              </div>
+
+              {/* HLAVIČKA */}
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-5">Dôvod spotreby</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dátum</label>
+                    <input type="date" value={spotrebaDate} onChange={e => setSpotrebaDate(e.target.value)}
+                      className="w-full bg-black border border-zinc-800 focus:border-purple-500 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dôvod / poznámka</label>
+                    <input type="text" value={spotrebaNote} onChange={e => setSpotrebaNote(e.target.value)}
+                      placeholder="napr. Oprava servisného vozidla BA123AB"
+                      className="w-full bg-black border border-zinc-800 focus:border-purple-500 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                </div>
+              </div>
+
+              {/* RIADKY */}
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Vydané položky</p>
+
+                {spotrebaLines.map((line, i) => (
+                  <div key={i} className={`rounded-2xl border overflow-hidden ${line.matched_item ? 'border-purple-500/40' : 'border-zinc-800/50'}`}>
+                    {line.matched_item && (
+                      <div className="bg-purple-500/10 border-b border-purple-500/20 px-3 py-2 flex items-center gap-3">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-purple-400 bg-purple-500/20 px-2 py-0.5 rounded-lg">✓ Nájdené na sklade</span>
+                        <span className="text-purple-300 text-[10px] font-black uppercase">{line.matched_item.name}</span>
+                        <span className="text-purple-600 text-[9px]">· {parseFloat(line.matched_item.quantity).toFixed(2)} {line.matched_item.unit} aktuálne na sklade</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-[1fr_1fr_80px_28px] gap-2 p-3 items-end">
+                      <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600 block mb-1.5">Číslo dielu (OEM)</label>
+                        <input type="text" placeholder="napr. 04L115561H" value={line.part_number}
+                          onChange={e => updateSpotrebaLine(i, 'part_number', e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-purple-500 p-2.5 rounded-xl text-yellow-400 font-black text-xs outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600 block mb-1.5">Názov dielu</label>
+                        <input type="text" placeholder={line.matched_item ? line.matched_item.name : 'zadajte OEM číslo…'} value={line.name}
+                          onChange={e => updateSpotrebaLine(i, 'name', e.target.value)}
+                          readOnly={!!line.matched_item}
+                          className={`w-full bg-zinc-900 border border-zinc-800 p-2.5 rounded-xl font-black text-xs outline-none transition-all ${line.matched_item ? 'text-zinc-400 cursor-default' : 'text-white focus:border-purple-500'}`} />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600 block mb-1.5">Množstvo</label>
+                        <input type="number" min="0.001" step="0.001" value={line.quantity}
+                          onChange={e => updateSpotrebaLine(i, 'quantity', e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-purple-500 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
+                      </div>
+                      <button type="button" onClick={() => setSpotrebaLines(l => l.filter((_, idx) => idx !== i))}
+                        className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs mb-0.5">✕</button>
+                    </div>
+                    {!line.matched_item && line.part_number.trim() && (
+                      <div className="px-3 pb-3">
+                        <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">⚠ Diel s týmto číslom nebol nájdený — skontrolujte OEM číslo</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <button type="button" onClick={() => setSpotrebaLines(l => [...l, emptySpotrebaLine()])}
+                  className="w-full border-2 border-dashed border-zinc-800 hover:border-zinc-600 rounded-2xl py-3 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all">
+                  + Pridať riadok
+                </button>
+              </div>
+
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setWarehouseSubTab('zoznam')}
+                  className="flex-1 bg-zinc-900 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">
+                  Zrušiť
+                </button>
+                <button type="submit" disabled={spotrebaSaving || !spotrebaLines.some(l => l.matched_item && parseFloat(l.quantity) > 0)}
+                  className="flex-[3] bg-purple-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-purple-500 transition-all shadow-xl disabled:opacity-50">
+                  {spotrebaSaving ? 'Spracovávam...' : '🔧 Potvrdiť spotrebu'}
                 </button>
               </div>
             </form>
