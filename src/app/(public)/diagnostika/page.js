@@ -29,6 +29,7 @@ export default function DiagnostikaPage() {
   const [error, setError] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [questionNum, setQuestionNum] = useState(0);
+  const [codeExplanation, setCodeExplanation] = useState('');
 
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -77,6 +78,7 @@ export default function DiagnostikaPage() {
       const reply = await callApi(initMsgs);
       const full = [...initMsgs, { role: 'assistant', content: reply.text, type: reply.type }];
       setMessages(full);
+      if (reply.explanation) setCodeExplanation(reply.explanation);
       if (reply.type === 'diagnosis') {
         setDiagnosis(reply.text);
         setPhase('done');
@@ -126,6 +128,7 @@ export default function DiagnostikaPage() {
     setCurrentAnswer('');
     setDiagnosis('');
     setQuestionNum(0);
+    setCodeExplanation('');
     setError('');
     setCode('');
     setSymptom('');
@@ -260,6 +263,16 @@ export default function DiagnostikaPage() {
               </div>
             </div>
 
+            {/* Vysvetlenie kódu závady */}
+            {codeExplanation && (
+              <div className="mb-4 bg-red-600/10 border border-red-600/30 rounded-2xl px-4 py-3">
+                <p className="text-red-500 text-xs font-black uppercase tracking-wider mb-1">
+                  {code ? `Kód ${code.toUpperCase()}` : 'Kód závady'}
+                </p>
+                <p className="text-zinc-200 text-sm leading-relaxed">{codeExplanation}</p>
+              </div>
+            )}
+
             {/* Pôvodný popis */}
             {messages[0] && (
               <div className="mb-4 bg-zinc-950 border border-zinc-900 rounded-2xl px-4 py-3">
@@ -342,6 +355,16 @@ export default function DiagnostikaPage() {
                 Nová diagnostika
               </button>
             </div>
+
+            {/* Vysvetlenie kódu závady */}
+            {codeExplanation && (
+              <div className="mb-5 bg-red-600/10 border border-red-600/30 rounded-2xl px-4 py-3">
+                <p className="text-red-500 text-xs font-black uppercase tracking-wider mb-1">
+                  {code ? `Kód ${code.toUpperCase()}` : 'Kód závady'}
+                </p>
+                <p className="text-zinc-200 text-sm leading-relaxed">{codeExplanation}</p>
+              </div>
+            )}
 
             {/* Súhrn konverzácie */}
             {chatMessages.length > 0 && (
