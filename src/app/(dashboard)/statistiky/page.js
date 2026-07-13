@@ -74,6 +74,7 @@ export default function StatistikyPage() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo]   = useState('');
   const [selMech, setSelMech]     = useState(null); // null = všetci
+  const [showPayouts, setShowPayouts] = useState(false);
   const [loading, setLoading]     = useState(true);
 
   const [tab, setTab]             = useState('prehlad');
@@ -109,7 +110,7 @@ export default function StatistikyPage() {
     ] = await Promise.all([
       supabase.from('invoices').select('total_amount, is_official, created_at').gte('created_at', from).lte('created_at', to),
       supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, status, job_items(quantity, unit_price, type, worker_id, mechanic_hours, mechanic_splits)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
-      supabase.from('kasa_entries').select('employee_id, amount').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate),
+      supabase.from('kasa_entries').select('id, employee_id, amount, date, description').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate).order('date', { ascending: false }),
     ]);
 
     // Faktúry
@@ -143,7 +144,7 @@ export default function StatistikyPage() {
     // Hodiny PER MECHANIK — mechanic_splits má prednosť, inak assigned_worker_id
     const empMap = {};
     (employees).forEach(e => {
-      empMap[e.id] = { id: e.id, name: e.name, color: e.color, hourlyRate: Number(e.hourly_rate) || 0, hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
+      empMap[e.id] = { id: e.id, name: e.name, color: e.color, hourlyRate: Number(e.hourly_rate) || 0, hours: 0, jobCount: 0, jobRevenue: 0, payout: 0, payoutEntries: [] };
     });
 
     (jobs || []).forEach(job => {
@@ -214,9 +215,10 @@ export default function StatistikyPage() {
     (payouts || []).forEach(p => {
       if (!empMap[p.employee_id]) {
         const emp = employees.find(e => e.id === p.employee_id);
-        empMap[p.employee_id] = { id: p.employee_id, name: emp?.name || 'Neznámy', color: emp?.color || '#666', hours: 0, jobCount: 0, jobRevenue: 0, payout: 0 };
+        empMap[p.employee_id] = { id: p.employee_id, name: emp?.name || 'Neznámy', color: emp?.color || '#666', hours: 0, jobCount: 0, jobRevenue: 0, payout: 0, payoutEntries: [] };
       }
       empMap[p.employee_id].payout += Number(p.amount);
+      empMap[p.employee_id].payoutEntries.push(p);
     });
 
     const mechanicStats = Object.values(empMap).filter(m => m.hours > 0 || m.jobCount > 0 || m.payout > 0).sort((a, b) => b.hours - a.hours);
@@ -345,6 +347,7 @@ export default function StatistikyPage() {
   })();
 
   const selMechData = stats?.mechanicStats?.find(m => m.id === selMech);
+  const handleSelMech = (id) => { setSelMech(id); setShowPayouts(false); };
 
   return (
     <div className="p-6 md:p-10 max-w-6xl mx-auto">
@@ -403,12 +406,12 @@ export default function StatistikyPage() {
           <div>
             <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-3">Mechanik</p>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => setSelMech(null)}
+              <button onClick={() => handleSelMech(null)}
                 className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${!selMech ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-black border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}>
                 Všetci
               </button>
               {employees.map(emp => (
-                <button key={emp.id} onClick={() => setSelMech(selMech === emp.id ? null : emp.id)}
+                <button key={emp.id} onClick={() => handleSelMech(selMech === emp.id ? null : emp.id)}
                   className={`px-4 py-2 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center gap-2 ${selMech === emp.id ? 'text-white shadow-lg' : 'bg-black border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600'}`}
                   style={selMech === emp.id ? { background: emp.color || '#dc2626', boxShadow: `0 4px 15px ${emp.color || '#dc2626'}33` } : {}}
                 >
@@ -479,11 +482,33 @@ export default function StatistikyPage() {
                     <p className="text-[8px] text-zinc-600 font-black mt-0.5">{selMechData.hourlyRate} €/hod</p>
                   </div>
                 )}
-                <div className="bg-amber-600/10 border border-amber-600/20 rounded-2xl p-4 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1">Vyplatené</p>
+                <button onClick={() => selMechData.payout > 0 && setShowPayouts(v => !v)}
+                  className={`bg-amber-600/10 border border-amber-600/20 rounded-2xl p-4 text-center transition-all ${selMechData.payout > 0 ? 'hover:bg-amber-600/20 cursor-pointer' : 'cursor-default'}`}>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-1">Vyplatené {selMechData.payout > 0 && <span className="text-amber-600/60">{showPayouts ? '▲' : '▼'}</span>}</p>
                   <p className="text-xl font-black text-amber-400">{selMechData.payout > 0 ? fmt(selMechData.payout) : '—'}</p>
-                </div>
+                  {selMechData.payout > 0 && <p className="text-[8px] text-amber-600/60 font-bold mt-0.5">{selMechData.payoutEntries?.length || 0} položiek</p>}
+                </button>
               </div>
+
+              {/* ZOZNAM VÝPLAT */}
+              {showPayouts && selMechData.payoutEntries?.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 mb-3">Výplaty v období</p>
+                  <div className="space-y-2">
+                    {selMechData.payoutEntries.map(p => (
+                      <div key={p.id} className="flex items-center justify-between bg-amber-600/5 border border-amber-600/15 rounded-2xl px-5 py-3">
+                        <div>
+                          <p className="text-white font-black text-sm">{p.description || 'Výplata'}</p>
+                          <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">
+                            {new Date(p.date + 'T12:00:00').toLocaleDateString('sk-SK', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <p className="text-amber-400 font-black text-base">{fmt(Number(p.amount))}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* ZOZNAM ZÁKAZIEK */}
               {mechJobs.length > 0 ? (
@@ -570,7 +595,7 @@ export default function StatistikyPage() {
               </p>
               <div className="space-y-5">
                 {stats.mechanicStats.map((m) => (
-                  <button key={m.id} onClick={() => setSelMech(selMech === m.id ? null : m.id)}
+                  <button key={m.id} onClick={() => handleSelMech(selMech === m.id ? null : m.id)}
                     className={`w-full flex items-center gap-4 rounded-2xl p-3 transition-all text-left ${selMech === m.id ? 'bg-black ring-1 ring-white/10' : 'hover:bg-black/50'}`}>
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-white text-sm shrink-0"
                       style={{ background: m.color || '#dc2626' }}>
