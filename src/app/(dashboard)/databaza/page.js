@@ -49,12 +49,21 @@ export default function DatabazaPage() {
   const [revertingId, setRevertingId] = useState(null);
   const [dupWarning, setDupWarning] = useState(null);
 
+  // --- VRATKA ---
+  const [vratkaLines, setVratkaLines] = useState([emptyVratkaLine()]);
+  const [vratkaHeader, setVratkaHeader] = useState({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
+  const [vratkaSaving, setVratkaSaving] = useState(false);
+
   // --- SORT SKLAD ---
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
 
   function emptyImportLine() {
     return { name: '', part_number: '', quantity: 1, purchase_price: '', sale_price: '', unit: 'ks', dodaci_list: '', matched_item: null, merge_action: 'add' };
+  }
+
+  function emptyVratkaLine() {
+    return { part_number: '', name: '', quantity: 1, matched_item: null };
   }
 
   const autoMatch = (line, items) => {
@@ -186,14 +195,20 @@ export default function DatabazaPage() {
   };
 
   const revertImport = async (batch) => {
-    if (!confirm(`Naozaj zrušiť import "${batch.doc_number || batch.supplier || 'bez názvu'}"?\n\nZ každého dielu sa odráta naskladnené množstvo.`)) return;
+    const isReturn = batch.batch_type === 'vratka';
+    const label = isReturn ? 'vratku' : 'import';
+    if (!confirm(`Naozaj zrušiť ${label} "${batch.doc_number || batch.supplier || 'bez názvu'}"?\n\n${isReturn ? 'Množstvo sa vráti späť na sklad.' : 'Z každého dielu sa odráta naskladnené množstvo.'}`)) return;
     setRevertingId(batch.id);
     for (const item of (batch.items_json || [])) {
       if (!item.item_id || item.quantity <= 0) continue;
       const existing = warehouseItems.find(w => w.id === item.item_id);
       if (!existing) continue;
-      const newQty = Math.max(0, parseFloat(existing.quantity) - item.quantity);
-      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', item.item_id);
+      if (isReturn) {
+        await supabase.from('warehouse_items').update({ quantity: parseFloat(existing.quantity) + item.quantity }).eq('id', item.item_id);
+      } else {
+        const newQty = Math.max(0, parseFloat(existing.quantity) - item.quantity);
+        await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', item.item_id);
+      }
     }
     await supabase.from('import_batches').delete().eq('id', batch.id);
     setRevertingId(null);
@@ -355,6 +370,55 @@ export default function DatabazaPage() {
     setWarehouseSubTab('historia');
   };
 
+  // ---- VRATKA ----
+  const updateVratkaLine = (i, field, value) =>
+    setVratkaLines(l => l.map((line, idx) => {
+      if (idx !== i) return line;
+      const updated = { ...line, [field]: value };
+      if (field === 'part_number') {
+        const pn = value.trim().toLowerCase();
+        updated.matched_item = pn ? (warehouseItems.find(w => w.part_number && w.part_number.trim().toLowerCase() === pn) || null) : null;
+        if (updated.matched_item) updated.name = updated.matched_item.name;
+      }
+      return updated;
+    }));
+
+  const submitVratka = async (e) => {
+    e.preventDefault();
+    setVratkaSaving(true);
+    const batchItems = [];
+    for (const line of vratkaLines) {
+      const qty = parseFloat(line.quantity) || 0;
+      if (qty <= 0 || !line.matched_item) continue;
+      const item = line.matched_item;
+      const note = [
+        `Vratka${vratkaHeader.doc_number ? `: ${vratkaHeader.doc_number}` : ''}`,
+        vratkaHeader.supplier || null,
+      ].filter(Boolean).join(' | ');
+      await supabase.from('warehouse_movements').insert([{ item_id: item.id, movement_type: 'out', quantity: qty, note }]);
+      const newQty = Math.max(0, parseFloat(item.quantity) - qty);
+      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', item.id);
+      batchItems.push({ item_id: item.id, name: item.name, part_number: item.part_number || null, quantity: qty, purchase_price: parseFloat(item.purchase_price) || 0, sale_price: parseFloat(item.sale_price) || 0 });
+    }
+    if (batchItems.length > 0) {
+      const totalWithoutVat = batchItems.reduce((s, i) => s + i.quantity * i.purchase_price, 0);
+      await supabase.from('import_batches').insert([{
+        doc_number: vratkaHeader.doc_number || null,
+        supplier: vratkaHeader.supplier || null,
+        import_date: vratkaHeader.date,
+        total_without_vat: totalWithoutVat,
+        total_with_vat: totalWithoutVat * 1.23,
+        items_json: batchItems,
+        batch_type: 'vratka',
+      }]);
+    }
+    setVratkaSaving(false);
+    setVratkaLines([emptyVratkaLine()]);
+    setVratkaHeader({ supplier: '', doc_number: '', date: new Date().toISOString().slice(0, 10) });
+    await Promise.all([fetchWarehouse(), fetchImportHistory()]);
+    setWarehouseSubTab('historia');
+  };
+
   // ---- PDF IMPORT ----
   const handlePdfUpload = async (e) => {
     const file = e.target.files[0];
@@ -474,6 +538,7 @@ export default function DatabazaPage() {
             {[
               { key: 'zoznam', label: '📋 Zoznam skladu' },
               { key: 'import', label: '📥 Import dodacieho listu' },
+              { key: 'vratka', label: '📤 Vratka' },
               { key: 'historia', label: '📜 História importov' },
             ].map(st => (
               <button key={st.key}
@@ -598,7 +663,7 @@ export default function DatabazaPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">
-                  Importy naskladnenia — kliknutím na <span className="text-red-500">Vrátiť</span> sa odráta množstvo zo skladu
+                  Importy a vrátky — kliknutím na <span className="text-red-500">Vrátiť</span> sa operácia zruší
                 </p>
                 <span className="text-zinc-600 text-[9px] font-black uppercase tracking-widest">{importHistory.length} záznamov</span>
               </div>
@@ -613,6 +678,11 @@ export default function DatabazaPage() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-3 flex-wrap">
+                            {batch.batch_type === 'vratka' ? (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg">📤 Vratka</span>
+                            ) : (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-1 rounded-lg">📥 Naskladnenie</span>
+                            )}
                             {batch.doc_number && (
                               <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-1 rounded-lg">
                                 {batch.doc_number}
@@ -653,7 +723,7 @@ export default function DatabazaPage() {
                           disabled={revertingId === batch.id}
                           className="shrink-0 bg-red-600/10 hover:bg-red-600 border border-red-600/30 hover:border-red-600 text-red-500 hover:text-white font-black px-5 py-3 rounded-2xl uppercase text-[9px] tracking-widest transition-all disabled:opacity-50"
                         >
-                          {revertingId === batch.id ? 'Vraciam...' : '↩ Vrátiť import'}
+                          {revertingId === batch.id ? 'Vraciam...' : batch.batch_type === 'vratka' ? '↩ Zrušiť vratku' : '↩ Vrátiť import'}
                         </button>
                       </div>
                     </div>
@@ -868,6 +938,103 @@ export default function DatabazaPage() {
                 <button type="submit" disabled={importSaving}
                   className="flex-[3] bg-red-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-red-500 transition-all shadow-xl disabled:opacity-50">
                   {importSaving ? 'Naskladňujem...' : '📥 Potvrdiť naskladnenie'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* VRATKA */}
+          {warehouseSubTab === 'vratka' && (
+            <form onSubmit={submitVratka} className="space-y-6">
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-[2rem] px-6 py-4 flex items-center gap-4">
+                <span className="text-2xl">📤</span>
+                <p className="text-orange-300 text-xs font-bold leading-relaxed">
+                  Zadajte diely, ktoré vraciate dodávateľovi. Množstvo sa odráta zo skladu a zaznamená sa pohyb.
+                </p>
+              </div>
+
+              {/* HLAVIČKA */}
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-5">Údaje dokladu</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dodávateľ</label>
+                    <input type="text" value={vratkaHeader.supplier} onChange={e => setVratkaHeader(h => ({ ...h, supplier: e.target.value }))}
+                      placeholder="napr. AutoParts s.r.o."
+                      className="w-full bg-black border border-zinc-800 focus:border-orange-500 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Číslo dokladu (vratky)</label>
+                    <input type="text" value={vratkaHeader.doc_number} onChange={e => setVratkaHeader(h => ({ ...h, doc_number: e.target.value }))}
+                      placeholder="napr. VR-2024-001"
+                      className="w-full bg-black border border-zinc-800 focus:border-orange-500 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600 block mb-2">Dátum</label>
+                    <input type="date" value={vratkaHeader.date} onChange={e => setVratkaHeader(h => ({ ...h, date: e.target.value }))}
+                      className="w-full bg-black border border-zinc-800 focus:border-orange-500 p-3 rounded-xl text-white font-black text-sm outline-none transition-all" />
+                  </div>
+                </div>
+              </div>
+
+              {/* RIADKY */}
+              <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Vracané položky</p>
+
+                {vratkaLines.map((line, i) => (
+                  <div key={i} className={`rounded-2xl border overflow-hidden ${line.matched_item ? 'border-orange-500/40' : 'border-zinc-800/50'}`}>
+                    {line.matched_item && (
+                      <div className="bg-orange-500/10 border-b border-orange-500/20 px-3 py-2 flex items-center gap-3">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded-lg">✓ Nájdené na sklade</span>
+                        <span className="text-orange-300 text-[10px] font-black uppercase">{line.matched_item.name}</span>
+                        <span className="text-orange-600 text-[9px]">· {parseFloat(line.matched_item.quantity).toFixed(2)} {line.matched_item.unit} aktuálne na sklade</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-[1fr_1fr_80px_28px] gap-2 p-3 items-end">
+                      <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600 block mb-1.5">Číslo dielu (OEM)</label>
+                        <input type="text" placeholder="napr. 04L115561H" value={line.part_number}
+                          onChange={e => updateVratkaLine(i, 'part_number', e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-orange-500 p-2.5 rounded-xl text-yellow-400 font-black text-xs outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600 block mb-1.5">Názov dielu</label>
+                        <input type="text" placeholder={line.matched_item ? line.matched_item.name : 'zadajte OEM číslo...'} value={line.name}
+                          onChange={e => updateVratkaLine(i, 'name', e.target.value)}
+                          readOnly={!!line.matched_item}
+                          className={`w-full bg-zinc-900 border border-zinc-800 p-2.5 rounded-xl font-black text-xs outline-none transition-all ${line.matched_item ? 'text-zinc-400 cursor-default' : 'text-white focus:border-orange-500'}`} />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-600 block mb-1.5">Množstvo</label>
+                        <input type="number" min="0.001" step="0.001" value={line.quantity}
+                          onChange={e => updateVratkaLine(i, 'quantity', e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 focus:border-orange-500 p-2.5 rounded-xl text-white font-black text-xs outline-none transition-all text-center" />
+                      </div>
+                      <button type="button" onClick={() => setVratkaLines(l => l.filter((_, idx) => idx !== i))}
+                        className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all text-xs mb-0.5">✕</button>
+                    </div>
+                    {!line.matched_item && line.part_number.trim() && (
+                      <div className="px-3 pb-3">
+                        <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">⚠ Diel s týmto číslom nebol nájdený na sklade — skontrolujte OEM číslo</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <button type="button" onClick={() => setVratkaLines(l => [...l, emptyVratkaLine()])}
+                  className="w-full border-2 border-dashed border-zinc-800 hover:border-zinc-600 rounded-2xl py-3 text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all">
+                  + Pridať riadok
+                </button>
+              </div>
+
+              <div className="flex gap-4">
+                <button type="button" onClick={() => setWarehouseSubTab('zoznam')}
+                  className="flex-1 bg-zinc-900 text-zinc-400 font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:text-white transition-all">
+                  Zrušiť
+                </button>
+                <button type="submit" disabled={vratkaSaving || !vratkaLines.some(l => l.matched_item && parseFloat(l.quantity) > 0)}
+                  className="flex-[3] bg-orange-600 text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest hover:bg-orange-500 transition-all shadow-xl disabled:opacity-50">
+                  {vratkaSaving ? 'Spracovávam...' : '📤 Potvrdiť vratku'}
                 </button>
               </div>
             </form>
@@ -1215,6 +1382,23 @@ export default function DatabazaPage() {
                       onChange={e => setSkladModal(m => ({ ...m, item: { ...m.item, part_number: e.target.value } }))}
                       placeholder="napr. 04L115561H"
                       className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all" />
+                    {skladModal.mode === 'add' && skladModal.item.part_number.trim() && (() => {
+                      const pn = skladModal.item.part_number.trim().toLowerCase();
+                      const dup = warehouseItems.find(w => w.part_number && w.part_number.trim().toLowerCase() === pn);
+                      if (!dup) return null;
+                      return (
+                        <div className="mt-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3 flex items-start gap-3">
+                          <span className="text-yellow-400 text-base shrink-0">⚠️</span>
+                          <div>
+                            <p className="text-yellow-300 text-[9px] font-black uppercase tracking-widest">Kartu s týmto číslom dielu už máte</p>
+                            <p className="text-yellow-400 text-sm font-black mt-1 uppercase italic">{dup.name}</p>
+                            <p className="text-yellow-600 text-[10px] font-black mt-0.5">
+                              {parseFloat(dup.quantity).toFixed(2)} {dup.unit} na sklade · pult {parseFloat(dup.sale_price).toFixed(2)} €
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
