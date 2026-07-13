@@ -108,7 +108,7 @@ export default function StatistikyPage() {
       { data: payouts },
     ] = await Promise.all([
       supabase.from('invoices').select('total_amount, is_official, created_at').gte('created_at', from).lte('created_at', to),
-      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, status, job_items(quantity, unit_price, type, worker_id, mechanic_hours, mechanic_splits)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
+      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, created_at, status, job_items(quantity, unit_price, type, worker_id, mechanic_hours, mechanic_splits), job_tasks(id, is_completed)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
       supabase.from('kasa_entries').select('employee_id, amount').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate),
     ]);
 
@@ -117,6 +117,15 @@ export default function StatistikyPage() {
     const draftInv     = (invoices || []).filter(i => !i.is_official);
     const invoiceRevenue = officialInv.reduce((s, i) => s + (i.total_amount || 0), 0);
     const draftRevenue   = draftInv.reduce((s, i) => s + (i.total_amount || 0), 0);
+
+    // Úkony
+    let tasksTotal = 0, tasksCompleted = 0;
+    (jobs || []).forEach(job => {
+      (job.job_tasks || []).forEach(task => {
+        tasksTotal++;
+        if (task.is_completed) tasksCompleted++;
+      });
+    });
 
     // Materiál a práca zo zákaziek
     let materialRevenue = 0, laborRevenue = 0;
@@ -271,6 +280,7 @@ export default function StatistikyPage() {
       jobCount: (jobs || []).length,
       totalHours, mechanicStats, maxHours,
       avgInvoice: officialInv.length ? invoiceRevenue / officialInv.length : 0,
+      tasksTotal, tasksCompleted,
     });
 
     // Trend — posledných 6 mesiacov
@@ -413,7 +423,7 @@ export default function StatistikyPage() {
       ) : stats && (
         <>
           {/* KPI KARTY */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-4 gap-4 mb-8">
             <KpiCard icon="💰" color="green" label="Tržby (faktúry)" value={fmt(stats.invoiceRevenue)} sub={`${stats.invoiceCount} faktúr`} />
             <KpiCard icon="📂" color="zinc"  label="Odložené" value={fmt(stats.draftRevenue)} sub={`${stats.draftCount} odložených`} />
             <KpiCard icon="🔩" color="blue"  label="Materiál" value={fmt(stats.materialRevenue)} sub="predaný materiál" />
@@ -424,6 +434,8 @@ export default function StatistikyPage() {
               value={selMech ? fmtH(selMechData?.hours || 0) : fmtH(stats.totalHours)}
               sub={selMech ? `${selMechData?.jobCount || 0} zákaziek` : `${stats.mechanicStats.length} mechanikov`}
             />
+            <KpiCard icon="✅" color="green" label="Úkony" value={stats.tasksTotal.toString()}
+              sub={stats.tasksTotal > 0 ? `${stats.tasksCompleted} splnených (${Math.round(stats.tasksCompleted / stats.tasksTotal * 100)}%)` : 'žiadne úkony'} />
           </div>
 
           {/* DETAIL MECHANIKA */}
