@@ -1362,7 +1362,7 @@ export default function DatabazaPage() {
       {/* MODALY SKLAD */}
       {skladModal && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6">
-          <div className="bg-zinc-950 border border-zinc-800 p-8 md:p-12 rounded-[3rem] max-w-lg w-full shadow-2xl">
+          <div className="bg-zinc-950 border border-zinc-800 p-8 md:p-12 rounded-[3rem] max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto">
 
             {(skladModal.mode === 'add' || skladModal.mode === 'edit') && (
               <>
@@ -1382,24 +1382,44 @@ export default function DatabazaPage() {
                       onChange={e => setSkladModal(m => ({ ...m, item: { ...m.item, part_number: e.target.value } }))}
                       placeholder="napr. 04L115561H"
                       className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-red-600 transition-all" />
-                    {skladModal.mode === 'add' && skladModal.item.part_number.trim() && (() => {
-                      const pn = skladModal.item.part_number.trim().toLowerCase();
-                      const dup = warehouseItems.find(w => w.part_number && w.part_number.trim().toLowerCase() === pn);
-                      if (!dup) return null;
-                      return (
-                        <div className="mt-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3 flex items-start gap-3">
-                          <span className="text-yellow-400 text-base shrink-0">⚠️</span>
-                          <div>
-                            <p className="text-yellow-300 text-[9px] font-black uppercase tracking-widest">Kartu s týmto číslom dielu už máte</p>
-                            <p className="text-yellow-400 text-sm font-black mt-1 uppercase italic">{dup.name}</p>
-                            <p className="text-yellow-600 text-[10px] font-black mt-0.5">
-                              {parseFloat(dup.quantity).toFixed(2)} {dup.unit} na sklade · pult {parseFloat(dup.sale_price).toFixed(2)} €
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
+
+                  {/* ZHODY NA SKLADE — živý autocomplete */}
+                  {skladModal.mode === 'add' && (() => {
+                    const nameQ = nd(skladModal.item.name.trim());
+                    const pnQ = nd(skladModal.item.part_number.trim());
+                    if (!nameQ && !pnQ) return null;
+                    const matches = warehouseItems.filter(w => {
+                      if (nameQ.length >= 2 && nd(w.name).includes(nameQ)) return true;
+                      if (pnQ.length >= 2 && w.part_number && nd(w.part_number).includes(pnQ)) return true;
+                      return false;
+                    }).slice(0, 6);
+                    if (!matches.length) return null;
+                    return (
+                      <div className="rounded-2xl border border-yellow-500/30 overflow-hidden">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-yellow-500 bg-yellow-500/10 px-4 py-2.5">
+                          ⚠️ Zhody na sklade — chcete naskladniť na existujúcu kartu?
+                        </p>
+                        {matches.map(w => (
+                          <button key={w.id} type="button"
+                            onClick={() => { setSkladModal(null); openNaskladnit(w); }}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800 transition-all border-t border-zinc-800 text-left group">
+                            <div className="min-w-0">
+                              <p className="text-white text-xs font-black uppercase italic truncate">{w.name}</p>
+                              {w.part_number && (
+                                <p className="text-yellow-400 text-[9px] font-black tracking-widest mt-0.5">{w.part_number}</p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0 ml-4">
+                              <p className="text-zinc-400 text-[9px] font-black">{parseFloat(w.quantity).toFixed(2)} {w.unit}</p>
+                              <p className="text-green-400 text-[9px] font-black uppercase tracking-widest mt-0.5 group-hover:text-green-300">Naskladniť →</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-[9px] font-black uppercase text-zinc-500 ml-2 tracking-widest block mb-2">Nákupná cena bez DPH</label>
