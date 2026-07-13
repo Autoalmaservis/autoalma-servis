@@ -31,9 +31,19 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Neplatný formát' }, { status: 400 });
   }
 
-  const { vehicle, messages } = body;
+  const { vehicle } = body;
+  // Podpora oboch formátov: nový {messages:[...]} aj starý {code, symptom}
+  let messages = body.messages;
   if (!messages?.length) {
-    return NextResponse.json({ error: 'Chýba popis problému' }, { status: 400 });
+    const { code, symptom } = body;
+    if (!code?.trim() && !symptom?.trim()) {
+      return NextResponse.json({ error: 'Zadajte kód závady alebo popis problému' }, { status: 400 });
+    }
+    const content = [
+      code?.trim() ? `Kód závady: ${code.trim().toUpperCase()}` : '',
+      symptom?.trim() ? `Popis problému: ${symptom.trim()}` : '',
+    ].filter(Boolean).join('\n');
+    messages = [{ role: 'user', content }];
   }
 
   const assistantCount = messages.filter(m => m.role === 'assistant').length;

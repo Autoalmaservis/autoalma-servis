@@ -52,8 +52,9 @@ export default function DiagnostikaPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vehicle, messages: msgs }),
     });
-    if (!res.ok) throw new Error('Chyba servera');
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Chyba servera');
+    return data;
   }
 
   async function startDiagnosis(e) {
@@ -83,8 +84,8 @@ export default function DiagnostikaPage() {
         setQuestionNum(1);
         setPhase('chat');
       }
-    } catch {
-      setError('Nepodarilo sa spojiť so serverom. Skúste znova.');
+    } catch (err) {
+      setError(err.message || 'Nepodarilo sa spojiť so serverom. Skúste znova.');
     } finally {
       setLoading(false);
     }
@@ -141,9 +142,14 @@ export default function DiagnostikaPage() {
         <Link href="/" className="font-black uppercase italic tracking-tighter text-white text-lg hover:text-red-500 transition-colors">
           AutoAlma Servis
         </Link>
-        <Link href="/#kontakt" className="text-sm text-zinc-400 hover:text-white transition-colors">
-          Kontakt
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="text-sm text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
+            ← Hlavná stránka
+          </Link>
+          <Link href="/#kontakt" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            Kontakt
+          </Link>
+        </div>
       </nav>
 
       <main className="max-w-2xl mx-auto px-6 py-12">
