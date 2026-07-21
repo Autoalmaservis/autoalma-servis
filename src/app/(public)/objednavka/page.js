@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { trackObjednavkaSubmit } from '@/app/lib/analytics';
 import { supabase } from '../../lib/supabase';
 
 const nd = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export default function VerejnaObjednavkaPage() {
+  const router = useRouter();
   // Kroky: 1 = základné info, 2 = booking modal
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -221,8 +223,7 @@ export default function VerejnaObjednavkaPage() {
 
       trackObjednavkaSubmit();
       alert('Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.');
-      setStep(null);
-      setCustomerData({ name: '', phone: '', email: '', plate: '' });
+      router.push('/');
     } catch (err) {
       alert('Chyba pri odosielaní: ' + err.message);
     } finally {
