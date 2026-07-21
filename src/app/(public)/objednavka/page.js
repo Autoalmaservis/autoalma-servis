@@ -6,8 +6,8 @@ import { supabase } from '../../lib/supabase';
 const nd = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export default function VerejnaObjednavkaPage() {
-  // Kroky: null = hlavná strana, 1 = základné info, 2 = booking modal
-  const [step, setStep] = useState(null);
+  // Kroky: 1 = základné info, 2 = booking modal
+  const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
   // Krok 1 — základné info zákazníka
@@ -80,10 +80,6 @@ export default function VerejnaObjednavkaPage() {
     setCustomItems(prev => [...prev, { id: Date.now(), description: currentCustomIssue.trim(), duration: currentItemDuration }]);
     setCurrentCustomIssue('');
     setCurrentItemDuration('technik');
-  };
-
-  const openStep1 = () => {
-    setStep(1);
   };
 
   const confirmStep1 = (e) => {
@@ -235,50 +231,26 @@ export default function VerejnaObjednavkaPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 font-bold">
+    <div className="min-h-screen bg-black text-white font-bold">
 
-      {/* HLAVNÁ STRANA */}
-      <div className="w-full max-w-2xl text-center space-y-10">
-        <div>
-          <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.4em] mb-4">AutoAlma Servis · Svornosti 119, Bratislava</p>
-          <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-none mb-6">
-            Objednajte sa<br /><span className="text-red-600">Online</span>
-          </h1>
-          <p className="text-zinc-500 text-sm font-bold max-w-md mx-auto">
-            Vyberte si servisné úkony, zvoľte termín a my sa o zvyšok postaráme.
-          </p>
-        </div>
-
-        <button
-          onClick={openStep1}
-          className="inline-block bg-red-600 hover:bg-red-500 text-white font-black uppercase text-sm tracking-[0.2em] px-12 py-6 rounded-3xl transition-all hover:scale-105 active:scale-100 shadow-[0_0_60px_rgba(220,38,38,0.3)]"
-        >
-          Objednať sa →
-        </button>
-
-        <div className="flex flex-wrap justify-center gap-6 text-[10px] text-zinc-600 font-black uppercase tracking-widest">
-          <span>📞 0940 449 449</span>
-          <span>📍 Svornosti 119, Bratislava</span>
-          <span>⏰ Po–Pi 7:00–17:00</span>
-        </div>
-      </div>
-
-      {/* KROK 1 — ZÁKLADNÉ ÚDAJE */}
+      {/* KROK 1 — ZÁKLADNÉ ÚDAJE (zobrazí sa ihneď) */}
       {step === 1 && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
+        <div className="min-h-screen flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-8 md:p-12 w-full max-w-lg shadow-2xl">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-black uppercase italic tracking-tighter">
-                Vaše <span className="text-red-600">údaje</span>
+
+            {/* Hlavička */}
+            <div className="mb-8">
+              <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.4em] mb-2">AutoAlma Servis</p>
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-tight">
+                Objednajte sa<br /><span className="text-red-600">Online</span>
               </h2>
-              <button onClick={() => setStep(null)} className="text-zinc-500 hover:text-white text-xl">✕</button>
             </div>
 
             <form onSubmit={confirmStep1} className="space-y-4">
               <div>
                 <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1 block mb-1.5">Meno a priezvisko *</label>
                 <input
-                  required
+                  required autoFocus
                   type="text"
                   value={customerData.name}
                   onChange={e => setCustomerData(p => ({ ...p, name: e.target.value }))}
@@ -325,6 +297,13 @@ export default function VerejnaObjednavkaPage() {
                 Pokračovať k výberu termínu →
               </button>
             </form>
+
+            {/* Kontaktné info */}
+            <div className="mt-8 pt-6 border-t border-zinc-800 flex flex-wrap justify-center gap-4 text-[9px] text-zinc-600 font-black uppercase tracking-widest">
+              <span>📞 0940 449 449</span>
+              <span>📍 Svornosti 119, Bratislava</span>
+              <span>⏰ Po–Pi 7:00–17:00</span>
+            </div>
           </div>
         </div>
       )}
