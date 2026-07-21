@@ -102,9 +102,9 @@ export default function ZapisnikPage() {
         setUploadingVoice(true);
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const fileName = `voice-${Date.now()}.webm`;
-        const { error: upErr } = await supabase.storage.from('voice-notes').upload(fileName, blob);
+        const { error: upErr } = await supabase.storage.from('service-images').upload(`zapisnik/${fileName}`, blob);
         if (!upErr) {
-          const { data: urlData } = supabase.storage.from('voice-notes').getPublicUrl(fileName);
+          const { data: urlData } = supabase.storage.from('service-images').getPublicUrl(`zapisnik/${fileName}`);
           const { data: entry } = await supabase.from('notes_entries').insert([{
             category_id: selectedCat.id, type: 'voice', audio_url: urlData.publicUrl,
           }]).select().single();
