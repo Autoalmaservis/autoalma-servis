@@ -380,6 +380,24 @@ export default function GarazPage() {
         }),
       }).catch(() => {});
 
+      // Potvrdenie zákazníkovi — žiadosť prijatá, čaká na potvrdenie
+      const customerEmail = userProfile?.email || user.email;
+      if (customerEmail) {
+        fetch('/api/send-reservation-confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: customerEmail,
+            customerName: userProfile?.full_name || '',
+            plateNumber: orderingVehicle.license_plate,
+            date: selectedDay,
+            startTime: selectedSlot,
+            issueDescription: finalDescription,
+            type: 'received',
+          }),
+        }).catch(() => {});
+      }
+
       await supabase.from('notifications').insert([{
         user_id: user.id,
         title: '📅 Žiadosť o termín odoslaná',

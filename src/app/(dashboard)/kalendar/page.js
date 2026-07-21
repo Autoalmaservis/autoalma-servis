@@ -51,6 +51,8 @@ export default function KalendarPage() {
   const [clientVehicles, setClientVehicles] = useState([]);
   const searchRef = useRef(null);
 
+  const [pendingEmailConfirm, setPendingEmailConfirm] = useState(null);
+
   const [showClientModal, setShowClientModal] = useState(false);
   const [clientModalStep, setClientModalStep] = useState(1);
   const [clientForm, setClientForm] = useState({
@@ -377,6 +379,17 @@ export default function KalendarPage() {
           type: 'success'
         }]);
       }
+      // Opýtaj sa technika či poslať potvrdzujúci email (len nová rezervácia, nie BLOK, ak je email)
+      if (!editingEventId && !isBlocking && tempCustomerContact.email) {
+        setPendingEmailConfirm({
+          email: tempCustomerContact.email,
+          customerName: selectedClientName || tempCustomerContact.customerName || '',
+          plateNumber: plate,
+          date: selectedDate,
+          startTime,
+          issueDescription,
+        });
+      }
       setIsModalOpen(false);
       setEditingEventId(null);
       setSelectionMode(null);
@@ -495,6 +508,16 @@ export default function KalendarPage() {
     if (!confirm("Naozaj chcete zmazať tento záznam?")) return;
     const { error } = await supabase.from('calendar_events').delete().eq('id', editingEventId);
     if (!error) { setIsModalOpen(false); setEditingEventId(null); fetchData(); }
+  };
+
+  const sendPendingEmail = () => {
+    const data = pendingEmailConfirm;
+    setPendingEmailConfirm(null);
+    fetch('/api/send-reservation-confirmation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).catch(() => {});
   };
 
   if (loading) return <div className="h-screen bg-black flex items-center justify-center text-red-600 font-black animate-pulse uppercase tracking-[0.3em]">Načítavam systém...</div>;
@@ -1088,6 +1111,28 @@ export default function KalendarPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Floating toast — odoslať potvrdzujúci email zákazníkovi */}
+      {pendingEmailConfirm && (
+        <div className="fixed bottom-6 right-6 z-[9999] bg-zinc-900 border border-zinc-700 rounded-2xl p-5 shadow-2xl max-w-sm w-full animate-in slide-in-from-bottom-4">
+          <p className="text-sm font-black uppercase tracking-wider text-white mb-1">Odoslať potvrdzujúci e-mail?</p>
+          <p className="text-xs text-zinc-400 mb-4 truncate">{pendingEmailConfirm.email}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={sendPendingEmail}
+              className="flex-1 bg-red-600 hover:bg-red-500 text-white rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition-all"
+            >
+              Áno, odoslať
+            </button>
+            <button
+              onClick={() => setPendingEmailConfirm(null)}
+              className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition-all"
+            >
+              Nie
+            </button>
           </div>
         </div>
       )}

@@ -97,6 +97,23 @@ export default function VerejnaObjednavkaPage() {
         }),
       }).catch(() => {});
 
+      // Potvrdenie zákazníkovi — žiadosť prijatá, čaká na potvrdenie
+      if (formData.email) {
+        fetch('/api/send-reservation-confirmation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: formData.email,
+            customerName: formData.name || '',
+            plateNumber: formData.plate.toUpperCase(),
+            date: formData.date,
+            startTime: formData.start,
+            issueDescription: formData.description,
+            type: 'received',
+          }),
+        }).catch(() => {});
+      }
+
       trackObjednavkaSubmit();
       alert("Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.");
       setIsModalOpen(false);
