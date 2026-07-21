@@ -192,6 +192,7 @@ export default function DashboardLayout({ children }) {
             {/* TO-DO — stránka */}
             <div className="pt-3 mt-3 border-t border-zinc-900">
               <MenuLink href="/todo" icon="📋" label="To-Do zoznam" collapsed={isCollapsed} active={pathname === '/todo'} badge={todoCount} />
+              <MenuLink href="/zapisnik" icon="📒" label="Zápisník" collapsed={isCollapsed} active={pathname === '/zapisnik'} />
             </div>
           </nav>
 
