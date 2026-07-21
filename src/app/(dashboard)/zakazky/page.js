@@ -276,7 +276,7 @@ export default function ZakazkyZoznamPage() {
                 <div className="flex items-center gap-3">
                   <p className="text-zinc-500 text-[9px] font-black uppercase tracking-[0.2em]">{job.car_brand_model}</p>
                   {job.customer_phone && (
-                    <a href={`tel:${job.customer_phone}`} onClick={e => e.stopPropagation()} className="text-zinc-400 text-[9px] font-black tracking-wider hover:text-red-500 transition-colors">📞 {job.customer_phone}</a>
+                    <a href={`tel:${job.customer_phone}`} onClick={e => e.stopPropagation()} className="text-zinc-400 text-[13px] font-black tracking-wider hover:text-red-500 transition-colors">📞 {job.customer_phone}</a>
                   )}
                 </div>
               </div>

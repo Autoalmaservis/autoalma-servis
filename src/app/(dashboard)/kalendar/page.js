@@ -1115,9 +1115,10 @@ export default function KalendarPage() {
         </div>
       )}
 
-      {/* Floating toast — odoslať potvrdzujúci email zákazníkovi */}
+      {/* Floating dialog — odoslať potvrdzujúci email zákazníkovi */}
       {pendingEmailConfirm && (
-        <div className="fixed bottom-6 right-6 z-[9999] bg-zinc-900 border border-zinc-700 rounded-2xl p-5 shadow-2xl max-w-sm w-full animate-in slide-in-from-bottom-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 shadow-2xl w-full max-w-sm mx-4">
           <p className="text-sm font-black uppercase tracking-wider text-white mb-1">Odoslať potvrdzujúci e-mail?</p>
           <p className="text-xs text-zinc-400 mb-4 truncate">{pendingEmailConfirm.email}</p>
           <div className="flex gap-2">
@@ -1134,6 +1135,7 @@ export default function KalendarPage() {
               Nie
             </button>
           </div>
+        </div>
         </div>
       )}
     </div>

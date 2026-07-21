@@ -911,7 +911,7 @@ export default function DetailZakazkyPage() {
                         <button onClick={() => setEditingPhone(false)} className="text-zinc-500 font-black text-xs">✕</button>
                       </span>
                     ) : (
-                      <button onClick={() => { setPhoneInput(zakazka.customer_phone || ''); setEditingPhone(true); }} className="hover:text-white transition-colors group inline-flex items-center gap-1">
+                      <button onClick={() => { setPhoneInput(zakazka.customer_phone || ''); setEditingPhone(true); }} className="text-lg text-zinc-300 hover:text-white transition-colors group inline-flex items-center gap-1">
                         {zakazka.customer_phone || '—'}
                         <span className="text-zinc-700 group-hover:text-zinc-400 text-[9px] opacity-0 group-hover:opacity-100 transition-opacity">✏️</span>
                       </button>
