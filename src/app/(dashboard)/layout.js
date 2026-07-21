@@ -83,6 +83,8 @@ export default function DashboardLayout({ children }) {
 
   const statusColor = (s) => ({ 'Prebieha': 'text-blue-400', 'Čaká na schválenie': 'text-purple-400', 'Dokončené': 'text-green-400' }[s] || 'text-zinc-400');
 
+  if (pathname === '/zapisnik') return <>{children}</>;
+
   return (
     <div className="flex min-h-screen bg-black font-sans">
 
@@ -192,7 +194,6 @@ export default function DashboardLayout({ children }) {
             {/* TO-DO — stránka */}
             <div className="pt-3 mt-3 border-t border-zinc-900">
               <MenuLink href="/todo" icon="📋" label="To-Do zoznam" collapsed={isCollapsed} active={pathname === '/todo'} badge={todoCount} />
-              <MenuLink href="/zapisnik" icon="📒" label="Zápisník" collapsed={isCollapsed} active={pathname === '/zapisnik'} />
             </div>
           </nav>
 
