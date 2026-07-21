@@ -209,23 +209,16 @@ function PrijemForm() {
     setTasks(newTasks);
   };
 
-  // --- NOVÁ FUNKCIA: GENEROVANIE ČÍSLA ZÁKAZKY ZDDMMRRCCC ---
+  // --- GENEROVANIE ČÍSLA ZÁKAZKY Z{YY}{CCC} ---
   const generateFinalJobNumber = async () => {
-    const teraz = new Date();
-    const dd = String(teraz.getDate()).padStart(2, '0');
-    const mm = String(teraz.getMonth() + 1).padStart(2, '0');
-    const rr = String(teraz.getFullYear()).slice(-2);
-    const dnesnyPrefix = `${dd}${mm}${rr}`;
-
-    const startOfDay = new Date(teraz.getFullYear(), teraz.getMonth(), teraz.getDate()).toISOString();
-    
+    const rr = String(new Date().getFullYear()).slice(-2);
+    const yearPrefix = `Z${rr}`;
     const { count } = await supabase
       .from('job_tickets')
       .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfDay);
-
+      .like('job_number', `${yearPrefix}%`);
     const ccc = String((count || 0) + 1).padStart(3, '0');
-    return `Z${dnesnyPrefix}${ccc}`;
+    return `${yearPrefix}${ccc}`;
   };
 
   const handleSave = async (e) => {

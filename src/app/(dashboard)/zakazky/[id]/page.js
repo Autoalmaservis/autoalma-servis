@@ -506,23 +506,20 @@ export default function DetailZakazkyPage() {
       const datumSplatnosti = new Date();
       datumSplatnosti.setDate(teraz.getDate() + 14);
 
-      const dd = String(teraz.getDate()).padStart(2, '0');
-      const mm = String(teraz.getMonth() + 1).padStart(2, '0');
       const rr = String(teraz.getFullYear()).slice(-2);
-      const dnesnyDátum = `${dd}${mm}${rr}`;
 
-      // Poradové číslo sa počíta globálne (nie denne) — stále rastie
+      // Poradové číslo per rok: F{YY}{CCC} alebo A{YY}{CCC}
       const { count: countOfficial } = await supabase
         .from('invoices').select('*', { count: 'exact', head: true })
-        .not('invoice_number', 'ilike', 'A%');
+        .like('invoice_number', `F${rr}%`);
       const { count: countOdlozene } = await supabase
         .from('invoices').select('*', { count: 'exact', head: true })
-        .ilike('invoice_number', 'A%');
+        .like('invoice_number', `A${rr}%`);
 
       const poradie = isOfficial
         ? String((countOfficial || 0) + 1).padStart(3, '0')
         : String((countOdlozene || 0) + 1).padStart(3, '0');
-      const konecneCislo = isOfficial ? `${dnesnyDátum}${poradie}` : `A${dnesnyDátum}${poradie}`;
+      const konecneCislo = isOfficial ? `F${rr}${poradie}` : `A${rr}${poradie}`;
       
       const invoicePayload = {
         invoice_number: konecneCislo, 

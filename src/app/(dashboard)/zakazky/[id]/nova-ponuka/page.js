@@ -91,11 +91,8 @@ export default function NovaPonukaPage() {
                 }
             }
 
-            const teraz = new Date();
-            const dd = String(teraz.getDate()).padStart(2, '0');
-            const mm = String(teraz.getMonth() + 1).padStart(2, '0');
-            const rr = String(teraz.getFullYear()).slice(-2);
-            const prefix = `P${dd}${mm}${rr}`;
+            const rr = String(new Date().getFullYear()).slice(-2);
+            const prefix = `P${rr}`;
             const { count } = await supabase
                 .from('price_offers')
                 .select('*', { count: 'exact', head: true })
