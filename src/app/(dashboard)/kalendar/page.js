@@ -195,11 +195,12 @@ export default function KalendarPage() {
     const props = ev.extendedProps;
 
     setEditingEventId(ev.id);
-    const isOrder = props.plateNumber && props.plateNumber !== 'BLOK' && props.plateNumber !== '';
-    
+    const isPending = props.isConfirmed === false;
+    const isOrder = isPending || (props.plateNumber && props.plateNumber !== 'BLOK' && props.plateNumber !== '');
+
     if (isOrder) {
       setSelectionMode('order');
-      loadCarDetails(props.plateNumber);
+      if (props.plateNumber && props.plateNumber !== 'BLOK') loadCarDetails(props.plateNumber);
     } else {
       setSelectionMode('block');
       setCarData(null);
@@ -404,8 +405,9 @@ export default function KalendarPage() {
   const openEventFromList = (ev) => {
     const props = ev.extendedProps;
     setEditingEventId(ev.id);
-    const isOrder = props.plateNumber && props.plateNumber !== 'BLOK' && props.plateNumber !== '';
-    if (isOrder) { setSelectionMode('order'); loadCarDetails(props.plateNumber); }
+    const isPending = props.isConfirmed === false;
+    const isOrder = isPending || (props.plateNumber && props.plateNumber !== 'BLOK' && props.plateNumber !== '');
+    if (isOrder) { setSelectionMode('order'); if (props.plateNumber && props.plateNumber !== 'BLOK') loadCarDetails(props.plateNumber); }
     else { setSelectionMode('block'); setCarData(null); }
     setIsConfirmed(props.isConfirmed !== false);
     setTitle(props.pureTitle || ev.title);
