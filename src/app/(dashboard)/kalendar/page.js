@@ -1011,7 +1011,16 @@ export default function KalendarPage() {
                         ) : plate ? (
                           <div className="border-2 border-dashed border-zinc-800 rounded-[3rem] p-8 space-y-4">
                             <p className="text-center text-zinc-600 text-[10px] font-black uppercase tracking-[0.4em]">Vozidlo nie je v DB</p>
-                            <button onClick={() => { setShowClientModal(true); setVehicleForm({ brand: '', model: '', vin: '', year: '', fuel_type: 'Diesel', mileage: '' }); }} className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all">
+                            <button onClick={() => {
+                              setShowClientModal(true);
+                              setVehicleForm({ brand: '', model: '', vin: '', year: '', fuel_type: 'Diesel', mileage: '' });
+                              setClientForm(p => ({
+                                ...p,
+                                full_name: tempCustomerContact.customerName || '',
+                                phone: tempCustomerContact.phone || '',
+                                email: tempCustomerContact.email || '',
+                              }));
+                            }} className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all">
                               + Nový zákazník
                             </button>
                           </div>
