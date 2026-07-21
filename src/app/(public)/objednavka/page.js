@@ -3,15 +3,27 @@ import { useState, useEffect } from 'react';
 import { trackObjednavkaSubmit } from '@/app/lib/analytics';
 import { supabase } from '../../lib/supabase';
 
+const nd = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 export default function VerejnaObjednavkaPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // Kroky: null = hlavná strana, 1 = základné info, 2 = booking modal
+  const [step, setStep] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState({
-    plate: '', phone: '', email: '', description: '',
-  });
+  // Krok 1 — základné info zákazníka
+  const [customerData, setCustomerData] = useState({ name: '', phone: '', email: '', plate: '' });
 
+  // Normy & kategórie
+  const [categories, setCategories] = useState([]);
+  const [norms, setNorms] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedNorms, setSelectedNorms] = useState([]);
+  const [customItems, setCustomItems] = useState([]);
+  const [currentCustomIssue, setCurrentCustomIssue] = useState('');
+  const [currentItemDuration, setCurrentItemDuration] = useState('technik');
+  const [normSearch, setNormSearch] = useState('');
+
+  // Kalendár
   const [availabilityMap, setAvailabilityMap] = useState({});
   const [roleCapacity, setRoleCapacity] = useState({});
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -25,17 +37,21 @@ export default function VerejnaObjednavkaPage() {
     '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00',
   ];
 
-  useEffect(() => {
-    fetchAvailability();
-  }, []);
+  const fetchServiceData = async () => {
+    const [{ data: cats }, { data: nrms }] = await Promise.all([
+      supabase.from('service_categories').select('*').order('name'),
+      supabase.from('service_norms').select('*').order('service_name'),
+    ]);
+    if (cats) setCategories(cats);
+    if (nrms) setNorms(nrms);
+  };
 
   const fetchAvailability = async () => {
     const res = await fetch('/api/availability');
-    if (!res.ok) { setLoading(false); return; }
+    if (!res.ok) return;
     const { availability, roleCapacity: rc } = await res.json();
     setAvailabilityMap(availability);
     setRoleCapacity(rc);
-    setLoading(false);
   };
 
   const fetchDayEvents = async (dateStr) => {
@@ -46,73 +62,162 @@ export default function VerejnaObjednavkaPage() {
         .gte('start_datetime', `${dateStr}T00:00:00`)
         .lte('start_datetime', `${dateStr}T23:59:59`),
     ]);
-    const start = settings?.find(s => s.id === 'work_start')?.value?.split(':')[0] || '07';
-    const end = settings?.find(s => s.id === 'work_end')?.value?.split(':')[0] || '17';
-    setWorkHours({ start, end });
+    setWorkHours({
+      start: settings?.find(s => s.id === 'work_start')?.value?.split(':')[0] || '07',
+      end: settings?.find(s => s.id === 'work_end')?.value?.split(':')[0] || '17',
+    });
     setDayEvents(evts || []);
+  };
+
+  const addNorm = (norm) => {
+    if (selectedNorms.find(n => n.id === norm.id)) return;
+    setSelectedNorms(prev => [...prev, norm]);
+    setNormSearch('');
+  };
+
+  const addCustomItem = () => {
+    if (!currentCustomIssue.trim()) return;
+    setCustomItems(prev => [...prev, { id: Date.now(), description: currentCustomIssue.trim(), duration: currentItemDuration }]);
+    setCurrentCustomIssue('');
+    setCurrentItemDuration('technik');
+  };
+
+  const openStep1 = () => {
+    setStep(1);
+  };
+
+  const confirmStep1 = (e) => {
+    e.preventDefault();
+    // Načítaj dáta pre booking modal
+    fetchServiceData();
+    fetchAvailability();
+    setSelectedNorms([]);
+    setCustomItems([]);
+    setSelectedDay('');
+    setSelectedSlot('');
+    setCalendarMonth(new Date());
+    setStep(2);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (selectedNorms.length === 0 && customItems.length === 0) {
+      alert('Prosím vyberte aspoň jeden servisný úkon alebo pridajte vlastný popis.');
+      return;
+    }
     if (!selectedDay || !selectedSlot) {
       alert('Prosím vyberte deň a čas príchodu.');
       return;
     }
     setSubmitting(true);
 
-    const [h, m] = selectedSlot.split(':').map(Number);
-    const endH = h + 1;
-    const endStr = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-
-    let foundUserId = null;
     try {
-      const { data: vehicleData } = await supabase
-        .from('vehicles')
-        .select('owner_id')
-        .eq('license_plate', formData.plate.toUpperCase())
-        .maybeSingle();
-      if (vehicleData?.owner_id) foundUserId = vehicleData.owner_id;
-    } catch (_) {}
+      // Zostaviť popis požiadavky
+      const normsList = selectedNorms.length > 0
+        ? `SERVISNÉ ÚKONY:\n${selectedNorms.map((p, i) => `${i + 1}. ${p.service_name} (~${p.duration_minutes} min)`).join('\n')}`
+        : '';
+      const customList = customItems.length > 0
+        ? `VLASTNÉ ÚKONY:\n${customItems.map((item, i) => {
+            const dur = item.duration === 'technik' ? 'čas na technikovi'
+              : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`;
+            return `${i + 1}. ${item.description} (${dur})`;
+          }).join('\n')}`
+        : '';
+      const issueDescription = [normsList, customList].filter(Boolean).join('\n\n');
 
-    const { error } = await supabase.from('calendar_events').insert([{
-      title: `ONLINE: ${formData.plate}`,
-      start_datetime: `${selectedDay}T${selectedSlot}:00`,
-      end_datetime: `${selectedDay}T${endStr}:00`,
-      plate_number: formData.plate.toUpperCase(),
-      issue_description: formData.description,
-      customer_phone: formData.phone,
-      customer_email: formData.email,
-      is_confirmed: false,
-      status: 'Čaká na schválenie',
-      user_id: foundUserId,
-    }]);
+      // Čas konca — odhadovaný súčet noriem + 60 min fallback
+      const normMinutes = selectedNorms.reduce((a, n) => a + n.duration_minutes, 0);
+      const customMinutes = customItems.filter(i => i.duration !== 'technik').reduce((a, i) => a + i.duration, 0);
+      const estimatedMinutes = normMinutes + customMinutes || 60;
+      const [h, m] = selectedSlot.split(':').map(Number);
+      const endDate = new Date(`${selectedDay}T${selectedSlot}:00`);
+      endDate.setMinutes(endDate.getMinutes() + estimatedMinutes);
+      const endStr = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
 
-    if (!error) {
+      const plateFinal = customerData.plate.trim().toUpperCase();
+
+      // --- Uloženie/nájdenie zákazníka ---
+      let customerId = null;
+      if (customerData.email) {
+        const { data: byEmail } = await supabase.from('customers').select('id').eq('email', customerData.email).maybeSingle();
+        if (byEmail) customerId = byEmail.id;
+      }
+      if (!customerId && customerData.phone) {
+        const { data: byPhone } = await supabase.from('customers').select('id').eq('phone', customerData.phone).maybeSingle();
+        if (byPhone) customerId = byPhone.id;
+      }
+      if (!customerId) {
+        const { data: newCust } = await supabase.from('customers').insert([{
+          name: customerData.name.trim(),
+          phone: customerData.phone.trim() || null,
+          email: customerData.email.trim() || null,
+          client_type: 'Osoba',
+        }]).select().single();
+        customerId = newCust?.id || null;
+      }
+
+      // --- Uloženie/nájdenie vozidla ---
+      let vehicleId = null;
+      if (plateFinal) {
+        const { data: existingVehicle } = await supabase.from('vehicles').select('id').eq('license_plate', plateFinal).maybeSingle();
+        if (existingVehicle) {
+          vehicleId = existingVehicle.id;
+        } else if (customerId) {
+          const { data: newVehicle } = await supabase.from('vehicles').insert([{
+            owner_id: customerId,
+            license_plate: plateFinal,
+            brand_model: 'Neznáme',
+          }]).select().single();
+          vehicleId = newVehicle?.id || null;
+        }
+      }
+
+      // --- Uloženie calendar_event ---
+      const { error } = await supabase.from('calendar_events').insert([{
+        title: `ONLINE: ${plateFinal || customerData.name}`,
+        start_datetime: `${selectedDay}T${selectedSlot}:00`,
+        end_datetime: `${selectedDay}T${endStr}:00`,
+        plate_number: plateFinal || null,
+        issue_description: issueDescription,
+        customer_name: customerData.name.trim(),
+        customer_phone: customerData.phone.trim() || null,
+        customer_email: customerData.email.trim() || null,
+        is_confirmed: false,
+        status: 'Čaká na schválenie',
+        user_id: customerId,
+        vehicle_id: vehicleId,
+      }]);
+
+      if (error) throw error;
+
+      // Notifikácia servisu
       fetch('/api/notify-booking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          plateNumber: formData.plate.toUpperCase(),
+          customerName: customerData.name.trim(),
+          plateNumber: plateFinal,
           date: selectedDay,
           time: selectedSlot,
-          services: formData.description,
-          phone: formData.phone,
-          email: formData.email,
+          services: issueDescription,
+          phone: customerData.phone,
+          email: customerData.email,
           source: 'Online objednávka',
         }),
       }).catch(() => {});
 
-      if (formData.email) {
+      // Potvrdenie zákazníkovi
+      if (customerData.email) {
         fetch('/api/send-reservation-confirmation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: formData.email,
-            customerName: '',
-            plateNumber: formData.plate.toUpperCase(),
+            email: customerData.email,
+            customerName: customerData.name,
+            plateNumber: plateFinal,
             date: selectedDay,
             startTime: selectedSlot,
-            issueDescription: formData.description,
+            issueDescription,
             type: 'received',
           }),
         }).catch(() => {});
@@ -120,272 +225,406 @@ export default function VerejnaObjednavkaPage() {
 
       trackObjednavkaSubmit();
       alert('Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.');
-      setIsModalOpen(false);
-      setSelectedDay('');
-      setSelectedSlot('');
-      setFormData({ plate: '', phone: '', email: '', description: '' });
-      fetchAvailability();
-    } else {
-      alert('Chyba pri odosielaní: ' + error.message);
+      setStep(null);
+      setCustomerData({ name: '', phone: '', email: '', plate: '' });
+    } catch (err) {
+      alert('Chyba pri odosielaní: ' + err.message);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
-  if (loading) return (
-    <div className="h-screen bg-black flex flex-col items-center justify-center space-y-4">
-      <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
-      <div className="text-red-600 font-black italic animate-pulse tracking-widest uppercase">Načítavam voľné kapacity...</div>
-    </div>
-  );
-
   return (
-    <div className="min-h-screen bg-black text-white p-4 md:p-8 flex flex-col items-center">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 font-bold">
 
-      <header className="w-full max-w-3xl mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-zinc-800 pb-8 gap-4">
+      {/* HLAVNÁ STRANA */}
+      <div className="w-full max-w-2xl text-center space-y-10">
         <div>
-          <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">
-            AutoAlma <span className="text-red-600">Booking</span>
+          <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.4em] mb-4">AutoAlma Servis · Svornosti 119, Bratislava</p>
+          <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-none mb-6">
+            Objednajte sa<br /><span className="text-red-600">Online</span>
           </h1>
-          <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-3">
-            Vyberte si voľný termín a odošlite žiadosť
+          <p className="text-zinc-500 text-sm font-bold max-w-md mx-auto">
+            Vyberte si servisné úkony, zvoľte termín a my sa o zvyšok postaráme.
           </p>
         </div>
-        <div className="text-zinc-600 text-[10px] font-black uppercase tracking-widest bg-zinc-900 px-4 py-2 rounded-full border border-zinc-800">
-          Kontrola kapacít v reálnom čase
+
+        <button
+          onClick={openStep1}
+          className="inline-block bg-red-600 hover:bg-red-500 text-white font-black uppercase text-sm tracking-[0.2em] px-12 py-6 rounded-3xl transition-all hover:scale-105 active:scale-100 shadow-[0_0_60px_rgba(220,38,38,0.3)]"
+        >
+          Objednať sa →
+        </button>
+
+        <div className="flex flex-wrap justify-center gap-6 text-[10px] text-zinc-600 font-black uppercase tracking-widest">
+          <span>📞 0940 449 449</span>
+          <span>📍 Svornosti 119, Bratislava</span>
+          <span>⏰ Po–Pi 7:00–17:00</span>
         </div>
-      </header>
-
-      <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-[3rem] p-6 md:p-10 shadow-[0_0_80px_rgba(220,38,38,0.05)]">
-
-        {/* Legenda */}
-        <div className="flex flex-wrap gap-3 mb-6">
-          <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white">
-            <span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block" /> Voľné
-          </span>
-          <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white">
-            <span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block" /> Čiastočne obsadené
-          </span>
-          <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white">
-            <span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block" /> Takmer plné
-          </span>
-          <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white">
-            <span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block" /> Plné / Víkend
-          </span>
-        </div>
-
-        {/* Navigácia mesiaca */}
-        <div className="flex justify-between items-center mb-4">
-          <button
-            onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-            className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl text-sm hover:bg-zinc-700 transition-all"
-          >←</button>
-          <span className="text-sm font-black uppercase tracking-widest">
-            {calendarMonth.toLocaleString('sk-SK', { month: 'long', year: 'numeric' }).toUpperCase()}
-          </span>
-          <button
-            onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-            className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl text-sm hover:bg-zinc-700 transition-all"
-          >→</button>
-        </div>
-
-        {/* Hlavičky dní */}
-        <div className="grid grid-cols-7 gap-1.5 mb-2">
-          {['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'].map(d => (
-            <div key={d} className="text-center text-[9px] text-zinc-500 font-black">{d}</div>
-          ))}
-        </div>
-
-        {/* Dni mesiaca */}
-        <div className="grid grid-cols-7 gap-1.5 mb-8">
-          {(() => {
-            const year = calendarMonth.getFullYear();
-            const month = calendarMonth.getMonth();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
-            const todayStr = new Date().toISOString().split('T')[0];
-            const cells = [];
-
-            for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />);
-
-            for (let d = 1; d <= daysInMonth; d++) {
-              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-              const dayOfWeek = (firstDay + d - 1) % 7;
-              const isWeekend = dayOfWeek >= 5;
-              const isPast = dateStr <= todayStr;
-              const avail = availabilityMap[dateStr];
-              const isSelected = selectedDay === dateStr;
-              const isFull = avail && avail.free === 0;
-              const isDisabled = isPast || isWeekend || isFull;
-
-              let cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed';
-              if (!isPast && !isWeekend && avail) {
-                const pct = avail.total > 0 ? avail.booked / avail.total : 0;
-                if (isFull)        cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
-                else if (pct >= 0.8) cls = 'bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 cursor-pointer';
-                else if (pct >= 0.4) cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
-                else               cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
-              }
-              if (isSelected) cls = 'bg-red-600 border border-red-500 text-white cursor-pointer shadow-lg shadow-red-600/30';
-
-              cells.push(
-                <button
-                  key={d}
-                  disabled={isDisabled}
-                  onClick={() => { setSelectedDay(dateStr); setSelectedSlot(''); fetchDayEvents(dateStr); }}
-                  className={`rounded-xl flex flex-col items-center justify-center py-2 transition-all ${cls}`}
-                >
-                  <span className="text-[11px] font-black">{d}</span>
-                  {avail && !isPast && !isWeekend && avail.total > 0 && (
-                    <span className="text-[7px] opacity-60 font-bold">{avail.free}/{avail.total}</span>
-                  )}
-                </button>
-              );
-            }
-            return cells;
-          })()}
-        </div>
-
-        {/* Po výbere dňa — hodinový prehľad + výber času */}
-        {selectedDay && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="border-t border-zinc-800 pt-6">
-              <p className="text-[10px] font-black uppercase tracking-widest text-red-600 mb-4">
-                {new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
-              </p>
-
-              {/* Hodinový prehľad obsadenosti */}
-              <div className="bg-black/40 rounded-2xl border border-zinc-800 p-4 space-y-1.5 mb-6">
-                <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
-                {(() => {
-                  const startH = parseInt(workHours.start);
-                  const endH = parseInt(workHours.end);
-                  const total = Object.values(roleCapacity).reduce((a, b) => a + b, 0) || 1;
-                  return Array.from({ length: endH - startH }, (_, i) => {
-                    const h = startH + i;
-                    const slotStart = new Date(`${selectedDay}T${String(h).padStart(2, '0')}:00:00`);
-                    const slotEnd = new Date(`${selectedDay}T${String(h + 1).padStart(2, '0')}:00:00`);
-                    const busy = new Set();
-                    dayEvents.forEach(ev => {
-                      const s = new Date(ev.start_datetime);
-                      const e = new Date(ev.end_datetime);
-                      if (ev.employee_id && s < slotEnd && e > slotStart) busy.add(ev.employee_id);
-                    });
-                    const busyCount = busy.size;
-                    const pct = total > 0 ? busyCount / total : 0;
-                    const free = total - busyCount;
-                    const barColor = pct === 0 ? 'bg-green-600/50' : pct < 0.5 ? 'bg-green-600/30' : pct < 1 ? 'bg-amber-500/50' : 'bg-red-600/40';
-                    return (
-                      <div key={h} className="flex items-center gap-2">
-                        <span className="text-[8px] font-black text-white w-9 shrink-0">{String(h).padStart(2, '0')}:00</span>
-                        <div className="flex-grow h-3 bg-zinc-900 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(5, pct * 100)}%` }} />
-                        </div>
-                        <span className={`text-[8px] font-black w-10 text-right shrink-0 ${pct === 1 ? 'text-red-500' : 'text-white'}`}>
-                          {pct === 1 ? 'PLNÉ' : `${free}/${total}`}
-                        </span>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              {/* Výber času */}
-              <p className="text-[9px] font-black uppercase tracking-widest text-white mb-3">Vyberte čas príchodu</p>
-              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                {timeSlots.map(slot => (
-                  <button
-                    key={slot}
-                    onClick={() => { setSelectedSlot(slot); setIsModalOpen(true); }}
-                    className={`py-3 rounded-xl text-[11px] font-black transition-all border ${
-                      selectedSlot === slot
-                        ? 'bg-red-600 border-red-500 text-white shadow-lg shadow-red-600/30'
-                        : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600 hover:bg-zinc-800'
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!selectedDay && (
-          <p className="text-center text-zinc-600 text-[10px] font-black uppercase tracking-widest py-4">
-            ↑ Vyberte si deň v kalendári
-          </p>
-        )}
       </div>
 
-      {/* Formulárový modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200 font-bold">
-          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-2xl shadow-2xl my-auto relative">
-            <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-zinc-500 hover:text-white transition-all text-xl">✕</button>
-
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">
-                Požiadavka na <span className="text-red-600">Servis</span>
+      {/* KROK 1 — ZÁKLADNÉ ÚDAJE */}
+      {step === 1 && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] p-8 md:p-12 w-full max-w-lg shadow-2xl">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter">
+                Vaše <span className="text-red-600">údaje</span>
               </h2>
-              <div className="inline-block mt-4 bg-zinc-800 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                {selectedDay && new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' })} | {selectedSlot}
-              </div>
+              <button onClick={() => setStep(null)} className="text-zinc-500 hover:text-white text-xl">✕</button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="flex flex-col gap-2">
-                <label className="text-[10px] font-black uppercase text-zinc-600 ml-2 tracking-widest">ŠPZ Vozidla</label>
-                <input
-                  required type="text"
-                  value={formData.plate}
-                  onChange={e => setFormData({ ...formData, plate: e.target.value.toUpperCase() })}
-                  className="bg-black border border-zinc-800 p-6 rounded-3xl text-white font-black text-4xl tracking-widest focus:border-red-600 outline-none uppercase shadow-inner text-center"
-                  placeholder="ŠPZ"
-                />
-                <p className="text-[8px] text-zinc-700 font-black uppercase text-center mt-2 tracking-widest italic">Vaša požiadavka bude spracovaná naším technikom</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase text-zinc-600 ml-2 mb-2 block tracking-widest">Váš Telefón</label>
-                  <input
-                    required type="tel"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"
-                    placeholder="+421 ..."
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black uppercase text-zinc-600 ml-2 mb-2 block tracking-widest">Váš E-mail</label>
-                  <input
-                    required type="email"
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner"
-                    placeholder="meno@domena.sk"
-                  />
-                </div>
-              </div>
-
+            <form onSubmit={confirmStep1} className="space-y-4">
               <div>
-                <label className="text-[10px] font-black uppercase text-zinc-600 ml-2 mb-2 block tracking-widest">Popis problému / Požiadavka</label>
-                <textarea
+                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1 block mb-1.5">Meno a priezvisko *</label>
+                <input
                   required
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white text-sm outline-none focus:border-red-600 h-32 resize-none shadow-inner font-bold"
-                  placeholder="Napr.: Výmena oleja, kontrola bŕzd..."
+                  type="text"
+                  value={customerData.name}
+                  onChange={e => setCustomerData(p => ({ ...p, name: e.target.value }))}
+                  placeholder="Ján Novák"
+                  className="w-full bg-black border border-zinc-800 focus:border-red-600 rounded-2xl px-5 py-4 text-white font-bold outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1 block mb-1.5">Telefón *</label>
+                <input
+                  required
+                  type="tel"
+                  value={customerData.phone}
+                  onChange={e => setCustomerData(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="+421 9XX XXX XXX"
+                  className="w-full bg-black border border-zinc-800 focus:border-red-600 rounded-2xl px-5 py-4 text-white font-bold outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1 block mb-1.5">E-mail</label>
+                <input
+                  type="email"
+                  value={customerData.email}
+                  onChange={e => setCustomerData(p => ({ ...p, email: e.target.value }))}
+                  placeholder="meno@domena.sk"
+                  className="w-full bg-black border border-zinc-800 focus:border-red-600 rounded-2xl px-5 py-4 text-white font-bold outline-none transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-zinc-500 tracking-widest ml-1 block mb-1.5">ŠPZ vozidla</label>
+                <input
+                  type="text"
+                  value={customerData.plate}
+                  onChange={e => setCustomerData(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
+                  placeholder="BA123AB"
+                  className="w-full bg-black border border-zinc-800 focus:border-red-600 rounded-2xl px-5 py-4 text-white font-black uppercase tracking-widest outline-none transition-all text-center text-lg"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full bg-red-600 py-6 rounded-3xl font-black uppercase text-xs tracking-[0.3em] shadow-[0_15px_30px_rgba(220,38,38,0.2)] hover:bg-red-500 hover:scale-[1.01] active:scale-[0.99] transition-all mt-4 disabled:opacity-50"
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.3em] py-5 rounded-2xl transition-all mt-2"
               >
-                {submitting ? 'Odosielam...' : 'Odoslať žiadosť o termín'}
+                Pokračovať k výberu termínu →
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* KROK 2 — BOOKING MODAL (AKO V GARÁŽI) */}
+      {step === 2 && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[95vh] p-6 md:p-10">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter">
+                  Nová <span className="text-red-600">Objednávka</span>
+                </h2>
+                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-wider mt-1">
+                  {customerData.name}{customerData.plate ? ` · ${customerData.plate}` : ''}
+                </p>
+              </div>
+              <button onClick={() => setStep(1)} className="text-zinc-500 hover:text-white text-xl font-bold">← Späť</button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="font-bold italic">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                {/* ĽAVÁ STRANA — VÝBER ÚKONOV */}
+                <div className="space-y-6">
+
+                  {/* 1. SERVISNÉ ÚKONY */}
+                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
+                    <p className="text-[10px] font-black text-red-600 uppercase tracking-widest ml-1">1. Výber servisných úkonov</p>
+
+                    {/* Kategórie */}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button"
+                        onClick={() => setSelectedCategory('')}
+                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === '' ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                        Všetky
+                      </button>
+                      {categories.map(cat => (
+                        <button key={cat.id} type="button"
+                          onClick={() => setSelectedCategory(cat.id === selectedCategory ? '' : cat.id)}
+                          className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === cat.id ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                          {cat.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Vyhľadávanie */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Hľadať úkon... (napr. brzdy, olej, klima)"
+                        value={normSearch}
+                        onChange={e => setNormSearch(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-700 focus:border-red-600 p-4 pl-5 pr-10 rounded-2xl text-white text-xs font-black outline-none transition-all not-italic normal-case placeholder:font-bold placeholder:normal-case placeholder:not-italic placeholder:text-zinc-600"
+                      />
+                      {normSearch
+                        ? <button type="button" onClick={() => setNormSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-sm">✕</button>
+                        : <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-30 text-sm">🔍</span>}
+                    </div>
+
+                    {/* Výsledky hľadania */}
+                    {(selectedCategory || normSearch.trim().length >= 2) && (() => {
+                      const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
+                      const hits = norms.filter(n =>
+                        (!selectedCategory || n.category_id === selectedCategory) &&
+                        (!normSearch.trim() || nd(n.service_name).includes(nd(normSearch))) &&
+                        !selectedNorms.find(s => s.id === n.id)
+                      ).slice(0, 15);
+                      return hits.length === 0
+                        ? <p className="text-center text-zinc-700 text-[10px] italic py-3">Žiadny úkon nenájdený</p>
+                        : (
+                          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                            {hits.map(norm => (
+                              <button key={norm.id} type="button" onClick={() => addNorm(norm)}
+                                className="w-full flex items-center justify-between gap-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-red-600/40 px-4 py-3 rounded-xl transition-all text-left">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {!selectedCategory && (
+                                    <span className="text-[8px] font-black uppercase text-white bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg shrink-0 not-italic">
+                                      {catMap[norm.category_id] || ''}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-black uppercase italic text-white break-words min-w-0">{norm.service_name}</span>
+                                </div>
+                                <span className="text-[10px] text-white shrink-0 not-italic font-bold">~{norm.duration_minutes} min</span>
+                              </button>
+                            ))}
+                          </div>
+                        );
+                    })()}
+
+                    {/* Košík vybratých úkonov */}
+                    <div className="space-y-2">
+                      <p className="text-[9px] text-white uppercase font-black ml-1">Vybrané úkony:</p>
+                      {selectedNorms.length === 0 ? (
+                        <div className="py-5 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
+                      ) : selectedNorms.map(sn => (
+                        <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-3 rounded-xl">
+                          <span className="text-xs font-black uppercase italic text-white break-words min-w-0 mr-3">{sn.service_name}</span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-[10px] font-black text-white not-italic">~{sn.duration_minutes} min</span>
+                            <button type="button" onClick={() => setSelectedNorms(p => p.filter(n => n.id !== sn.id))} className="text-red-500 hover:text-white font-bold not-italic">✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. VLASTNÉ ÚKONY */}
+                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
+                    <p className="text-[10px] font-black text-white uppercase tracking-widest ml-1">2. Vlastné úkony / Iné závady</p>
+
+                    {customItems.length > 0 && (
+                      <div className="space-y-2">
+                        {customItems.map(item => (
+                          <div key={item.id} className="flex justify-between items-center bg-zinc-800/60 border border-zinc-700 p-3 rounded-xl">
+                            <div>
+                              <span className="text-xs font-black uppercase italic text-white">{item.description}</span>
+                              <span className="text-[9px] text-white ml-2 not-italic font-bold">
+                                {item.duration === 'technik' ? '— čas na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`}
+                              </span>
+                            </div>
+                            <button type="button" onClick={() => setCustomItems(p => p.filter(i => i.id !== item.id))} className="text-red-500 hover:text-white font-bold ml-3 not-italic">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      placeholder="Popíšte závadu alebo úkon..."
+                      value={currentCustomIssue}
+                      onChange={e => setCurrentCustomIssue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
+                      className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-red-600 uppercase italic placeholder:normal-case placeholder:not-italic"
+                    />
+
+                    <div>
+                      <p className="text-[8px] font-black text-white uppercase tracking-widest mb-2 ml-1">Odhadovaný čas</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: 'Na technika', value: 'technik' },
+                          { label: '30 min', value: 30 },
+                          { label: '1 hod', value: 60 },
+                          { label: '2 hod', value: 120 },
+                          { label: '3 hod', value: 180 },
+                          { label: '4+ hod', value: 240 },
+                        ].map(opt => (
+                          <button key={opt.value} type="button" onClick={() => setCurrentItemDuration(opt.value)}
+                            className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${currentItemDuration === opt.value ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button type="button" onClick={addCustomItem} disabled={!currentCustomIssue.trim()}
+                      className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-white hover:border-red-600 transition-all disabled:opacity-30 not-italic">
+                      + Pridať úkon
+                    </button>
+                  </div>
+                </div>
+
+                {/* PRAVÁ STRANA — KALENDÁR + ČAS */}
+                <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 flex flex-col font-bold italic uppercase">
+
+                  {/* Legenda */}
+                  <div className="flex flex-wrap gap-3">
+                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
+                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Čiastočne</span>
+                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block"/> Takmer plné</span>
+                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
+                  </div>
+
+                  <p className="text-[9px] text-red-600 uppercase ml-1 font-black tracking-widest">Vyber deň príchodu</p>
+
+                  {/* Navigácia mesiaca */}
+                  <div className="flex justify-between items-center">
+                    <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">←</button>
+                    <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                      {calendarMonth.toLocaleString('sk-SK', { month: 'long', year: 'numeric' }).toUpperCase()}
+                    </span>
+                    <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">→</button>
+                  </div>
+
+                  {/* Hlavičky dní */}
+                  <div className="grid grid-cols-7 gap-1 -mb-2">
+                    {['Po','Ut','St','Št','Pi','So','Ne'].map(d => (
+                      <div key={d} className="text-center text-[8px] text-white font-black">{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Dni mesiaca */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {(() => {
+                      const year = calendarMonth.getFullYear();
+                      const month = calendarMonth.getMonth();
+                      const daysInMonth = new Date(year, month + 1, 0).getDate();
+                      const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const cells = [];
+                      for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />);
+                      for (let d = 1; d <= daysInMonth; d++) {
+                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        const dayOfWeek = (firstDay + d - 1) % 7;
+                        const isWeekend = dayOfWeek >= 5;
+                        const isPast = dateStr <= todayStr;
+                        const avail = availabilityMap[dateStr];
+                        const isSelected = selectedDay === dateStr;
+                        const isFull = avail && avail.free === 0;
+                        const isDisabled = isPast || isWeekend || isFull;
+                        let cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed';
+                        if (!isPast && !isWeekend && avail) {
+                          const pct = avail.total > 0 ? avail.booked / avail.total : 0;
+                          if (isFull)        cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
+                          else if (pct >= 0.8) cls = 'bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 cursor-pointer';
+                          else if (pct >= 0.4) cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
+                          else               cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
+                        }
+                        if (isSelected) cls = 'bg-red-600 border border-red-500 text-white cursor-pointer shadow-lg shadow-red-600/30';
+                        cells.push(
+                          <button key={d} type="button" disabled={isDisabled}
+                            onClick={() => { setSelectedDay(dateStr); setSelectedSlot(''); fetchDayEvents(dateStr); }}
+                            className={`rounded-lg flex flex-col items-center justify-center py-1.5 transition-all ${cls}`}>
+                            <span className="text-[10px] font-black">{d}</span>
+                            {avail && !isPast && !isWeekend && avail.total > 0 && (
+                              <span className="text-[7px] opacity-60 font-bold not-italic normal-case">{avail.free}/{avail.total}</span>
+                            )}
+                          </button>
+                        );
+                      }
+                      return cells;
+                    })()}
+                  </div>
+
+                  {/* Po výbere dňa — hodinový prehľad + výber času */}
+                  {selectedDay && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest">
+                        {new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+                      </p>
+
+                      {/* Hodinový prehľad */}
+                      <div className="bg-black/40 rounded-2xl border border-zinc-800 p-4 space-y-1.5">
+                        <p className="text-[8px] font-black text-white uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
+                        {(() => {
+                          const startH = parseInt(workHours.start);
+                          const endH = parseInt(workHours.end);
+                          const total = Object.values(roleCapacity).reduce((a, b) => a + b, 0) || 1;
+                          return Array.from({ length: endH - startH }, (_, i) => {
+                            const hh = startH + i;
+                            const slotStart = new Date(`${selectedDay}T${String(hh).padStart(2,'0')}:00:00`);
+                            const slotEnd = new Date(`${selectedDay}T${String(hh+1).padStart(2,'0')}:00:00`);
+                            const busy = new Set();
+                            dayEvents.forEach(ev => {
+                              const s = new Date(ev.start_datetime), e = new Date(ev.end_datetime);
+                              if (ev.employee_id && s < slotEnd && e > slotStart) busy.add(ev.employee_id);
+                            });
+                            const pct = total > 0 ? busy.size / total : 0;
+                            const free = total - busy.size;
+                            const barColor = pct === 0 ? 'bg-green-600/50' : pct < 0.5 ? 'bg-green-600/30' : pct < 1 ? 'bg-amber-500/50' : 'bg-red-600/40';
+                            return (
+                              <div key={hh} className="flex items-center gap-2">
+                                <span className="text-[8px] font-black text-white w-9 shrink-0 not-italic">{String(hh).padStart(2,'0')}:00</span>
+                                <div className="flex-grow h-3 bg-zinc-900 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(5, pct * 100)}%` }} />
+                                </div>
+                                <span className={`text-[8px] font-black w-10 text-right shrink-0 not-italic ${pct === 1 ? 'text-red-500' : 'text-white'}`}>
+                                  {pct === 1 ? 'PLNÉ' : `${free}/${total}`}
+                                </span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+
+                      {/* Výber času */}
+                      <div>
+                        <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
+                        <div className="grid grid-cols-4 gap-2">
+                          {timeSlots.map(slot => (
+                            <button key={slot} type="button" onClick={() => setSelectedSlot(slot)}
+                              className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                              {slot}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Odoslať */}
+                  <button
+                    type="submit"
+                    disabled={submitting || !selectedDay || !selectedSlot || (selectedNorms.length === 0 && customItems.length === 0)}
+                    className="mt-auto w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.2em] py-5 rounded-2xl transition-all disabled:opacity-30 not-italic shadow-[0_10px_30px_rgba(220,38,38,0.2)]"
+                  >
+                    {submitting ? 'Odosielam...' : '✓ Odoslať žiadosť o termín'}
+                  </button>
+                </div>
+              </div>
             </form>
           </div>
         </div>
