@@ -922,11 +922,52 @@ export default function KalendarPage() {
                     ) : (
                       <div className="space-y-8 animate-in slide-in-from-right duration-500 font-bold">
                         
-                        {(title?.includes('FLEXI') || title?.includes('ŽIADOSŤ')) && !isConfirmed && (
-                          <div className="bg-amber-600/20 border-2 border-amber-600 p-8 rounded-[3rem] animate-pulse space-y-3 shadow-2xl shadow-amber-600/10">
-                             <p className="text-[10px] font-black text-amber-500 tracking-[0.3em]">⚠️ Akcia vyžaduje pozornosť</p>
-                             <h4 className="text-2xl font-black text-white uppercase italic leading-tight">Zákazník žiada o pridelenie termínu</h4>
-                             <p className="text-xs text-zinc-400 font-bold leading-relaxed uppercase">Skontrolujte voľné kapacity, nastavte presný čas a priraďte mechanika. Po kliknutí na "Uložiť" zazvoní zvonček v garáži.</p>
+                        {!isConfirmed && (
+                          <div className="border-2 border-amber-500 rounded-[3rem] shadow-2xl shadow-amber-600/10 overflow-hidden">
+                            <div className="bg-amber-600/30 px-8 py-4 flex items-center gap-3">
+                              <span className="text-amber-400 text-base animate-pulse">⚠️</span>
+                              <p className="text-[10px] font-black text-amber-400 tracking-[0.3em] uppercase">Čakajúca žiadosť o termín</p>
+                            </div>
+                            <div className="bg-amber-600/10 p-8 space-y-5">
+                              <h4 className="text-3xl font-black text-white uppercase italic leading-tight">
+                                {tempCustomerContact.customerName || selectedClientName || 'Neznámy zákazník'}
+                              </h4>
+                              <div className="space-y-2">
+                                {tempCustomerContact.phone && (
+                                  <a href={`tel:${tempCustomerContact.phone}`} className="flex items-center gap-3 group">
+                                    <span className="text-zinc-500 text-sm">📞</span>
+                                    <span className="text-xl font-black text-white tracking-widest group-hover:text-amber-400 transition-colors">{tempCustomerContact.phone}</span>
+                                  </a>
+                                )}
+                                {tempCustomerContact.email && (
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-zinc-500 text-sm">✉️</span>
+                                    <span className="text-sm text-zinc-300">{tempCustomerContact.email}</span>
+                                  </div>
+                                )}
+                              </div>
+                              {plate && (
+                                <div>
+                                  <span className="bg-white text-black px-4 py-2 rounded-xl font-black text-lg tracking-widest uppercase">{plate}</span>
+                                </div>
+                              )}
+                              {issueDescription && (
+                                <div className="border-t border-amber-600/30 pt-5">
+                                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3">Požadované úkony</p>
+                                  <div className="bg-black/40 rounded-2xl p-4 space-y-1">
+                                    {issueDescription.split('\n').filter(Boolean).map((line, i) => (
+                                      <div key={i} className="flex items-start gap-2">
+                                        <span className="text-amber-500 mt-0.5 text-xs shrink-0">•</span>
+                                        <span className="text-sm text-zinc-300 font-bold">{line}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <p className="text-[9px] text-zinc-500 font-bold leading-relaxed uppercase border-t border-zinc-800 pt-4">
+                                Nastavte presný čas, priraďte mechanika a kliknite „Uložiť a Potvrdiť". Zákazník dostane notifikáciu.
+                              </p>
+                            </div>
                           </div>
                         )}
 
