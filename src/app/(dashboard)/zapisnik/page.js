@@ -2,9 +2,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
+const CAT_COLORS = [
+  { bg: 'bg-red-950/30',    border: 'border-red-800/50',    text: 'text-red-400',    dot: 'bg-red-500' },
+  { bg: 'bg-blue-950/30',   border: 'border-blue-800/50',   text: 'text-blue-400',   dot: 'bg-blue-500' },
+  { bg: 'bg-emerald-950/30',border: 'border-emerald-800/50',text: 'text-emerald-400',dot: 'bg-emerald-500' },
+  { bg: 'bg-amber-950/30',  border: 'border-amber-800/50',  text: 'text-amber-400',  dot: 'bg-amber-500' },
+  { bg: 'bg-purple-950/30', border: 'border-purple-800/50', text: 'text-purple-400', dot: 'bg-purple-500' },
+  { bg: 'bg-pink-950/30',   border: 'border-pink-800/50',   text: 'text-pink-400',   dot: 'bg-pink-500' },
+  { bg: 'bg-cyan-950/30',   border: 'border-cyan-800/50',   text: 'text-cyan-400',   dot: 'bg-cyan-500' },
+  { bg: 'bg-orange-950/30', border: 'border-orange-800/50', text: 'text-orange-400', dot: 'bg-orange-500' },
+];
+
 export default function ZapisnikPage() {
   const [categories, setCategories] = useState([]);
   const [selectedCat, setSelectedCat] = useState(null);
+  const [selectedCatColor, setSelectedCatColor] = useState(CAT_COLORS[0]);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [entryCounts, setEntryCounts] = useState({});
@@ -15,6 +27,8 @@ export default function ZapisnikPage() {
   const [addingType, setAddingType] = useState(null);
   const [newContent, setNewContent] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -41,7 +55,15 @@ export default function ZapisnikPage() {
   };
 
   useEffect(() => { fetchCategories(); }, []);
-  useEffect(() => { if (selectedCat) fetchEntries(selectedCat.id); }, [selectedCat]);
+  useEffect(() => {
+    if (selectedCat) {
+      fetchEntries(selectedCat.id);
+      const idx = categories.findIndex(c => c.id === selectedCat.id);
+      setSelectedCatColor(CAT_COLORS[idx % CAT_COLORS.length]);
+    }
+  }, [selectedCat]);
+
+  const askConfirm = (message, onConfirm) => setConfirmModal({ message, onConfirm });
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
@@ -52,7 +74,6 @@ export default function ZapisnikPage() {
   };
 
   const deleteCategory = async (id) => {
-    if (!confirm('Vymazať kategóriu aj so všetkými položkami?')) return;
     await supabase.from('notes_entries').delete().eq('category_id', id);
     await supabase.from('notes_categories').delete().eq('id', id);
     setCategories(p => p.filter(c => c.id !== id));
@@ -130,32 +151,57 @@ export default function ZapisnikPage() {
   const fmtTime = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('sk-SK', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+  // ── POTVRDZOVACIE OKNO ──
+  const ConfirmModal = () => !confirmModal ? null : (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm px-6">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-xs shadow-2xl space-y-5">
+        <p className="text-white font-black text-base text-center leading-snug">{confirmModal.message}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest transition-all"
+          >Vymazať</button>
+          <button
+            onClick={() => setConfirmModal(null)}
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-black py-3 rounded-xl text-xs uppercase tracking-widest transition-all"
+          >Zrušiť</button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center text-zinc-600 text-xs uppercase tracking-widest font-black">Načítavam...</div>
   );
 
-  // ── CATEGORY DETAIL ──
+  // ── DETAIL KATEGÓRIE ──
   if (selectedCat) {
     const tasks = entries.filter(e => e.type === 'task');
     const texts = entries.filter(e => e.type === 'text');
     const voices = entries.filter(e => e.type === 'voice');
     const doneTasks = tasks.filter(t => t.checked).length;
+    const c = selectedCatColor;
 
     return (
       <div className="min-h-screen bg-black text-white flex flex-col">
-        <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-900 px-4 py-4 flex items-center gap-3">
+        <ConfirmModal />
+        <div className={`sticky top-0 z-10 backdrop-blur-md border-b px-4 py-4 flex items-center gap-3 ${c.bg} ${c.border}`}>
           <button onClick={() => { setSelectedCat(null); setAddingType(null); setNewContent(''); }}
-            className="bg-zinc-900 hover:bg-zinc-800 p-3 rounded-2xl transition-all text-base shrink-0">←</button>
+            className="bg-black/40 hover:bg-black/60 p-3 rounded-2xl transition-all text-base shrink-0">←</button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-black uppercase italic tracking-tighter truncate">{selectedCat.name}</h1>
-            {tasks.length > 0 && <p className="text-[10px] text-zinc-600 uppercase tracking-widest">{doneTasks}/{tasks.length} splnených</p>}
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+              <h1 className={`text-xl font-black uppercase italic tracking-tighter truncate ${c.text}`}>{selectedCat.name}</h1>
+            </div>
+            {tasks.length > 0 && <p className="text-[10px] text-zinc-600 uppercase tracking-widest ml-4">{doneTasks}/{tasks.length} splnených</p>}
           </div>
-          <button onClick={() => deleteCategory(selectedCat.id)} className="text-zinc-700 hover:text-red-600 transition-all p-2 text-sm shrink-0">🗑️</button>
+          <button onClick={() => askConfirm('Vymazať celú kategóriu aj so všetkými položkami?', () => deleteCategory(selectedCat.id))}
+            className="text-zinc-700 hover:text-red-600 transition-all p-2 text-sm shrink-0">🗑️</button>
         </div>
 
         <div className="flex-1 p-4 space-y-6 pb-36">
 
-          {/* ÚLOHY — modrá */}
+          {/* ÚLOHY — modré */}
           {tasks.length > 0 && (
             <div>
               <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3">☑ Úlohy</p>
@@ -167,14 +213,15 @@ export default function ZapisnikPage() {
                       {e.checked && <span className="text-[10px] font-black">✓</span>}
                     </button>
                     <span className={`flex-1 font-bold text-sm leading-snug ${e.checked ? 'line-through text-zinc-600' : 'text-white'}`}>{e.content}</span>
-                    <button onClick={() => deleteEntry(e.id)} className="text-zinc-700 hover:text-red-500 transition-all text-xs shrink-0 p-1">✕</button>
+                    <button onClick={() => askConfirm('Vymazať túto úlohu?', () => deleteEntry(e.id))}
+                      className="text-zinc-600 hover:text-red-500 transition-all text-xs shrink-0 p-1">✕</button>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* TEXT — žltá */}
+          {/* TEXT — jantárové */}
           {texts.length > 0 && (
             <div>
               <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-3">📝 Poznámky</p>
@@ -183,7 +230,8 @@ export default function ZapisnikPage() {
                   <div key={e.id} className="bg-amber-950/20 border border-amber-900/40 p-5 rounded-2xl">
                     <div className="flex items-start gap-2">
                       <p className="flex-1 text-sm text-zinc-200 font-bold whitespace-pre-wrap leading-relaxed">{e.content}</p>
-                      <button onClick={() => deleteEntry(e.id)} className="text-zinc-700 hover:text-red-500 transition-all text-xs shrink-0 p-1 mt-0.5">✕</button>
+                      <button onClick={() => askConfirm('Vymazať túto poznámku?', () => deleteEntry(e.id))}
+                        className="text-zinc-600 hover:text-red-500 transition-all text-xs shrink-0 p-1 mt-0.5">✕</button>
                     </div>
                     <p className="text-[9px] text-zinc-700 mt-3 uppercase">{fmtDate(e.created_at)}</p>
                   </div>
@@ -192,7 +240,7 @@ export default function ZapisnikPage() {
             </div>
           )}
 
-          {/* HLAS — fialová */}
+          {/* HLAS — fialové */}
           {voices.length > 0 && (
             <div>
               <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-3">🎙️ Hlasové záznamy</p>
@@ -202,7 +250,8 @@ export default function ZapisnikPage() {
                     <div className="flex items-center gap-3 mb-3">
                       <span className="text-purple-400 text-lg">🎙️</span>
                       <p className="text-[9px] text-zinc-600 uppercase flex-1">{fmtDate(e.created_at)}</p>
-                      <button onClick={() => deleteEntry(e.id)} className="text-zinc-700 hover:text-red-500 transition-all text-xs p-1">✕</button>
+                      <button onClick={() => askConfirm('Vymazať tento hlasový záznam?', () => deleteEntry(e.id))}
+                        className="text-zinc-600 hover:text-red-500 transition-all text-xs p-1">✕</button>
                     </div>
                     <audio src={e.audio_url} controls className="w-full" />
                   </div>
@@ -231,7 +280,6 @@ export default function ZapisnikPage() {
               </div>
             </div>
           )}
-
           {addingType === 'task' && (
             <div className="flex gap-2">
               <input autoFocus value={newContent} onChange={e => setNewContent(e.target.value)}
@@ -242,7 +290,6 @@ export default function ZapisnikPage() {
               <button onClick={() => { setAddingType(null); setNewContent(''); }} className="bg-zinc-900 text-zinc-400 py-3 px-4 rounded-2xl text-xs transition-all">✕</button>
             </div>
           )}
-
           {addingType === 'voice' && (
             <div className="text-center space-y-3">
               {uploadingVoice ? (
@@ -260,7 +307,6 @@ export default function ZapisnikPage() {
               )}
             </div>
           )}
-
           {!addingType && (
             <div className="flex gap-2">
               <button onClick={() => setAddingType('task')} className="flex-1 bg-blue-950/60 hover:bg-blue-900/60 border border-blue-900/50 text-blue-300 font-black py-4 rounded-2xl text-xs uppercase tracking-widest transition-all">☑ Úloha</button>
@@ -273,9 +319,10 @@ export default function ZapisnikPage() {
     );
   }
 
-  // ── HLAVNÝ ZOZNAM KATEGÓRIÍ ──
+  // ── ZOZNAM KATEGÓRIÍ ──
   return (
     <div className="min-h-screen bg-black text-white">
+      <ConfirmModal />
       <div className="max-w-2xl mx-auto p-4">
         <div className="mb-8 pt-4">
           <h1 className="text-4xl font-black uppercase italic tracking-tighter">Zápisník</h1>
@@ -301,18 +348,20 @@ export default function ZapisnikPage() {
         )}
 
         <div className="space-y-2">
-          {categories.map(cat => (
-            <button key={cat.id} onClick={() => setSelectedCat(cat)}
-              className="w-full bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-700 px-5 py-4 rounded-2xl text-left transition-all active:scale-[0.98] flex items-center justify-between">
-              <h3 className="font-black uppercase italic tracking-tight text-white text-base">{cat.name}</h3>
-              <div className="flex items-center gap-3">
-                {entryCounts[cat.id] > 0 && (
-                  <span className="text-[10px] text-zinc-600 uppercase tracking-widest">{entryCounts[cat.id]}</span>
-                )}
-                <span className="text-zinc-700 text-sm">›</span>
+          {categories.map((cat, idx) => {
+            const c = CAT_COLORS[idx % CAT_COLORS.length];
+            return (
+              <div key={cat.id} className={`flex items-center border rounded-2xl transition-all ${c.bg} ${c.border}`}>
+                <button onClick={() => setSelectedCat(cat)} className="flex-1 px-5 py-4 text-left flex items-center gap-3 active:opacity-70">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
+                  <h3 className={`font-black uppercase italic tracking-tight text-base ${c.text}`}>{cat.name}</h3>
+                  <span className="ml-auto text-zinc-700 text-xs">{entryCounts[cat.id] || 0}</span>
+                </button>
+                <button onClick={() => askConfirm(`Vymazať kategóriu „${cat.name}"?`, () => deleteCategory(cat.id))}
+                  className="px-4 py-4 text-zinc-700 hover:text-red-500 transition-all text-sm shrink-0">🗑️</button>
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
 
         {categories.length === 0 && !showNewCat && (
