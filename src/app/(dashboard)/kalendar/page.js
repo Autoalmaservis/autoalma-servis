@@ -379,8 +379,10 @@ export default function KalendarPage() {
           type: 'success'
         }]);
       }
-      // Opýtaj sa technika či poslať potvrdzujúci email (len nová rezervácia, nie BLOK, ak je email)
-      if (!editingEventId && !isBlocking && tempCustomerContact.email) {
+      // Opýtaj sa technika či poslať potvrdzujúci email
+      // — nová rezervácia, alebo potvrdenie čakajúcej žiadosti zákazníka
+      const isConfirmingPending = editingEventId && !isConfirmed;
+      if (!isBlocking && tempCustomerContact.email && (!editingEventId || isConfirmingPending)) {
         setPendingEmailConfirm({
           email: tempCustomerContact.email,
           customerName: selectedClientName || tempCustomerContact.customerName || '',
