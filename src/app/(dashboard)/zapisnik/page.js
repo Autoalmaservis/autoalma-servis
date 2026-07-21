@@ -52,7 +52,8 @@ export default function ZapisnikPage() {
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
-    const { data } = await supabase.from('notes_categories').insert([{ name: newCatName.trim(), icon: newCatIcon }]).select().single();
+    const { data, error } = await supabase.from('notes_categories').insert([{ name: newCatName.trim(), icon: newCatIcon }]).select().single();
+    if (error) { alert('Chyba: ' + error.message); return; }
     if (data) setCategories(p => [...p, data]);
     setNewCatName(''); setNewCatIcon('📁'); setShowNewCat(false);
   };
