@@ -774,11 +774,22 @@ export default function DetailZakazkyPage() {
               <button onClick={() => setShowChangeCustomer(true)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest">✏️ Zmeniť odberateľa</button>
             </div>
             <h4 className="text-blue-500 uppercase text-[10px] mb-3 font-black tracking-widest italic">Odberateľ</h4>
-            <p className="text-lg font-black italic">{zakazka.company_name || zakazka.customer_name}</p>
-            {/* DOPLNENÁ ADRESA ODBERATEĽA */}
-            <p className="text-xs text-zinc-400">{zakazka.address || zakazka.customer_address || 'Adresa neuvedená'}</p>
-            <p className="text-xs text-zinc-400">{zakazka.zip || ''} {zakazka.city || ''}</p>
-            <div className="mt-4 text-[10px] font-bold text-zinc-500 uppercase leading-relaxed font-black">
+            <p className="text-2xl font-black italic leading-tight">{zakazka.company_name || zakazka.customer_name}</p>
+            {(zakazka.address || zakazka.customer_address) && (
+              <p className="text-sm text-zinc-300 mt-1">{zakazka.address || zakazka.customer_address}</p>
+            )}
+            {(zakazka.zip || zakazka.city) && (
+              <p className="text-sm text-zinc-300">{[zakazka.zip, zakazka.city].filter(Boolean).join(' ')}</p>
+            )}
+            {zakazka.customer_phone && (
+              <a href={`tel:${zakazka.customer_phone}`} className="block text-2xl font-black text-white mt-3 hover:text-red-500 transition-colors tracking-wider">
+                📞 {zakazka.customer_phone}
+              </a>
+            )}
+            {zakazka.customer_email && (
+              <p className="text-sm text-zinc-400 mt-1">{zakazka.customer_email}</p>
+            )}
+            <div className="mt-3 text-[10px] font-bold text-zinc-500 uppercase leading-relaxed">
               <p>IČO: {zakazka.ico || '---'} | DIČ: {zakazka.dic || '---'}</p>
               {zakazka.ic_dph && <p>IČ DPH: {zakazka.ic_dph}</p>}
             </div>
