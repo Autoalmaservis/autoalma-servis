@@ -40,6 +40,7 @@ export default function KalendarPage() {
   const [plannedWork, setPlannedWork] = useState('');
   
   const [tempCustomerContact, setTempCustomerContact] = useState({ phone: '', email: '', customerName: '', userId: null });
+  const [eventCustomerNote, setEventCustomerNote] = useState('');
 
   const [isKnown, setIsKnown] = useState(false);
   const [carData, setCarData] = useState(null);
@@ -115,7 +116,8 @@ export default function KalendarPage() {
           employeeColor: ev.employees?.color || null,
           customerPhone: ev.customer_phone,
           customerEmail: ev.customer_email,
-          userId: ev.user_id
+          userId: ev.user_id,
+          customerNote: ev.customer_note || ''
         }
       };
     });
@@ -243,6 +245,7 @@ export default function KalendarPage() {
       customerName: props.customerName || '',
       userId: props.userId || null
     });
+    setEventCustomerNote(props.customerNote || '');
     setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
 
     setIsModalOpen(true);
@@ -325,7 +328,7 @@ export default function KalendarPage() {
       setEndTime(endStr.split('T')[1].substring(0, 5));
     }
     
-    setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork('');
+    setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork(''); setEventCustomerNote('');
     setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
     setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
     setEndDate('');
@@ -421,6 +424,7 @@ export default function KalendarPage() {
     setIssueDescription(props.issueDescription || '');
     setPlannedWork(props.plannedWork || '');
     setTempCustomerContact({ phone: props.customerPhone || '', email: props.customerEmail || '', customerName: props.customerName || '', userId: props.userId || null });
+    setEventCustomerNote(props.customerNote || '');
     setIsModalOpen(true);
   };
 
@@ -1013,6 +1017,12 @@ export default function KalendarPage() {
                                       </div>
                                     ))}
                                   </div>
+                                </div>
+                              )}
+                              {eventCustomerNote && (
+                                <div className="border-2 border-yellow-400/60 bg-yellow-400/10 rounded-2xl p-4">
+                                  <p className="text-[9px] font-black text-yellow-400 uppercase tracking-widest mb-2">💬 Poznámka zákazníka</p>
+                                  <p className="text-white font-bold text-sm leading-relaxed">{eventCustomerNote}</p>
                                 </div>
                               )}
                               <p className="text-[9px] text-zinc-500 font-bold leading-relaxed uppercase border-t border-zinc-800 pt-4">

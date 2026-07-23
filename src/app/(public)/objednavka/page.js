@@ -88,7 +88,6 @@ export default function VerejnaObjednavkaPage() {
 
   const confirmStep1 = (e) => {
     e.preventDefault();
-    // Načítaj dáta pre booking modal
     fetchServiceData();
     fetchAvailability();
     setSelectedNorms([]);
@@ -101,12 +100,15 @@ export default function VerejnaObjednavkaPage() {
     setStep(2);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const confirmStep2 = () => {
     if (selectedNorms.length === 0 && customItems.length === 0) {
-      const ok = window.confirm('Nevybrali ste žiadny servisný úkon ani vlastný popis závady.\n\nChcete odoslať žiadosť bez opisu problému?');
+      const ok = window.confirm('Nevybrali ste žiadny servisný úkon ani vlastný popis závady.\n\nChcete pokračovať bez opisu problému?');
       if (!ok) return;
     }
+    setStep(3);
+  };
+
+  const handleSubmit = async () => {
     if (!selectedDay || (!selectedSlot && !letTechDecideTime)) {
       alert('Prosím vyberte deň príchodu a čas, alebo zvoľte „Čas určí technik".');
       return;
@@ -319,322 +321,351 @@ export default function VerejnaObjednavkaPage() {
         </div>
       )}
 
-      {/* KROK 2 — BOOKING MODAL (AKO V GARÁŽI) */}
+      {/* KROK 2 — VÝBER ÚKONOV */}
       {step === 2 && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-6xl shadow-2xl overflow-y-auto max-h-[95vh] p-6 md:p-10">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter">
-                  Nová <span className="text-red-600">Objednávka</span>
-                </h2>
-                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-wider mt-1">
-                  {customerData.name}{customerData.plate ? ` · ${customerData.plate}` : ''}
-                </p>
+        <div className="min-h-screen flex flex-col items-center justify-start p-4 py-10">
+          <div className="w-full max-w-2xl">
+
+            {/* Navigácia */}
+            <div className="flex items-center justify-between mb-8">
+              <button onClick={() => setStep(1)} className="text-zinc-500 hover:text-white text-sm font-black uppercase tracking-widest transition-colors">← Späť</button>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-1.5 rounded-full bg-red-600" />
+                <span className="w-7 h-1.5 rounded-full bg-red-600" />
+                <span className="w-7 h-1.5 rounded-full bg-zinc-700" />
               </div>
-              <button onClick={() => setStep(1)} className="text-zinc-500 hover:text-white text-xl font-bold">← Späť</button>
             </div>
 
-            <form onSubmit={handleSubmit} className="font-bold italic">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="mb-8">
+              <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.4em] mb-2">Krok 2 z 3</p>
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-tight">
+                Čo potrebujete <span className="text-red-600">opraviť?</span>
+              </h2>
+              <p className="text-zinc-500 text-xs font-bold mt-1">{customerData.name}{customerData.plate ? ` · ${customerData.plate}` : ''}</p>
+            </div>
 
-                {/* ĽAVÁ STRANA — VÝBER ÚKONOV */}
-                <div className="space-y-6">
+            <div className="space-y-6 font-bold italic">
 
-                  {/* 1. SERVISNÉ ÚKONY */}
-                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
-                    <p className="text-[10px] font-black text-red-600 uppercase tracking-widest ml-1">1. Výber servisných úkonov</p>
+              {/* 1. SERVISNÉ ÚKONY */}
+              <div className="bg-zinc-900/60 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest ml-1 not-italic">1. Výber servisných úkonov</p>
 
-                    {/* Kategórie */}
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button"
-                        onClick={() => setSelectedCategory('')}
-                        className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === '' ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
-                        Všetky
-                      </button>
-                      {categories.map(cat => (
-                        <button key={cat.id} type="button"
-                          onClick={() => setSelectedCategory(cat.id === selectedCategory ? '' : cat.id)}
-                          className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === cat.id ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
-                          {cat.name}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Vyhľadávanie */}
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Hľadať úkon... (napr. brzdy, olej, klima)"
-                        value={normSearch}
-                        onChange={e => setNormSearch(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-700 focus:border-red-600 p-4 pl-5 pr-10 rounded-2xl text-white text-xs font-black outline-none transition-all not-italic normal-case placeholder:font-bold placeholder:normal-case placeholder:not-italic placeholder:text-zinc-600"
-                      />
-                      {normSearch
-                        ? <button type="button" onClick={() => setNormSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-sm">✕</button>
-                        : <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-30 text-sm">🔍</span>}
-                    </div>
-
-                    {/* Výsledky hľadania */}
-                    {(selectedCategory || normSearch.trim().length >= 2) && (() => {
-                      const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
-                      const hits = norms.filter(n =>
-                        (!selectedCategory || n.category_id === selectedCategory) &&
-                        (!normSearch.trim() || nd(n.service_name).includes(nd(normSearch))) &&
-                        !selectedNorms.find(s => s.id === n.id)
-                      ).slice(0, 15);
-                      return hits.length === 0
-                        ? <p className="text-center text-zinc-700 text-[10px] italic py-3">Žiadny úkon nenájdený</p>
-                        : (
-                          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                            {hits.map(norm => (
-                              <button key={norm.id} type="button" onClick={() => addNorm(norm)}
-                                className="w-full flex items-center justify-between gap-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-red-600/40 px-4 py-3 rounded-xl transition-all text-left">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {!selectedCategory && (
-                                    <span className="text-[8px] font-black uppercase text-white bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg shrink-0 not-italic">
-                                      {catMap[norm.category_id] || ''}
-                                    </span>
-                                  )}
-                                  <span className="text-xs font-black uppercase italic text-white break-words min-w-0">{norm.service_name}</span>
-                                </div>
-                                <span className="text-[10px] text-white shrink-0 not-italic font-bold">~{norm.duration_minutes} min</span>
-                              </button>
-                            ))}
-                          </div>
-                        );
-                    })()}
-
-                    {/* Košík vybratých úkonov */}
-                    <div className="space-y-2">
-                      <p className="text-[9px] text-white uppercase font-black ml-1">Vybrané úkony:</p>
-                      {selectedNorms.length === 0 ? (
-                        <div className="py-5 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
-                      ) : selectedNorms.map(sn => (
-                        <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-3 rounded-xl">
-                          <span className="text-xs font-black uppercase italic text-white break-words min-w-0 mr-3">{sn.service_name}</span>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-[10px] font-black text-white not-italic">~{sn.duration_minutes} min</span>
-                            <button type="button" onClick={() => setSelectedNorms(p => p.filter(n => n.id !== sn.id))} className="text-red-500 hover:text-white font-bold not-italic">✕</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* 2. VLASTNÉ ÚKONY */}
-                  <div className="bg-black/40 p-6 rounded-3xl border border-zinc-800 space-y-4">
-                    <p className="text-[10px] font-black text-white uppercase tracking-widest ml-1">2. Vlastné úkony / Iné závady</p>
-
-                    {customItems.length > 0 && (
-                      <div className="space-y-2">
-                        {customItems.map(item => (
-                          <div key={item.id} className="flex justify-between items-center bg-zinc-800/60 border border-zinc-700 p-3 rounded-xl">
-                            <div>
-                              <span className="text-xs font-black uppercase italic text-white">{item.description}</span>
-                              <span className="text-[9px] text-white ml-2 not-italic font-bold">
-                                {item.duration === 'technik' ? '— čas na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`}
-                              </span>
-                            </div>
-                            <button type="button" onClick={() => setCustomItems(p => p.filter(i => i.id !== item.id))} className="text-red-500 hover:text-white font-bold ml-3 not-italic">✕</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <input
-                      type="text"
-                      placeholder="Popíšte závadu alebo úkon..."
-                      value={currentCustomIssue}
-                      onChange={e => setCurrentCustomIssue(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
-                      className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-red-600 uppercase italic placeholder:normal-case placeholder:not-italic"
-                    />
-
-                    <div>
-                      <p className="text-[8px] font-black text-white uppercase tracking-widest mb-2 ml-1">Odhadovaný čas</p>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { label: 'Na technika', value: 'technik' },
-                          { label: '30 min', value: 30 },
-                          { label: '1 hod', value: 60 },
-                          { label: '2 hod', value: 120 },
-                          { label: '3 hod', value: 180 },
-                          { label: '4+ hod', value: 240 },
-                        ].map(opt => (
-                          <button key={opt.value} type="button" onClick={() => setCurrentItemDuration(opt.value)}
-                            className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${currentItemDuration === opt.value ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button type="button" onClick={addCustomItem} disabled={!currentCustomIssue.trim()}
-                      className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-white hover:border-red-600 transition-all disabled:opacity-30 not-italic">
-                      + Pridať úkon
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setSelectedCategory('')}
+                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === '' ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                    Všetky
+                  </button>
+                  {categories.map(cat => (
+                    <button key={cat.id} type="button" onClick={() => setSelectedCategory(cat.id === selectedCategory ? '' : cat.id)}
+                      className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${selectedCategory === cat.id ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                      {cat.name}
                     </button>
-                  </div>
+                  ))}
                 </div>
 
-                {/* PRAVÁ STRANA — KALENDÁR + ČAS */}
-                <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 flex flex-col font-bold italic uppercase">
+                <div className="relative">
+                  <input type="text" placeholder="Hľadať úkon... (napr. brzdy, olej, klima)"
+                    value={normSearch} onChange={e => setNormSearch(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-700 focus:border-red-600 p-4 pl-5 pr-10 rounded-2xl text-white text-xs font-black outline-none transition-all not-italic normal-case placeholder:font-bold placeholder:normal-case placeholder:not-italic placeholder:text-zinc-600"
+                  />
+                  {normSearch
+                    ? <button type="button" onClick={() => setNormSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-sm">✕</button>
+                    : <span className="absolute right-4 top-1/2 -translate-y-1/2 opacity-30 text-sm">🔍</span>}
+                </div>
 
-                  {/* Legenda */}
-                  <div className="flex flex-wrap gap-3">
-                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
-                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Čiastočne</span>
-                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block"/> Takmer plné</span>
-                    <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
-                  </div>
-
-                  <p className="text-[9px] text-red-600 uppercase ml-1 font-black tracking-widest">Vyber deň príchodu</p>
-
-                  {/* Navigácia mesiaca */}
-                  <div className="flex justify-between items-center">
-                    <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">←</button>
-                    <span className="text-[11px] font-black uppercase tracking-widest text-white">
-                      {calendarMonth.toLocaleString('sk-SK', { month: 'long', year: 'numeric' }).toUpperCase()}
-                    </span>
-                    <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">→</button>
-                  </div>
-
-                  {/* Hlavičky dní */}
-                  <div className="grid grid-cols-7 gap-1 -mb-2">
-                    {['Po','Ut','St','Št','Pi','So','Ne'].map(d => (
-                      <div key={d} className="text-center text-[8px] text-white font-black">{d}</div>
-                    ))}
-                  </div>
-
-                  {/* Dni mesiaca */}
-                  <div className="grid grid-cols-7 gap-1">
-                    {(() => {
-                      const year = calendarMonth.getFullYear();
-                      const month = calendarMonth.getMonth();
-                      const daysInMonth = new Date(year, month + 1, 0).getDate();
-                      const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
-                      const todayStr = new Date().toISOString().split('T')[0];
-                      const cells = [];
-                      for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />);
-                      for (let d = 1; d <= daysInMonth; d++) {
-                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                        const dayOfWeek = (firstDay + d - 1) % 7;
-                        const isWeekend = dayOfWeek >= 5;
-                        const isPast = dateStr <= todayStr;
-                        const avail = availabilityMap[dateStr];
-                        const isSelected = selectedDay === dateStr;
-                        const isFull = avail && avail.free === 0;
-                        const isDisabled = isPast || isWeekend || isFull;
-                        let cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed';
-                        if (!isPast && !isWeekend && avail) {
-                          const pct = avail.total > 0 ? avail.booked / avail.total : 0;
-                          if (isFull)        cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
-                          else if (pct >= 0.8) cls = 'bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 cursor-pointer';
-                          else if (pct >= 0.4) cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
-                          else               cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
-                        }
-                        if (isSelected) cls = 'bg-red-600 border border-red-500 text-white cursor-pointer shadow-lg shadow-red-600/30';
-                        cells.push(
-                          <button key={d} type="button" disabled={isDisabled}
-                            onClick={() => { setSelectedDay(dateStr); setSelectedSlot(''); fetchDayEvents(dateStr); }}
-                            className={`rounded-lg flex flex-col items-center justify-center py-1.5 transition-all ${cls}`}>
-                            <span className="text-[10px] font-black">{d}</span>
-                            {avail && !isPast && !isWeekend && avail.total > 0 && (
-                              <span className="text-[7px] opacity-60 font-bold not-italic normal-case">{avail.free}/{avail.total}</span>
-                            )}
+                {(selectedCategory || normSearch.trim().length >= 2) && (() => {
+                  const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
+                  const hits = norms.filter(n =>
+                    (!selectedCategory || n.category_id === selectedCategory) &&
+                    (!normSearch.trim() || nd(n.service_name).includes(nd(normSearch))) &&
+                    !selectedNorms.find(s => s.id === n.id)
+                  ).slice(0, 15);
+                  return hits.length === 0
+                    ? <p className="text-center text-zinc-700 text-[10px] italic py-3">Žiadny úkon nenájdený</p>
+                    : (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {hits.map(norm => (
+                          <button key={norm.id} type="button" onClick={() => addNorm(norm)}
+                            className="w-full flex items-center justify-between gap-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-red-600/40 px-4 py-3 rounded-xl transition-all text-left">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {!selectedCategory && (
+                                <span className="text-[8px] font-black uppercase text-white bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg shrink-0 not-italic">{catMap[norm.category_id] || ''}</span>
+                              )}
+                              <span className="text-xs font-black uppercase italic text-white break-words min-w-0">{norm.service_name}</span>
+                            </div>
+                            <span className="text-[10px] text-white shrink-0 not-italic font-bold">~{norm.duration_minutes} min</span>
                           </button>
-                        );
-                      }
-                      return cells;
-                    })()}
-                  </div>
-
-                  {/* Po výbere dňa — hodinový prehľad + výber času */}
-                  {selectedDay && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                      <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest">
-                        {new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
-                      </p>
-
-                      {/* Hodinový prehľad */}
-                      <div className="bg-black/40 rounded-2xl border border-zinc-800 p-4 space-y-1.5">
-                        <p className="text-[8px] font-black text-white uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
-                        {(() => {
-                          const startH = parseInt(workHours.start);
-                          const endH = parseInt(workHours.end);
-                          const total = Object.values(roleCapacity).reduce((a, b) => a + b, 0) || 1;
-                          return Array.from({ length: endH - startH }, (_, i) => {
-                            const hh = startH + i;
-                            const slotStart = new Date(`${selectedDay}T${String(hh).padStart(2,'0')}:00:00`);
-                            const slotEnd = new Date(`${selectedDay}T${String(hh+1).padStart(2,'0')}:00:00`);
-                            const busy = new Set();
-                            dayEvents.forEach(ev => {
-                              const s = new Date(ev.start_datetime), e = new Date(ev.end_datetime);
-                              if (ev.employee_id && s < slotEnd && e > slotStart) busy.add(ev.employee_id);
-                            });
-                            const pct = total > 0 ? busy.size / total : 0;
-                            const free = total - busy.size;
-                            const barColor = pct === 0 ? 'bg-green-600/50' : pct < 0.5 ? 'bg-green-600/30' : pct < 1 ? 'bg-amber-500/50' : 'bg-red-600/40';
-                            return (
-                              <div key={hh} className="flex items-center gap-2">
-                                <span className="text-[8px] font-black text-white w-9 shrink-0 not-italic">{String(hh).padStart(2,'0')}:00</span>
-                                <div className="flex-grow h-3 bg-zinc-900 rounded-full overflow-hidden">
-                                  <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(5, pct * 100)}%` }} />
-                                </div>
-                                <span className={`text-[8px] font-black w-10 text-right shrink-0 not-italic ${pct === 1 ? 'text-red-500' : 'text-white'}`}>
-                                  {pct === 1 ? 'PLNÉ' : `${free}/${total}`}
-                                </span>
-                              </div>
-                            );
-                          });
-                        })()}
+                        ))}
                       </div>
+                    );
+                })()}
 
-                      {/* Výber času */}
-                      <div>
-                        <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
-                        <div className="grid grid-cols-4 gap-2">
-                          {timeSlots.map(slot => (
-                            <button key={slot} type="button" onClick={() => { setSelectedSlot(slot); setLetTechDecideTime(false); }}
-                              className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot && !letTechDecideTime ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
-                              {slot}
-                            </button>
-                          ))}
-                        </div>
-                        <button type="button" onClick={() => { setLetTechDecideTime(true); setSelectedSlot(''); }}
-                          className={`w-full mt-3 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all not-italic ${letTechDecideTime ? 'bg-zinc-700 border-zinc-500 text-white' : 'bg-zinc-900/60 border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}>
-                          🔧 {letTechDecideTime ? '✓ Čas určí prijímací technik' : 'Čas nech určí prijímací technik'}
-                        </button>
-                        {letTechDecideTime && (
-                          <p className="text-[9px] text-amber-400 font-black uppercase tracking-widest text-center mt-1.5 not-italic">Zavoláme vám a dohodneme presný čas</p>
-                        )}
-                      </div>
-
-                      {/* Poznámka */}
-                      <div>
-                        <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Poznámka (nepovinné)</p>
-                        <textarea
-                          value={customerNote}
-                          onChange={e => setCustomerNote(e.target.value)}
-                          placeholder="Napr. preferovaný čas, špeciálne požiadavky..."
-                          rows={3}
-                          className="w-full bg-zinc-900 border border-zinc-700 focus:border-zinc-500 rounded-2xl px-4 py-3 text-white text-xs font-bold outline-none resize-none not-italic normal-case placeholder:text-zinc-600 placeholder:font-bold placeholder:normal-case placeholder:not-italic"
-                        />
+                <div className="space-y-2">
+                  <p className="text-[9px] text-white uppercase font-black ml-1 not-italic">Vybrané úkony:</p>
+                  {selectedNorms.length === 0 ? (
+                    <div className="py-5 text-center text-zinc-700 uppercase italic text-[10px] border border-dashed border-zinc-800 rounded-2xl">Zoznam je prázdny</div>
+                  ) : selectedNorms.map(sn => (
+                    <div key={sn.id} className="flex justify-between items-center bg-blue-600/10 border border-blue-600/30 p-3 rounded-xl">
+                      <span className="text-xs font-black uppercase italic text-white break-words min-w-0 mr-3">{sn.service_name}</span>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-[10px] font-black text-white not-italic">~{sn.duration_minutes} min</span>
+                        <button type="button" onClick={() => setSelectedNorms(p => p.filter(n => n.id !== sn.id))} className="text-red-500 hover:text-white font-bold not-italic">✕</button>
                       </div>
                     </div>
-                  )}
-
-                  {/* Odoslať */}
-                  <button
-                    type="submit"
-                    disabled={submitting || !selectedDay || (!selectedSlot && !letTechDecideTime)}
-                    className="mt-auto w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.2em] py-5 rounded-2xl transition-all disabled:opacity-30 not-italic shadow-[0_10px_30px_rgba(220,38,38,0.2)]"
-                  >
-                    {submitting ? 'Odosielam...' : '✓ Odoslať žiadosť o termín'}
-                  </button>
+                  ))}
                 </div>
               </div>
-            </form>
+
+              {/* 2. VLASTNÉ ÚKONY */}
+              <div className="bg-zinc-900/60 border border-zinc-800 p-6 rounded-3xl space-y-4">
+                <p className="text-[10px] font-black text-white uppercase tracking-widest ml-1 not-italic">2. Vlastné úkony / Iné závady</p>
+
+                {customItems.length > 0 && (
+                  <div className="space-y-2">
+                    {customItems.map(item => (
+                      <div key={item.id} className="flex justify-between items-center bg-zinc-800/60 border border-zinc-700 p-3 rounded-xl">
+                        <div>
+                          <span className="text-xs font-black uppercase italic text-white">{item.description}</span>
+                          <span className="text-[9px] text-white ml-2 not-italic font-bold">
+                            {item.duration === 'technik' ? '— čas na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`}
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => setCustomItems(p => p.filter(i => i.id !== item.id))} className="text-red-500 hover:text-white font-bold ml-3 not-italic">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input type="text" placeholder="Popíšte závadu alebo úkon..."
+                  value={currentCustomIssue}
+                  onChange={e => setCurrentCustomIssue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
+                  className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-red-600 uppercase italic placeholder:normal-case placeholder:not-italic"
+                />
+
+                <div>
+                  <p className="text-[8px] font-black text-white uppercase tracking-widest mb-2 ml-1 not-italic">Odhadovaný čas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: 'Na technika', value: 'technik' },
+                      { label: '30 min', value: 30 },
+                      { label: '1 hod', value: 60 },
+                      { label: '2 hod', value: 120 },
+                      { label: '3 hod', value: 180 },
+                      { label: '4+ hod', value: 240 },
+                    ].map(opt => (
+                      <button key={opt.value} type="button" onClick={() => setCurrentItemDuration(opt.value)}
+                        className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all border not-italic ${currentItemDuration === opt.value ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button type="button" onClick={addCustomItem} disabled={!currentCustomIssue.trim()}
+                  className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-white hover:border-red-600 transition-all disabled:opacity-30 not-italic">
+                  + Pridať úkon
+                </button>
+              </div>
+            </div>
+
+            <button type="button" onClick={confirmStep2}
+              className="w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.3em] py-5 rounded-2xl transition-all mt-6 shadow-[0_10px_30px_rgba(220,38,38,0.2)]">
+              Pokračovať k výberu termínu →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* KROK 3 — VÝBER TERMÍNU + POZNÁMKA */}
+      {step === 3 && (
+        <div className="min-h-screen flex flex-col items-center justify-start p-4 py-10">
+          <div className="w-full max-w-xl">
+
+            {/* Navigácia */}
+            <div className="flex items-center justify-between mb-8">
+              <button onClick={() => setStep(2)} className="text-zinc-500 hover:text-white text-sm font-black uppercase tracking-widest transition-colors">← Späť</button>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-1.5 rounded-full bg-red-600" />
+                <span className="w-7 h-1.5 rounded-full bg-red-600" />
+                <span className="w-7 h-1.5 rounded-full bg-red-600" />
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.4em] mb-2">Krok 3 z 3</p>
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter">Vyber <span className="text-red-600">termín</span></h2>
+              <p className="text-zinc-500 text-xs font-bold mt-1">{customerData.name}{customerData.plate ? ` · ${customerData.plate}` : ''}</p>
+            </div>
+
+            {/* Súhrn úkonov */}
+            {(selectedNorms.length > 0 || customItems.length > 0) && (
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 mb-6">
+                <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-2">Vybrané úkony</p>
+                <div className="space-y-1">
+                  {selectedNorms.map(sn => (
+                    <div key={sn.id} className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-white">{sn.service_name}</span>
+                      <span className="text-[10px] text-zinc-500 shrink-0 ml-2">~{sn.duration_minutes} min</span>
+                    </div>
+                  ))}
+                  {customItems.map(item => (
+                    <div key={item.id} className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-zinc-300">{item.description}</span>
+                      <span className="text-[10px] text-zinc-500 shrink-0 ml-2">
+                        {item.duration === 'technik' ? 'na technikovi' : item.duration >= 60 ? `~${item.duration / 60} hod` : `~${item.duration} min`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Kalendár + čas + poznámka */}
+            <div className="space-y-6 bg-black/20 p-6 rounded-[2.5rem] border border-zinc-800/50 font-bold italic uppercase">
+
+              <div className="flex flex-wrap gap-3">
+                <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-green-600/40 border border-green-600/50 inline-block"/> Voľné</span>
+                <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-amber-600/40 border border-amber-600/50 inline-block"/> Čiastočne</span>
+                <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-red-600/40 border border-red-600/50 inline-block"/> Takmer plné</span>
+                <span className="flex items-center gap-1.5 text-[8px] font-black uppercase text-white"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700 inline-block"/> Plné / Víkend</span>
+              </div>
+
+              <p className="text-[9px] text-red-600 uppercase ml-1 font-black tracking-widest">Vyber deň príchodu</p>
+
+              <div className="flex justify-between items-center">
+                <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">←</button>
+                <span className="text-[11px] font-black uppercase tracking-widest text-white">
+                  {calendarMonth.toLocaleString('sk-SK', { month: 'long', year: 'numeric' }).toUpperCase()}
+                </span>
+                <button type="button" onClick={() => setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))} className="w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-lg text-xs hover:bg-zinc-700 transition-all">→</button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 -mb-2">
+                {['Po','Ut','St','Št','Pi','So','Ne'].map(d => (
+                  <div key={d} className="text-center text-[8px] text-white font-black">{d}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {(() => {
+                  const year = calendarMonth.getFullYear();
+                  const month = calendarMonth.getMonth();
+                  const daysInMonth = new Date(year, month + 1, 0).getDate();
+                  const firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const cells = [];
+                  for (let i = 0; i < firstDay; i++) cells.push(<div key={`e${i}`} />);
+                  for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dayOfWeek = (firstDay + d - 1) % 7;
+                    const isWeekend = dayOfWeek >= 5;
+                    const isPast = dateStr <= todayStr;
+                    const avail = availabilityMap[dateStr];
+                    const isSelected = selectedDay === dateStr;
+                    const isFull = avail && avail.free === 0;
+                    const isDisabled = isPast || isWeekend || isFull;
+                    let cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 cursor-not-allowed';
+                    if (!isPast && !isWeekend && avail) {
+                      const pct = avail.total > 0 ? avail.booked / avail.total : 0;
+                      if (isFull)          cls = 'bg-zinc-900 border border-zinc-800 text-zinc-700 opacity-40 cursor-not-allowed';
+                      else if (pct >= 0.8) cls = 'bg-red-600/20 border border-red-600/40 text-red-400 hover:bg-red-600/30 cursor-pointer';
+                      else if (pct >= 0.4) cls = 'bg-amber-600/20 border border-amber-600/40 text-amber-400 hover:bg-amber-600/40 cursor-pointer';
+                      else                 cls = 'bg-green-600/20 border border-green-600/40 text-green-400 hover:bg-green-600/40 cursor-pointer';
+                    }
+                    if (isSelected) cls = 'bg-red-600 border border-red-500 text-white cursor-pointer shadow-lg shadow-red-600/30';
+                    cells.push(
+                      <button key={d} type="button" disabled={isDisabled}
+                        onClick={() => { setSelectedDay(dateStr); setSelectedSlot(''); fetchDayEvents(dateStr); }}
+                        className={`rounded-lg flex flex-col items-center justify-center py-1.5 transition-all ${cls}`}>
+                        <span className="text-[10px] font-black">{d}</span>
+                        {avail && !isPast && !isWeekend && avail.total > 0 && (
+                          <span className="text-[7px] opacity-60 font-bold not-italic normal-case">{avail.free}/{avail.total}</span>
+                        )}
+                      </button>
+                    );
+                  }
+                  return cells;
+                })()}
+              </div>
+
+              {selectedDay && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest">
+                    {new Date(selectedDay + 'T12:00:00').toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+                  </p>
+
+                  <div className="bg-black/40 rounded-2xl border border-zinc-800 p-4 space-y-1.5">
+                    <p className="text-[8px] font-black text-white uppercase tracking-widest mb-3">Obsadenosť počas dňa</p>
+                    {(() => {
+                      const startH = parseInt(workHours.start);
+                      const endH = parseInt(workHours.end);
+                      const total = Object.values(roleCapacity).reduce((a, b) => a + b, 0) || 1;
+                      return Array.from({ length: endH - startH }, (_, i) => {
+                        const hh = startH + i;
+                        const slotStart = new Date(`${selectedDay}T${String(hh).padStart(2,'0')}:00:00`);
+                        const slotEnd = new Date(`${selectedDay}T${String(hh+1).padStart(2,'00')}:00:00`);
+                        const busy = new Set();
+                        dayEvents.forEach(ev => {
+                          const s = new Date(ev.start_datetime), e = new Date(ev.end_datetime);
+                          if (ev.employee_id && s < slotEnd && e > slotStart) busy.add(ev.employee_id);
+                        });
+                        const pct = total > 0 ? busy.size / total : 0;
+                        const free = total - busy.size;
+                        const barColor = pct === 0 ? 'bg-green-600/50' : pct < 0.5 ? 'bg-green-600/30' : pct < 1 ? 'bg-amber-500/50' : 'bg-red-600/40';
+                        return (
+                          <div key={hh} className="flex items-center gap-2">
+                            <span className="text-[8px] font-black text-white w-9 shrink-0 not-italic">{String(hh).padStart(2,'0')}:00</span>
+                            <div className="flex-grow h-3 bg-zinc-900 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.max(5, pct * 100)}%` }} />
+                            </div>
+                            <span className={`text-[8px] font-black w-10 text-right shrink-0 not-italic ${pct === 1 ? 'text-red-500' : 'text-white'}`}>
+                              {pct === 1 ? 'PLNÉ' : `${free}/${total}`}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  <div>
+                    <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {timeSlots.map(slot => (
+                        <button key={slot} type="button" onClick={() => { setSelectedSlot(slot); setLetTechDecideTime(false); }}
+                          className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot && !letTechDecideTime ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                          {slot}
+                        </button>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => { setLetTechDecideTime(true); setSelectedSlot(''); }}
+                      className={`w-full mt-3 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all not-italic ${letTechDecideTime ? 'bg-zinc-700 border-zinc-500 text-white' : 'bg-zinc-900/60 border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}>
+                      🔧 {letTechDecideTime ? '✓ Čas určí prijímací technik' : 'Čas nech určí prijímací technik'}
+                    </button>
+                    {letTechDecideTime && (
+                      <p className="text-[9px] text-amber-400 font-black uppercase tracking-widest text-center mt-1.5 not-italic">Zavoláme vám a dohodneme presný čas</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Poznámka (nepovinné)</p>
+                    <textarea
+                      value={customerNote}
+                      onChange={e => setCustomerNote(e.target.value)}
+                      placeholder="Napr. preferovaný čas, špeciálne požiadavky..."
+                      rows={3}
+                      className="w-full bg-zinc-900 border border-zinc-700 focus:border-zinc-500 rounded-2xl px-4 py-3 text-white text-xs font-bold outline-none resize-none not-italic normal-case placeholder:text-zinc-600 placeholder:font-bold placeholder:normal-case placeholder:not-italic"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button type="button" onClick={handleSubmit}
+              disabled={submitting || !selectedDay || (!selectedSlot && !letTechDecideTime)}
+              className="mt-6 w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.2em] py-5 rounded-2xl transition-all disabled:opacity-30 shadow-[0_10px_30px_rgba(220,38,38,0.2)]">
+              {submitting ? 'Odosielam...' : '✓ Odoslať žiadosť o termín'}
+            </button>
           </div>
         </div>
       )}
