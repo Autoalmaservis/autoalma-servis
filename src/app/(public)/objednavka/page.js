@@ -104,8 +104,8 @@ export default function VerejnaObjednavkaPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (selectedNorms.length === 0 && customItems.length === 0) {
-      alert('Prosím vyberte aspoň jeden servisný úkon alebo pridajte vlastný popis.');
-      return;
+      const ok = window.confirm('Nevybrali ste žiadny servisný úkon ani vlastný popis závady.\n\nChcete odoslať žiadosť bez opisu problému?');
+      if (!ok) return;
     }
     if (!selectedDay || (!selectedSlot && !letTechDecideTime)) {
       alert('Prosím vyberte deň príchodu a čas, alebo zvoľte „Čas určí technik".');
@@ -627,7 +627,7 @@ export default function VerejnaObjednavkaPage() {
                   {/* Odoslať */}
                   <button
                     type="submit"
-                    disabled={submitting || !selectedDay || (!selectedSlot && !letTechDecideTime) || (selectedNorms.length === 0 && customItems.length === 0)}
+                    disabled={submitting || !selectedDay || (!selectedSlot && !letTechDecideTime)}
                     className="mt-auto w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.2em] py-5 rounded-2xl transition-all disabled:opacity-30 not-italic shadow-[0_10px_30px_rgba(220,38,38,0.2)]"
                   >
                     {submitting ? 'Odosielam...' : '✓ Odoslať žiadosť o termín'}
