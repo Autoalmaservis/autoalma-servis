@@ -902,6 +902,30 @@ export default function KalendarPage() {
                             </select>
                           </div>
                         </div>
+
+                        {/* MENO KLIENTA + TELEFÓN */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Meno klienta</label>
+                            <input
+                              type="text"
+                              value={selectedClientName}
+                              onChange={e => setSelectedClientName(e.target.value)}
+                              placeholder="Ján Novák..."
+                              className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-4 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Telefón</label>
+                            <input
+                              type="tel"
+                              value={tempCustomerContact.phone}
+                              onChange={e => setTempCustomerContact(p => ({ ...p, phone: e.target.value }))}
+                              placeholder="+421 900 000 000"
+                              className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-4 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 text-sm"
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
 
