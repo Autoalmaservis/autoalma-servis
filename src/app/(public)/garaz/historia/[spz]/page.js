@@ -9,8 +9,8 @@ export default function HistoriaVozidlaPage() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [ticketPhotos, setTicketPhotos] = useState([]); // Stav pre fotky konkrétnej zákazky
-  const [ticketInvoice, setTicketInvoice] = useState(null); // Nový stav pre faktúru
+  const [ticketPhotos, setTicketPhotos] = useState([]);
+  const [ticketInvoice, setTicketInvoice] = useState(null);
 
   useEffect(() => {
     if (spz) fetchHistory();
@@ -27,62 +27,47 @@ export default function HistoriaVozidlaPage() {
   }, [selectedTicket]);
 
   const fetchHistory = async () => {
-    // Načítame zákazky pre danú ŠPZ
     const { data, error } = await supabase
       .from('job_tickets')
       .select('*')
       .eq('plate_number', spz.toUpperCase())
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error(error);
-      setLoading(false);
-      return;
-    }
+    if (error) { console.error(error); setLoading(false); return; }
 
-    // Pre každú zákazku dotiahneme položky (ceny) a úlohy (popis)
     const formattedData = await Promise.all(data.map(async (t) => {
       const { data: items } = await supabase.from('job_items').select('*').eq('job_id', t.id);
       const { data: tasks } = await supabase.from('job_tasks').select('*').eq('job_id', t.id);
-
-      // Výpočet ceny s DPH 23%
       const subtotal = items?.reduce((acc, item) => acc + (Number(item.unit_price) * Number(item.quantity)), 0) || 0;
-      
-      return { 
-        ...t, 
-        job_items: items || [], 
-        job_tasks: tasks || [],
-        total_price: subtotal * 1.23 
-      };
+      return { ...t, job_items: items || [], job_tasks: tasks || [], total_price: subtotal * 1.23 };
     }));
 
-    setTickets(formattedData);
+    // Batch: zisti ktoré zákazky majú oficiálnu / odloženú faktúru (2 queries, nie N+1)
+    const jobIds = formattedData.map(t => t.id);
+    const [{ data: officialInvs }, { data: deferredInvs }] = await Promise.all([
+      supabase.from('invoices').select('job_id, id').in('job_id', jobIds).eq('is_official', true),
+      supabase.from('invoices').select('job_id').in('job_id', jobIds).eq('is_official', false),
+    ]);
+    const officialMap = Object.fromEntries(officialInvs?.map(i => [i.job_id, i.id]) || []);
+    const deferredSet = new Set(deferredInvs?.map(i => i.job_id) || []);
+
+    setTickets(formattedData.map(t => ({
+      ...t,
+      officialInvoiceId: officialMap[t.id] || null,
+      hasDeferred: deferredSet.has(t.id),
+    })));
     setLoading(false);
   };
 
   const fetchTicketDetails = async (jobId) => {
-    // 1. Načítanie fotiek
-    const { data: photos, error: pError } = await supabase
-      .from('job_photos')
-      .select('*')
-      .eq('job_id', jobId)
-      .order('created_at', { ascending: true });
+    const { data: photos } = await supabase
+      .from('job_photos').select('*').eq('job_id', jobId).order('created_at', { ascending: true });
+    if (photos) setTicketPhotos(photos);
 
-    if (!pError && photos) {
-      setTicketPhotos(photos);
-    }
-
-    // 2. Načítanie faktúry spojenej so zákazkou
-    const { data: invoice, error: iError } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('job_id', jobId)
-      .eq('is_official', true)
-      .maybeSingle();
-
-    if (!iError && invoice) {
-      setTicketInvoice(invoice);
-    }
+    // Len oficiálna faktúra — odloženú zobrazujeme len informatívne bez ID/linku
+    const { data: invoice } = await supabase
+      .from('invoices').select('*').eq('job_id', jobId).eq('is_official', true).maybeSingle();
+    if (invoice) setTicketInvoice(invoice);
   };
 
   if (loading) return (
@@ -113,19 +98,18 @@ export default function HistoriaVozidlaPage() {
           <div className="hidden md:grid grid-cols-4 px-8 text-zinc-500 text-[10px] font-black uppercase tracking-widest italic mb-2">
             <span>Dátum</span>
             <span>Popis závady / Úkony</span>
-            <span className="text-right">Suma (DPH)</span>
+            <span className="text-right">Suma</span>
             <span className="text-center">Stav</span>
           </div>
 
           {tickets.length > 0 ? tickets.map((t) => (
-            <div 
-              key={t.id} 
+            <div
+              key={t.id}
               onClick={() => setSelectedTicket(t)}
               className="bg-zinc-900/30 border border-zinc-800 p-6 md:p-8 rounded-[2rem] hover:border-red-600/50 transition-all cursor-pointer grid grid-cols-1 md:grid-cols-4 items-center gap-4 group"
             >
               <div className="text-zinc-400 text-sm italic">
                 {new Date(t.created_at).toLocaleDateString('sk-SK')}
-                {/* PRIDANÉ: Malý výpis čísla zákazky pod dátumom pre lepšiu orientáciu */}
                 <span className="block text-[8px] text-zinc-600 mt-1 font-mono uppercase tracking-widest">{t.job_number || t.id.slice(0, 8)}</span>
               </div>
               <div className="md:col-span-1">
@@ -133,8 +117,14 @@ export default function HistoriaVozidlaPage() {
                   {t.job_tasks?.length > 0 ? t.job_tasks.map(task => task.task_description).join(', ') : 'Servisná prehliadka'}
                 </p>
               </div>
-              <div className="text-right text-xl font-black italic tracking-tighter text-white">
-                {t.total_price.toFixed(2)} €
+              <div className="text-right">
+                {t.officialInvoiceId ? (
+                  <span className="text-xl font-black italic tracking-tighter text-white">{t.total_price.toFixed(2)} €</span>
+                ) : t.hasDeferred ? (
+                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">—</span>
+                ) : (
+                  <span className="text-xl font-black italic tracking-tighter text-white">{t.total_price.toFixed(2)} €</span>
+                )}
               </div>
               <div className="flex justify-center">
                 <span className={`text-[9px] px-4 py-1.5 rounded-full border font-black uppercase ${
@@ -170,19 +160,23 @@ export default function HistoriaVozidlaPage() {
                 </p>
               </div>
 
-              {/* TLAČIDLO NA FAKTÚRU */}
               <div className="text-right">
                 {ticketInvoice ? (
-                  <button 
+                  <button
                     onClick={() => window.open(`/faktura-online/${ticketInvoice.id}`, '_blank')}
                     className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/40 transition-all flex items-center gap-2 mb-2"
                   >
                     📄 Faktúra {ticketInvoice.invoice_number}
                   </button>
+                ) : selectedTicket.hasDeferred ? (
+                  <div className="flex items-center gap-2 justify-end mb-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 border border-zinc-700 px-3 py-1.5 rounded-xl">
+                      📋 Servisný prehľad
+                    </span>
+                  </div>
                 ) : (
                   <p className="text-[10px] text-zinc-600 uppercase font-black mb-1 text-right">Evidenčné číslo</p>
                 )}
-                {/* UPRAVENÉ: Tu sa teraz zobrazuje job_number z databázy alebo záloha */}
                 <p className="text-2xl font-black italic text-right text-red-600">
                   {selectedTicket.job_number || `#${selectedTicket.id.slice(0, 8).toUpperCase()}`}
                 </p>
@@ -245,24 +239,47 @@ export default function HistoriaVozidlaPage() {
                 )}
               </div>
 
-              {/* --- STĽPEC 2: ROZPIS CIEN --- */}
+              {/* --- STĽPEC 2: MATERIÁL A PRÁCA --- */}
               <div className="space-y-6">
-                <h3 className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Materiál a položky</h3>
+                <h3 className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] italic ml-2">Materiál a práca</h3>
                 <div className="bg-black/20 rounded-[2.5rem] border border-zinc-800 overflow-hidden shadow-inner">
-                  <div className="divide-y divide-zinc-800/50">
-                    {selectedTicket.job_items?.map((item) => (
-                      <div key={item.id} className="flex justify-between p-5 text-[10px]">
-                        <span className="text-zinc-400">{item.name}</span>
-                        <span className="text-white font-black">{item.quantity} {item.unit} • {Number(item.unit_price).toFixed(2)} €</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="p-8 bg-zinc-800/20 text-right">
-                    <p className="text-zinc-500 text-[10px] uppercase font-black mb-2 tracking-widest">Finálna suma s DPH</p>
-                    <p className="text-5xl font-black italic tracking-tighter text-white">
-                      {selectedTicket.total_price.toFixed(2)} €
-                    </p>
-                  </div>
+                  {selectedTicket.job_items?.length > 0 ? (
+                    <div className="divide-y divide-zinc-800/50">
+                      {selectedTicket.job_items.map((item) => (
+                        <div key={item.id} className="flex justify-between items-center p-5 text-[10px] gap-4">
+                          <div className="min-w-0">
+                            <span className="text-zinc-300 font-bold block">{item.name}</span>
+                            <span className="text-zinc-600 text-[9px] uppercase">{item.type}</span>
+                          </div>
+                          <span className="text-zinc-400 shrink-0 font-black">
+                            {item.quantity} {item.unit}
+                            {/* Cenu zobrazujeme iba ak je vystavená oficiálna faktúra */}
+                            {!selectedTicket.hasDeferred && (
+                              <span className="text-white ml-2">• {Number(item.unit_price).toFixed(2)} €</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-zinc-700 text-[10px] uppercase italic">Žiadne položky</div>
+                  )}
+                  {/* Súčet len pri oficiálnej faktúre */}
+                  {!selectedTicket.hasDeferred && selectedTicket.total_price > 0 && (
+                    <div className="p-8 bg-zinc-800/20 text-right">
+                      <p className="text-zinc-500 text-[10px] uppercase font-black mb-2 tracking-widest">Finálna suma s DPH</p>
+                      <p className="text-5xl font-black italic tracking-tighter text-white">
+                        {selectedTicket.total_price.toFixed(2)} €
+                      </p>
+                    </div>
+                  )}
+                  {selectedTicket.hasDeferred && (
+                    <div className="p-5 bg-zinc-900/40 border-t border-zinc-800">
+                      <p className="text-[9px] text-zinc-600 uppercase font-black tracking-widest text-center">
+                        Informatívny servisný prehľad — nie je daňovým dokladom
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
