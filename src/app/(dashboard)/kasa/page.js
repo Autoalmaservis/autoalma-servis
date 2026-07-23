@@ -179,14 +179,14 @@ export default function KasaPage() {
             <p className="text-[10px] text-red-500 uppercase tracking-widest font-black mb-1">Výdaje</p>
             <p className="text-3xl font-black text-red-400 italic">−{totalVydaj.toFixed(2)} €</p>
           </div>
-          <div className={`rounded-[1.5rem] p-5 text-center border ${zostatok >= 0 ? 'bg-white/5 border-white/10' : 'bg-orange-600/10 border-orange-600/30'}`}>
-            <p className={`text-[10px] uppercase tracking-widest font-black mb-1 ${zostatok >= 0 ? 'text-zinc-400' : 'text-orange-400'}`}>Zostatok v kase</p>
-            <p className={`text-3xl font-black italic ${zostatok >= 0 ? 'text-white' : 'text-orange-400'}`}>{zostatok >= 0 ? '+' : ''}{zostatok.toFixed(2)} €</p>
-          </div>
-          <div className={`rounded-[1.5rem] p-5 text-center border ${zarobene >= 0 ? 'bg-blue-600/10 border-blue-600/30' : 'bg-orange-600/10 border-orange-600/30'}`}>
-            <p className={`text-[10px] uppercase tracking-widest font-black mb-1 ${zarobene >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>Zarobené tento týždeň</p>
-            <p className={`text-3xl font-black italic ${zarobene >= 0 ? 'text-blue-300' : 'text-orange-400'}`}>{zarobene >= 0 ? '+' : ''}{zarobene.toFixed(2)} €</p>
+          <div className={`rounded-[1.5rem] p-5 text-center border ${zarobene >= 0 ? 'bg-white/5 border-white/10' : 'bg-orange-600/10 border-orange-600/30'}`}>
+            <p className={`text-[10px] uppercase tracking-widest font-black mb-1 ${zarobene >= 0 ? 'text-zinc-400' : 'text-orange-400'}`}>Zarobené tento týždeň</p>
+            <p className={`text-3xl font-black italic ${zarobene >= 0 ? 'text-white' : 'text-orange-400'}`}>{zarobene >= 0 ? '+' : ''}{zarobene.toFixed(2)} €</p>
             {preneseny > 0 && <p className="text-[9px] text-zinc-600 mt-1 font-black uppercase tracking-widest">bez {preneseny.toFixed(0)} € prenosu</p>}
+          </div>
+          <div className={`rounded-[1.5rem] p-5 text-center border ${zostatok >= 0 ? 'bg-blue-600/10 border-blue-600/30' : 'bg-orange-600/10 border-orange-600/30'}`}>
+            <p className={`text-[10px] uppercase tracking-widest font-black mb-1 ${zostatok >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>Zostatok v kase</p>
+            <p className={`text-3xl font-black italic ${zostatok >= 0 ? 'text-blue-300' : 'text-orange-400'}`}>{zostatok >= 0 ? '+' : ''}{zostatok.toFixed(2)} €</p>
           </div>
         </div>
 
