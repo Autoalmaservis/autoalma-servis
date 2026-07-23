@@ -535,6 +535,7 @@ export default function KalendarPage() {
         .fc-button-active { background: #dc2626 !important; border-color: #dc2626 !important; }
         .fc-view-harness { background: #09090b; border-radius: 2rem; overflow: hidden; border: 1px solid #18181b; }
         .fc-event { border-radius: 12px !important; padding: 6px !important; font-weight: 700 !important; cursor: pointer; border: none !important; }
+        .fc-blok-strip { width: 26px !important; min-width: 26px !important; max-width: 26px !important; border-radius: 8px !important; padding: 4px 2px !important; overflow: hidden; }
         .fc-timegrid-slot { height: 3em !important; }
         input[type="date"]::-webkit-calendar-picker-indicator {
           filter: invert(1);
@@ -606,10 +607,36 @@ export default function KalendarPage() {
             eventDrop={handleEventChange}
             eventResize={handleEventChange}
             eventClick={handleEventClick}
+            eventContent={(arg) => {
+              if (!arg.event.extendedProps.isBlocked) return undefined;
+              const worker = arg.event.extendedProps.employeeName || '';
+              const reason = arg.event.extendedProps.pureTitle || '';
+              const label = [worker, reason].filter(Boolean).join(' – ');
+              return (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '2px 0' }}>
+                  <span style={{
+                    writingMode: 'vertical-lr',
+                    transform: 'rotate(180deg)',
+                    fontSize: '8px',
+                    fontWeight: '900',
+                    color: 'rgba(255,255,255,0.85)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    maxHeight: '100%',
+                    lineHeight: 1.2,
+                  }}>
+                    🚫 {label}
+                  </span>
+                </div>
+              );
+            }}
             eventDidMount={(info) => {
               if (info.event.extendedProps.isBlocked) {
                 const color = info.event.extendedProps.employeeColor || '#dc2626';
                 info.el.style.setProperty('border', `2px solid ${color}`, 'important');
+                info.el.classList.add('fc-blok-strip');
               }
             }}
             slotMinTime={`${workStart}:00`}
