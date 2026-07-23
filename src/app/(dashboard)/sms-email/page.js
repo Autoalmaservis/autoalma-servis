@@ -11,7 +11,7 @@ const TABS = [
 ];
 
 function fmtDt(iso) {
-  return new Date(iso).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function ChannelToggle({ channel, onChange }) {
