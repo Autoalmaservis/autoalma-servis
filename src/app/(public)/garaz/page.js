@@ -955,12 +955,25 @@ export default function GarazPage() {
                     </div>
                   )}
 
-                  <input type="text" placeholder="Popíšte závadu alebo úkon..."
-                    value={currentCustomIssue}
-                    onChange={e => setCurrentCustomIssue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
-                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-xs outline-none focus:border-red-600 uppercase italic placeholder:normal-case placeholder:not-italic"
-                  />
+                  <div className="relative">
+                    <input type="text" placeholder="Popíšte závadu alebo úkon..."
+                      value={currentCustomIssue}
+                      onChange={e => setCurrentCustomIssue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomItem(); } }}
+                      className={`w-full bg-zinc-900 p-4 rounded-2xl text-white text-xs outline-none uppercase italic placeholder:normal-case placeholder:not-italic transition-all ${currentCustomIssue.trim() ? 'border-2 border-red-500 pr-24' : 'border border-zinc-800 focus:border-zinc-600'}`}
+                    />
+                    {currentCustomIssue.trim() && (
+                      <button type="button" onClick={addCustomItem}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-red-600 hover:bg-red-500 text-white text-[9px] font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all not-italic whitespace-nowrap">
+                        + Pridať
+                      </button>
+                    )}
+                  </div>
+                  {currentCustomIssue.trim() && (
+                    <p className="text-[9px] text-amber-400 font-black uppercase tracking-widest not-italic animate-pulse">
+                      ↵ Enter alebo kliknite „+ Pridať" — úkon sa ešte nepridá automaticky
+                    </p>
+                  )}
 
                   <div>
                     <p className="text-[8px] font-black text-white uppercase tracking-widest mb-2 ml-1 not-italic">Odhadovaný čas</p>
@@ -982,7 +995,7 @@ export default function GarazPage() {
                   </div>
 
                   <button type="button" onClick={addCustomItem} disabled={!currentCustomIssue.trim()}
-                    className="w-full py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-zinc-700 text-white hover:border-red-600 transition-all disabled:opacity-30 not-italic">
+                    className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all not-italic ${currentCustomIssue.trim() ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20' : 'border border-zinc-800 text-zinc-600 cursor-not-allowed'}`}>
                     + Pridať úkon
                   </button>
                 </div>
