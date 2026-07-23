@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
+const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 const CAT_COLORS = [
   { bg: 'bg-red-950/30',    border: 'border-red-800/50',    text: 'text-red-400',    dot: 'bg-red-500' },
   { bg: 'bg-blue-950/30',   border: 'border-blue-800/50',   text: 'text-blue-400',   dot: 'bg-blue-500' },
@@ -29,6 +31,8 @@ export default function ZapisnikPage() {
   const [saving, setSaving] = useState(false);
 
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
+  const [search, setSearch] = useState('');
+  const [allEntries, setAllEntries] = useState([]);
 
   const [editingCatId, setEditingCatId] = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
@@ -46,9 +50,10 @@ export default function ZapisnikPage() {
     const { data: cats } = await supabase.from('notes_categories').select('*').order('created_at');
     setCategories(cats || []);
     if (cats?.length) {
-      const { data: counts } = await supabase.from('notes_entries').select('category_id').in('category_id', cats.map(c => c.id));
+      const { data: allE } = await supabase.from('notes_entries').select('*').in('category_id', cats.map(c => c.id)).order('created_at');
+      setAllEntries(allE || []);
       const map = {};
-      (counts || []).forEach(r => { map[r.category_id] = (map[r.category_id] || 0) + 1; });
+      (allE || []).forEach(r => { map[r.category_id] = (map[r.category_id] || 0) + 1; });
       setEntryCounts(map);
     }
     setLoading(false);
@@ -101,6 +106,7 @@ export default function ZapisnikPage() {
     }]).select().single();
     if (data) {
       setEntries(p => [...p, data]);
+      setAllEntries(p => [...p, data]);
       setEntryCounts(p => ({ ...p, [selectedCat.id]: (p[selectedCat.id] || 0) + 1 }));
     }
     setNewContent(''); setAddingType(null); setSaving(false);
@@ -116,11 +122,13 @@ export default function ZapisnikPage() {
     if (!editingEntryContent.trim()) return;
     await supabase.from('notes_entries').update({ content: editingEntryContent.trim() }).eq('id', id);
     setEntries(p => p.map(e => e.id === id ? { ...e, content: editingEntryContent.trim() } : e));
+    setAllEntries(p => p.map(e => e.id === id ? { ...e, content: editingEntryContent.trim() } : e));
     setEditingEntryId(null);
   };
 
   const deleteEntry = async (id) => {
     setEntries(p => p.filter(e => e.id !== id));
+    setAllEntries(p => p.filter(e => e.id !== id));
     setEntryCounts(p => ({ ...p, [selectedCat.id]: Math.max(0, (p[selectedCat.id] || 1) - 1) }));
     await supabase.from('notes_entries').delete().eq('id', id);
   };
@@ -383,16 +391,97 @@ export default function ZapisnikPage() {
   }
 
   // ── ZOZNAM KATEGÓRIÍ ──
+  const q = nd(search.trim());
+  const searchResults = q
+    ? allEntries
+        .filter(e => e.type !== 'voice' && nd(e.content || '').includes(q))
+        .map(e => {
+          const idx = categories.findIndex(c => c.id === e.category_id);
+          return { ...e, cat: categories[idx], color: CAT_COLORS[idx % CAT_COLORS.length] };
+        })
+    : [];
+  const catNameHits = q ? categories.filter(c => nd(c.name).includes(q)) : [];
+
+  const highlight = (text) => {
+    if (!q) return text;
+    const parts = text.split(new RegExp(`(${search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+    return parts.map((p, i) => nd(p) === q
+      ? <mark key={i} className="bg-red-600/40 text-red-200 rounded px-0.5">{p}</mark>
+      : p
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       <ConfirmModal />
       <div className="max-w-2xl mx-auto p-4">
-        <div className="mb-8 pt-4">
+        <div className="mb-6 pt-4">
           <h1 className="text-4xl font-black uppercase italic tracking-tighter">Zápisník</h1>
           <p className="text-zinc-600 text-xs uppercase tracking-widest mt-1">Osobné poznámky a úlohy</p>
         </div>
 
-        {showNewCat ? (
+        {/* SEARCH */}
+        <div className="relative mb-4">
+          <input
+            type="text"
+            placeholder="Hľadať vo všetkých kategóriách..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 focus:border-red-600 rounded-2xl px-5 py-3.5 text-white font-bold text-sm outline-none transition-all pr-10"
+          />
+          {search ? (
+            <button onClick={() => setSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors text-sm">✕</button>
+          ) : (
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-700 text-sm">🔍</span>
+          )}
+        </div>
+
+        {/* VÝSLEDKY HĽADANIA */}
+        {q && (
+          <div className="mb-6 space-y-2">
+            {searchResults.length === 0 && catNameHits.length === 0 && (
+              <div className="text-center py-10 text-zinc-700 uppercase text-xs tracking-widest font-black">Žiadne výsledky pre „{search}"</div>
+            )}
+            {catNameHits.length > 0 && (
+              <>
+                <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-2">Kategórie</p>
+                {catNameHits.map((cat, idx) => {
+                  const c = CAT_COLORS[categories.findIndex(c2 => c2.id === cat.id) % CAT_COLORS.length];
+                  return (
+                    <button key={cat.id} onClick={() => { setSelectedCat(cat); setSearch(''); }}
+                      className={`w-full flex items-center gap-3 px-5 py-4 border rounded-2xl text-left transition-all ${c.bg} ${c.border} hover:opacity-80`}>
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
+                      <span className={`font-black uppercase italic tracking-tight text-base ${c.text}`}>{highlight(cat.name)}</span>
+                      <span className="ml-auto text-zinc-600 text-xs">{entryCounts[cat.id] || 0} položiek</span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+            {searchResults.length > 0 && (
+              <>
+                <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mt-4 mb-2">Položky ({searchResults.length})</p>
+                {searchResults.map(e => {
+                  const c = e.color || CAT_COLORS[0];
+                  const typeIcon = e.type === 'task' ? '☑' : '📝';
+                  return (
+                    <button key={e.id} onClick={() => { setSelectedCat(e.cat); setSearch(''); }}
+                      className="w-full text-left bg-zinc-950 border border-zinc-800 hover:border-zinc-600 p-4 rounded-2xl transition-all">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${c.text}`}>{e.cat?.name}</span>
+                        <span className="ml-auto text-zinc-700 text-xs">{typeIcon}</span>
+                      </div>
+                      <p className="text-sm text-zinc-300 font-bold leading-snug line-clamp-2">{highlight(e.content)}</p>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+
+        {!q && (showNewCat ? (
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 mb-4 space-y-3">
             <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addCategory()}
@@ -408,9 +497,9 @@ export default function ZapisnikPage() {
             className="w-full border-2 border-dashed border-zinc-800 hover:border-red-600 text-zinc-600 hover:text-red-500 font-black py-4 rounded-2xl text-xs uppercase tracking-widest transition-all mb-4">
             + Nová kategória
           </button>
-        )}
+        ))}
 
-        <div className="space-y-2">
+        {!q && <div className="space-y-2">
           {categories.map((cat, idx) => {
             const c = CAT_COLORS[idx % CAT_COLORS.length];
             const isEditing = editingCatId === cat.id;
@@ -449,11 +538,12 @@ export default function ZapisnikPage() {
           })}
         </div>
 
-        {categories.length === 0 && !showNewCat && (
-          <div className="text-center py-20 text-zinc-800 uppercase text-xs tracking-widest font-black">
-            Zatiaľ žiadne kategórie.<br />Vytvorte prvú.
-          </div>
-        )}
+          {categories.length === 0 && !showNewCat && (
+            <div className="text-center py-20 text-zinc-800 uppercase text-xs tracking-widest font-black">
+              Zatiaľ žiadne kategórie.<br />Vytvorte prvú.
+            </div>
+          )}
+        </div>}
       </div>
     </div>
   );
