@@ -728,10 +728,33 @@ export default function DetailZakazkyPage() {
     }
   };
 
+  const restoreWarehouseStock = async (itemName, qty) => {
+    try {
+      const { data: rows } = await supabase
+        .from('warehouse_items')
+        .select('id, quantity')
+        .ilike('name', itemName.trim())
+        .limit(1);
+      const wItem = rows?.[0];
+      if (!wItem) return;
+      const newQty = parseFloat(wItem.quantity) + qty;
+      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', wItem.id);
+      fetchWarehouseItems();
+    } catch (err) {
+      console.error('Chyba vrátenia skladu:', err.message);
+    }
+  };
+
   const deleteItem = async (itemId) => {
     if (!await ensureAuth()) return;
+    const item = items.find(i => i.id === itemId);
     const { error } = await supabase.from('job_items').delete().eq('id', itemId);
-    if (!error) fetchItems();
+    if (!error) {
+      if (item && item.type === 'Materiál') {
+        await restoreWarehouseStock(item.name, parseFloat(item.quantity) || 1);
+      }
+      fetchItems();
+    }
   };
 
   const calculateTotal = () => {
