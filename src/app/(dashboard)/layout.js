@@ -185,7 +185,7 @@ export default function DashboardLayout({ children }) {
 
             <div className="pt-4 mt-4 border-t border-zinc-900">
               {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
-              <MenuLink href="/databaza" icon="🗄️" label="Databáza prác/dielov" collapsed={isCollapsed} active={pathname === '/databaza'} />
+              <MenuLink href="/databaza" icon="🗄️" label="Práce / Diely / Úkony" collapsed={isCollapsed} active={pathname === '/databaza'} />
               <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
               <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
               <MenuLink href="/kasa" icon="💵" label="Kasa" collapsed={isCollapsed} active={pathname === '/kasa'} />

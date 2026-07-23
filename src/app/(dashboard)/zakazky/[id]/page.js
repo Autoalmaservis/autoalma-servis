@@ -293,7 +293,7 @@ export default function DetailZakazkyPage() {
   };
 
   const fetchWarehouseItems = async () => {
-    const { data } = await supabase.from('warehouse_items').select('id, name, part_number, sale_price, unit, quantity').order('name');
+    const { data } = await supabase.from('warehouse_items').select('id, name, part_number, sale_price, unit, quantity, created_at').order('created_at', { ascending: false });
     if (data) setWarehouseItems(data);
   };
 
@@ -619,6 +619,29 @@ export default function DetailZakazkyPage() {
     setNewItemVatStr((price * 1.23).toFixed(2));
     setShowItemDropdown(false);
     setWarehouseModalOpen(false);
+  };
+
+  const selectWarehouseItems = async (selectedList) => {
+    await ensureAuth();
+    for (const { item: w, qty } of selectedList) {
+      const price = parseFloat(w.sale_price) || 0;
+      const quantity = parseFloat(qty) || 1;
+      const { error } = await supabase.from('job_items').insert([{
+        job_id: id,
+        name: w.name,
+        quantity,
+        unit: w.unit || 'ks',
+        unit_price: price,
+        type: 'Materiál',
+        worker_id: null,
+        mechanic_hours: null,
+        mechanic_splits: null,
+      }]);
+      if (!error) {
+        decreaseWarehouseStock(w.name, quantity);
+      }
+    }
+    fetchItems();
   };
 
   const selectCatalogItem = (c) => {
@@ -1334,7 +1357,16 @@ export default function DetailZakazkyPage() {
                                   {filtered.map(u => (
                                     <button key={u.id} type="button"
                                       onMouseDown={() => {
-                                        setNewItem(prev => ({ ...prev, name: u.name, unit_price: parseFloat(u.unit_price), unit: u.unit || 'ks' }));
+                                        setNewItem(prev => ({
+                                          ...prev,
+                                          name: u.name,
+                                          unit_price: parseFloat(u.unit_price),
+                                          unit: u.unit || 'ks',
+                                          mechanic_hours: u.mechanic_hours ? String(u.mechanic_hours) : prev.mechanic_hours,
+                                          mechanic_splits: u.mechanic_hours
+                                            ? prev.mechanic_splits.map((s, i) => i === 0 ? { ...s, hours: String(u.mechanic_hours) } : s)
+                                            : prev.mechanic_splits,
+                                        }));
                                         setNewItemVatStr((parseFloat(u.unit_price) * 1.23).toFixed(2));
                                         setUkonSearch(u.name);
                                         setShowItemDropdown(false);
@@ -1495,7 +1527,7 @@ export default function DetailZakazkyPage() {
       {warehouseModalOpen && (
         <WarehouseModal
           warehouseItems={warehouseItems}
-          onSelect={selectWarehouseItem}
+          onSelectMultiple={selectWarehouseItems}
           onClose={() => setWarehouseModalOpen(false)}
         />
       )}

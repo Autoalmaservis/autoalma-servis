@@ -23,7 +23,7 @@ export default function DatabazaPage() {
   const [ukonActions, setUkonActions] = useState([]);
   const [ukonLoading, setUkonLoading] = useState(false);
   const [ukonSearch, setUkonSearch] = useState('');
-  const [newUkon, setNewUkon] = useState({ name: '', unit_price: '', unit: 'ks' });
+  const [newUkon, setNewUkon] = useState({ name: '', unit_price: '', unit: 'ks', mechanic_hours: '' });
   const [newUkonVatStr, setNewUkonVatStr] = useState('');
   const [editUkon, setEditUkon] = useState(null);
   const [editUkonVatStr, setEditUkonVatStr] = useState('');
@@ -110,6 +110,7 @@ export default function DatabazaPage() {
       name: newUkon.name.trim(),
       unit_price: parseFloat(newUkon.unit_price),
       unit: newUkon.unit || 'ks',
+      mechanic_hours: newUkon.mechanic_hours ? parseFloat(newUkon.mechanic_hours) : null,
     }]);
     setNewUkon({ name: '', unit_price: '', unit: 'ks' });
     setNewUkonVatStr('');
@@ -122,6 +123,7 @@ export default function DatabazaPage() {
       name: editUkon.name.trim(),
       unit_price: parseFloat(editUkon.unit_price),
       unit: editUkon.unit || 'ks',
+      mechanic_hours: editUkon.mechanic_hours ? parseFloat(editUkon.mechanic_hours) : null,
     }).eq('id', editUkon.id);
     setEditUkon(null);
     fetchUkony();
@@ -1435,6 +1437,15 @@ export default function DatabazaPage() {
                   placeholder="ks"
                   className="w-full bg-black border border-zinc-800 focus:border-purple-600 p-3 rounded-xl text-white font-black text-center outline-none transition-all" />
               </div>
+              <div className="w-28">
+                <label className="text-[9px] font-black uppercase tracking-widest text-yellow-600 block mb-2">Čas mech. (hod)</label>
+                <input type="number" min="0" step="0.25"
+                  value={newUkon.mechanic_hours}
+                  onChange={e => setNewUkon({ ...newUkon, mechanic_hours: e.target.value })}
+                  onFocus={e => e.target.select()}
+                  placeholder="0.5"
+                  className="w-full bg-black border border-yellow-800/50 focus:border-yellow-500 p-3 rounded-xl text-yellow-300 font-black text-center outline-none transition-all" />
+              </div>
               <button type="submit" className="bg-purple-600 hover:bg-purple-500 text-white font-black py-3 px-6 rounded-xl uppercase text-[10px] tracking-widest transition-all whitespace-nowrap">
                 + Pridať
               </button>
@@ -1469,7 +1480,13 @@ export default function DatabazaPage() {
                       <span className="text-amber-300 font-black text-sm">{(parseFloat(u.unit_price) * VAT).toFixed(2)} €</span>
                     </div>
                     <span className="text-zinc-500 font-black text-sm uppercase">{u.unit}</span>
-                    <button onClick={() => { setEditUkon({ ...u, unit_price: String(u.unit_price) }); setEditUkonVatStr((parseFloat(u.unit_price) * VAT).toFixed(2)); }}
+                    {u.mechanic_hours && (
+                      <div className="text-right">
+                        <span className="text-[8px] text-yellow-600 block uppercase font-black">mech. čas</span>
+                        <span className="text-yellow-400 font-black text-sm">{u.mechanic_hours} hod</span>
+                      </div>
+                    )}
+                    <button onClick={() => { setEditUkon({ ...u, unit_price: String(u.unit_price), mechanic_hours: u.mechanic_hours != null ? String(u.mechanic_hours) : '' }); setEditUkonVatStr((parseFloat(u.unit_price) * VAT).toFixed(2)); }}
                       className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-white hover:text-black transition-all text-xs">✏️</button>
                     <button onClick={() => deleteUkon(u.id)}
                       className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100 text-xs">🗑️</button>
@@ -1518,6 +1535,14 @@ export default function DatabazaPage() {
                   <input type="text" value={editUkon.unit} onChange={e => setEditUkon({ ...editUkon, unit: e.target.value })}
                     className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white font-black outline-none focus:border-purple-600 text-center text-xl transition-all" />
                 </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-yellow-600 ml-2 tracking-widest block mb-2">Čas mechanika (hod)</label>
+                <input type="number" min="0" step="0.25" value={editUkon.mechanic_hours}
+                  onChange={e => setEditUkon({ ...editUkon, mechanic_hours: e.target.value })}
+                  onFocus={e => e.target.select()}
+                  placeholder="napr. 0.5 = 30 minút, 1 = 1 hodina"
+                  className="w-full bg-zinc-900 border border-yellow-800/50 p-4 rounded-2xl text-yellow-300 font-black outline-none focus:border-yellow-500 text-center text-xl transition-all" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => { setEditUkon(null); setEditUkonVatStr(''); }}
