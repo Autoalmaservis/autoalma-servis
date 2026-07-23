@@ -74,6 +74,7 @@ export default function DetailZakazkyPage() {
     worker_id: '',
     mechanic_hours: '',
     mechanic_splits: [{ worker_id: '', hours: '' }],
+    warehouseItemId: null,
   });
 
   // --- REAL-TIME ODBERY (Postrážené, aby nič nevypadlo) ---
@@ -616,7 +617,7 @@ export default function DetailZakazkyPage() {
 
   const selectWarehouseItem = (w) => {
     const price = parseFloat(w.sale_price) || 0;
-    setNewItem(prev => ({ ...prev, name: w.name, unit_price: price, unit: w.unit || 'ks', type: 'Materiál' }));
+    setNewItem(prev => ({ ...prev, name: w.name, unit_price: price, unit: w.unit || 'ks', type: 'Materiál', warehouseItemId: w.id }));
     setNewItemVatStr((price * 1.23).toFixed(2));
     setShowItemDropdown(false);
     setWarehouseModalOpen(false);
@@ -639,7 +640,7 @@ export default function DetailZakazkyPage() {
         mechanic_splits: null,
       }]);
       if (!error) {
-        await decreaseWarehouseStock(w.name, quantity);
+        await decreaseWarehouseStock(w.id, quantity);
       }
     }
     fetchItems();
@@ -652,13 +653,15 @@ export default function DetailZakazkyPage() {
     setShowItemDropdown(false);
   };
 
-  const decreaseWarehouseStock = async (itemName, qty) => {
+  const decreaseWarehouseStock = async (warehouseId, qty) => {
+    if (!warehouseId) return;
     try {
-      const { data: wItem } = await supabase
+      const { data: wItem, error: fetchErr } = await supabase
         .from('warehouse_items')
         .select('id, quantity')
-        .ilike('name', itemName.trim())
+        .eq('id', warehouseId)
         .maybeSingle();
+      if (fetchErr) { console.error('Sklad SELECT chyba:', fetchErr.message); return; }
       if (!wItem) return;
       const newQty = Math.max(0, parseFloat(wItem.quantity) - qty);
       const { error: updateErr } = await supabase
@@ -667,6 +670,7 @@ export default function DetailZakazkyPage() {
         .eq('id', wItem.id);
       if (updateErr) {
         console.error('Sklad UPDATE chyba:', updateErr.message);
+        alert(`Chyba pri odpočte skladu: ${updateErr.message}`);
         return;
       }
       fetchWarehouseItems();
@@ -715,9 +719,9 @@ export default function DetailZakazkyPage() {
       mechanic_splits: (isPraca || isUkon) && validSplits.length > 1 ? validSplits : null,
     }]);
     if (!error) {
-      if (!isPraca && !isUkon) await decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
+      if (!isPraca && !isUkon) await decreaseWarehouseStock(newItem.warehouseItemId, parseFloat(itemToSave.quantity));
       const keepWorker = newItem.mechanic_splits[0]?.worker_id || '';
-      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: keepWorker, mechanic_hours: isUkon ? newItem.mechanic_hours : '', mechanic_splits: [{ worker_id: keepWorker, hours: '' }] });
+      setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: keepWorker, mechanic_hours: isUkon ? newItem.mechanic_hours : '', mechanic_splits: [{ worker_id: keepWorker, hours: '' }], warehouseItemId: null });
       setUkonSearch('');
       setShowAddItemModal(false);
       fetchItems();
