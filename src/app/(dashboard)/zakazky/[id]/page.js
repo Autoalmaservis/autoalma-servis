@@ -639,7 +639,7 @@ export default function DetailZakazkyPage() {
         mechanic_splits: null,
       }]);
       if (!error) {
-        decreaseWarehouseStock(w.name, quantity);
+        await decreaseWarehouseStock(w.name, quantity);
       }
     }
     fetchItems();
@@ -661,14 +661,24 @@ export default function DetailZakazkyPage() {
         .maybeSingle();
       if (!wItem) return;
       const newQty = Math.max(0, parseFloat(wItem.quantity) - qty);
-      await supabase.from('warehouse_items').update({ quantity: newQty }).eq('id', wItem.id);
-      await supabase.from('warehouse_movements').insert([{
+      const { error: updateErr } = await supabase
+        .from('warehouse_items')
+        .update({ quantity: newQty })
+        .eq('id', wItem.id);
+      if (updateErr) {
+        console.error('Sklad UPDATE chyba:', updateErr.message);
+        return;
+      }
+      fetchWarehouseItems();
+      supabase.from('warehouse_movements').insert([{
         item_id: wItem.id,
         movement_type: 'out',
         quantity: qty,
         job_id: id,
         note: `Zákazka ${zakazka?.plate_number || ''}`,
-      }]);
+      }]).then(({ error }) => {
+        if (error) console.warn('warehouse_movements (non-critical):', error.message);
+      });
     } catch (err) {
       console.error('Chyba skladu:', err.message);
     }
@@ -705,7 +715,7 @@ export default function DetailZakazkyPage() {
       mechanic_splits: (isPraca || isUkon) && validSplits.length > 1 ? validSplits : null,
     }]);
     if (!error) {
-      if (!isPraca && !isUkon) decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
+      if (!isPraca && !isUkon) await decreaseWarehouseStock(itemToSave.name, parseFloat(itemToSave.quantity));
       const keepWorker = newItem.mechanic_splits[0]?.worker_id || '';
       setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: keepWorker, mechanic_hours: isUkon ? newItem.mechanic_hours : '', mechanic_splits: [{ worker_id: keepWorker, hours: '' }] });
       setUkonSearch('');
