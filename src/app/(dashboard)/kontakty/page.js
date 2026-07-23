@@ -10,7 +10,6 @@
   ALTER TABLE contacts_categories ENABLE ROW LEVEL SECURITY;
   CREATE POLICY "auth full access" ON contacts_categories FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-  -- Nová štruktúra: entry = pomenovaný záznam, fields = JSONB pole [{label, value}]
   CREATE TABLE contacts_entries (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     category_id uuid REFERENCES contacts_categories(id) ON DELETE CASCADE,
@@ -20,8 +19,6 @@
   );
   -- Ak tabuľka contacts_entries už existuje zo starej verzie:
   -- ALTER TABLE contacts_entries ADD COLUMN IF NOT EXISTS fields jsonb DEFAULT '[]'::jsonb;
-  -- ALTER TABLE contacts_entries ALTER COLUMN name SET NOT NULL; -- ak name je nullable
-  -- (stĺpce type/value/username/password/notes môžeš nechať alebo odstrániť)
   ALTER TABLE contacts_entries ENABLE ROW LEVEL SECURITY;
   CREATE POLICY "auth full access" ON contacts_entries FOR ALL TO authenticated USING (true) WITH CHECK (true);
 */
@@ -84,34 +81,206 @@ function FieldValue({ label, value, revealed, onToggle }) {
   return <span className="text-zinc-300 break-words whitespace-pre-wrap">{value}</span>;
 }
 
-export default function KontaktyPage() {
-  const [categories, setCategories]   = useState([]);
-  const [entries, setEntries]         = useState([]);
-  const [allEntries, setAllEntries]   = useState([]);
-  const [activeCat, setActiveCat]     = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [search, setSearch]           = useState('');
+// ─── EntryCard je definovaný MIMO KontaktyPage ───────────────────────────────
+// Dôvod: vnorený komponent by sa remontoval pri každom re-renderi rodiča
+// a input by strácal focus po každom znaku.
+function EntryCard({ entry, onUpdateFields, onDeleteEntry, onSaveName }) {
+  const [editingName, setEditingName] = useState(false);
+  const [editName,    setEditName]    = useState('');
 
-  const [newCatName, setNewCatName]   = useState('');
-  const [addingCat, setAddingCat]     = useState(false);
-  const [editingCatId, setEditingCatId]     = useState(null);
+  const [addingField, setAddingField] = useState(false);
+  const [newLabel,    setNewLabel]    = useState('');
+  const [newValue,    setNewValue]    = useState('');
+
+  const [editIdx,   setEditIdx]   = useState(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editValue, setEditValue] = useState('');
+
+  const [showPw,  setShowPw]  = useState({});
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+
+  const fields = entry.fields || [];
+
+  const doAddField = () => {
+    const label = newLabel.trim(), value = newValue.trim();
+    if (!label || !value) return;
+    onUpdateFields(entry.id, [...fields, { label, value }]);
+    setNewLabel(''); setNewValue(''); setAddingField(false);
+  };
+
+  const doSaveField = () => {
+    const label = editLabel.trim(), value = editValue.trim();
+    if (!label || !value) return;
+    onUpdateFields(entry.id, fields.map((f, i) => i === editIdx ? { label, value } : f));
+    setEditIdx(null);
+  };
+
+  const doDeleteField = idx => {
+    onUpdateFields(entry.id, fields.filter((_, i) => i !== idx));
+  };
+
+  const doDrop = toIdx => {
+    if (dragIdx === null || dragIdx === toIdx) return;
+    const arr = [...fields];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(toIdx, 0, moved);
+    onUpdateFields(entry.id, arr);
+    setDragIdx(null); setDragOver(null);
+  };
+
+  const doSaveName = () => {
+    const name = editName.trim();
+    if (!name) return;
+    onSaveName(entry.id, name);
+    setEditingName(false);
+  };
+
+  return (
+    <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden group/card">
+
+      {/* Hlavička záznamu */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-zinc-800/60">
+        {editingName ? (
+          <>
+            <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') doSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+              className="flex-1 bg-black border border-zinc-700 px-3 py-1.5 rounded-xl text-white font-black text-sm outline-none focus:border-red-600" />
+            <button onClick={doSaveName} className="text-xs text-green-400 font-black hover:text-green-300 shrink-0">OK</button>
+            <button onClick={() => setEditingName(false)} className="text-xs text-zinc-600 font-black hover:text-zinc-400 shrink-0">✕</button>
+          </>
+        ) : (
+          <>
+            <h3 className="flex-1 text-sm font-black uppercase tracking-widest text-white truncate">{entry.name}</h3>
+            <div className="opacity-0 group-hover/card:opacity-100 flex gap-1 transition-opacity shrink-0">
+              <button onClick={() => { setEditingName(true); setEditName(entry.name); }}
+                className="w-7 h-7 flex items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-800 transition-all text-sm">✏️</button>
+              <button onClick={() => onDeleteEntry(entry)}
+                className="w-7 h-7 flex items-center justify-center rounded-xl text-red-500 hover:bg-red-600 hover:text-white transition-all text-xs font-black">✕</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Polia */}
+      <div className="divide-y divide-zinc-800/40">
+        {fields.map((f, idx) => {
+          const isEditingThis = editIdx === idx;
+          const isDragTarget  = dragOver === idx && dragIdx !== idx;
+          return (
+            <div key={idx}
+              draggable={!isEditingThis}
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={e => { e.preventDefault(); setDragOver(idx); }}
+              onDrop={e => { e.preventDefault(); doDrop(idx); }}
+              onDragEnd={() => { setDragIdx(null); setDragOver(null); }}
+              className={`group/field transition-colors ${isDragTarget ? 'border-t-2 border-red-500 bg-red-600/5' : 'hover:bg-zinc-900/40'} ${dragIdx === idx ? 'opacity-30' : ''}`}>
+
+              {isEditingThis ? (
+                <div className="px-5 py-4 space-y-2.5">
+                  <div className="flex flex-wrap gap-1.5 mb-1">
+                    {FIELD_SUGGESTIONS.map(s => (
+                      <button key={s} type="button" onClick={() => setEditLabel(s)}
+                        className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${editLabel === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'}`}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                  <input autoFocus value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                    placeholder="Názov poľa"
+                    className="w-full bg-black border border-zinc-700 px-3 py-2 rounded-xl text-white font-bold text-xs outline-none focus:border-zinc-500" />
+                  <input value={editValue} onChange={e => setEditValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') doSaveField(); if (e.key === 'Escape') setEditIdx(null); }}
+                    placeholder="Hodnota"
+                    className="w-full bg-black border border-zinc-700 px-3 py-2 rounded-xl text-white font-bold text-xs outline-none focus:border-zinc-500 font-mono" />
+                  <div className="flex gap-3">
+                    <button onClick={() => setEditIdx(null)} className="text-xs text-zinc-600 font-black hover:text-zinc-400">Zrušiť</button>
+                    <button onClick={doSaveField} className="text-xs text-green-400 font-black hover:text-green-300">Uložiť</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 px-4 py-3">
+                  <span className="text-zinc-700 hover:text-zinc-400 cursor-grab active:cursor-grabbing text-sm mt-1 select-none shrink-0 px-1" title="Presunúť">⠿</span>
+                  <span className="text-base shrink-0 mt-0.5 select-none">{fieldIcon(f.label)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-0.5">{f.label}</p>
+                    <div className="text-sm font-bold leading-snug">
+                      <FieldValue label={f.label} value={f.value}
+                        revealed={showPw[idx]}
+                        onToggle={() => setShowPw(p => ({ ...p, [idx]: !p[idx] }))} />
+                    </div>
+                  </div>
+                  <div className="opacity-0 group-hover/field:opacity-100 flex gap-1 transition-opacity shrink-0 mt-0.5">
+                    <button onClick={() => { setEditIdx(idx); setEditLabel(f.label); setEditValue(f.value); setAddingField(false); }}
+                      className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-800 hover:text-white transition-all text-xs">✏️</button>
+                    <button onClick={() => doDeleteField(idx)}
+                      className="w-6 h-6 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-600 hover:text-white transition-all text-xs font-black">✕</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Pridať pole */}
+        {addingField ? (
+          <div className="px-5 py-4 space-y-3 bg-zinc-900/30">
+            <div className="flex flex-wrap gap-1.5">
+              {FIELD_SUGGESTIONS.map(s => (
+                <button key={s} type="button" onClick={() => setNewLabel(s)}
+                  className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${newLabel === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+            <input value={newLabel} onChange={e => setNewLabel(e.target.value)}
+              placeholder="Vlastný názov poľa..."
+              className="w-full bg-black border border-zinc-700 px-4 py-2.5 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-500" />
+            <input value={newValue} onChange={e => setNewValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && doAddField()}
+              placeholder="Hodnota"
+              className="w-full bg-black border border-zinc-700 px-4 py-2.5 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-500 font-mono" />
+            <div className="flex gap-2">
+              <button onClick={() => { setAddingField(false); setNewLabel(''); setNewValue(''); }}
+                className="flex-1 py-2.5 rounded-2xl bg-zinc-900 text-zinc-500 font-black text-[10px] uppercase tracking-widest hover:bg-zinc-800 transition-colors">
+                Zrušiť
+              </button>
+              <button onClick={doAddField}
+                className="flex-[2] py-2.5 rounded-2xl bg-red-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all shadow-lg">
+                Pridať pole
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setAddingField(true); setNewLabel(''); setNewValue(''); setEditIdx(null); }}
+            className="w-full px-5 py-3 text-left text-[10px] text-zinc-700 hover:text-zinc-400 font-black uppercase tracking-widest transition-colors hover:bg-zinc-900/30">
+            + pridať pole
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function KontaktyPage() {
+  const [categories, setCategories] = useState([]);
+  const [entries,    setEntries]    = useState([]);
+  const [allEntries, setAllEntries] = useState([]);
+  const [activeCat,  setActiveCat]  = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState('');
+
+  const [newCatName, setNewCatName] = useState('');
+  const [addingCat,  setAddingCat]  = useState(false);
+  const [editingCatId,   setEditingCatId]   = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
 
   const [newEntryName, setNewEntryName] = useState('');
-  const [addingEntry, setAddingEntry]   = useState(false);
-  const [editingEntryId, setEditingEntryId]     = useState(null);
-  const [editingEntryName, setEditingEntryName] = useState('');
+  const [addingEntry,  setAddingEntry]  = useState(false);
 
-  const [addingFieldFor, setAddingFieldFor] = useState(null);
-  const [newFieldLabel, setNewFieldLabel]   = useState('');
-  const [newFieldValue, setNewFieldValue]   = useState('');
-
-  const [editingField, setEditingField]     = useState(null); // { entryId, idx }
-  const [editFieldLabel, setEditFieldLabel] = useState('');
-  const [editFieldValue, setEditFieldValue] = useState('');
-
-  const [showPasswords, setShowPasswords] = useState({});
-  const [confirmModal, setConfirmModal]   = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
 
   useEffect(() => { fetchCategories(); }, []);
   useEffect(() => { if (activeCat) fetchEntries(activeCat.id); }, [activeCat]);
@@ -138,9 +307,7 @@ export default function KontaktyPage() {
     const { data } = await supabase.from('contacts_categories').insert({ name }).select().single();
     if (data) {
       setCategories(c => [...c, data]);
-      setNewCatName('');
-      setAddingCat(false);
-      setActiveCat(data);
+      setNewCatName(''); setAddingCat(false); setActiveCat(data);
     }
   };
 
@@ -176,18 +343,15 @@ export default function KontaktyPage() {
     if (data) {
       setEntries(e => [...e, data]);
       setAllEntries(a => [...a, data]);
-      setNewEntryName('');
-      setAddingEntry(false);
+      setNewEntryName(''); setAddingEntry(false);
     }
   };
 
-  const saveEntryName = async (id) => {
-    const name = editingEntryName.trim();
+  const saveEntryName = async (id, name) => {
     if (!name) return;
     await supabase.from('contacts_entries').update({ name }).eq('id', id);
     setEntries(e => e.map(x => x.id === id ? { ...x, name } : x));
     setAllEntries(a => a.map(x => x.id === id ? { ...x, name } : x));
-    setEditingEntryId(null);
   };
 
   const deleteEntry = (entry) => {
@@ -204,47 +368,12 @@ export default function KontaktyPage() {
 
   // ── POLIA ──
 
-  const updateEntryFields = (entryId, newFields) => {
-    const upd = e => e.map(x => x.id === entryId ? { ...x, fields: newFields } : x);
+  const updateEntryFields = async (entryId, newFields) => {
+    await supabase.from('contacts_entries').update({ fields: newFields }).eq('id', entryId);
+    const upd = arr => arr.map(x => x.id === entryId ? { ...x, fields: newFields } : x);
     setEntries(upd);
     setAllEntries(upd);
   };
-
-  const addField = async (entryId) => {
-    const label = newFieldLabel.trim();
-    const value = newFieldValue.trim();
-    if (!label || !value) return;
-    const entry = entries.find(e => e.id === entryId);
-    if (!entry) return;
-    const newFields = [...(entry.fields || []), { label, value }];
-    await supabase.from('contacts_entries').update({ fields: newFields }).eq('id', entryId);
-    updateEntryFields(entryId, newFields);
-    setNewFieldLabel('');
-    setNewFieldValue('');
-    setAddingFieldFor(null);
-  };
-
-  const saveField = async (entryId, idx) => {
-    const label = editFieldLabel.trim();
-    const value = editFieldValue.trim();
-    if (!label || !value) return;
-    const entry = entries.find(e => e.id === entryId);
-    if (!entry) return;
-    const newFields = entry.fields.map((f, i) => i === idx ? { label, value } : f);
-    await supabase.from('contacts_entries').update({ fields: newFields }).eq('id', entryId);
-    updateEntryFields(entryId, newFields);
-    setEditingField(null);
-  };
-
-  const deleteField = async (entryId, idx) => {
-    const entry = entries.find(e => e.id === entryId);
-    if (!entry) return;
-    const newFields = (entry.fields || []).filter((_, i) => i !== idx);
-    await supabase.from('contacts_entries').update({ fields: newFields }).eq('id', entryId);
-    updateEntryFields(entryId, newFields);
-  };
-
-  const togglePw = key => setShowPasswords(p => ({ ...p, [key]: !p[key] }));
 
   // ── SEARCH ──
 
@@ -270,7 +399,7 @@ export default function KontaktyPage() {
     );
   };
 
-  // ── KOMPONENTY ──
+  // ── RENDERY ──
 
   function ConfirmModal() {
     if (!confirmModal) return null;
@@ -293,134 +422,10 @@ export default function KontaktyPage() {
     );
   }
 
-  function EntryCard({ entry }) {
-    const fields = entry.fields || [];
-    const isEditingName  = editingEntryId === entry.id;
-    const isAddingField  = addingFieldFor === entry.id;
-
-    return (
-      <div className="bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden group/card">
-
-        {/* Hlavička záznamu */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-zinc-800/60">
-          {isEditingName ? (
-            <>
-              <input autoFocus value={editingEntryName}
-                onChange={e => setEditingEntryName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') saveEntryName(entry.id); if (e.key === 'Escape') setEditingEntryId(null); }}
-                className="flex-1 bg-black border border-zinc-700 px-3 py-1.5 rounded-xl text-white font-black text-sm outline-none focus:border-red-600" />
-              <button onClick={() => saveEntryName(entry.id)} className="text-xs text-green-400 font-black hover:text-green-300 shrink-0">OK</button>
-              <button onClick={() => setEditingEntryId(null)} className="text-xs text-zinc-600 font-black hover:text-zinc-400 shrink-0">✕</button>
-            </>
-          ) : (
-            <>
-              <h3 className="flex-1 text-sm font-black uppercase tracking-widest text-white truncate">{entry.name}</h3>
-              <div className="opacity-0 group-hover/card:opacity-100 flex gap-1 transition-opacity shrink-0">
-                <button onClick={() => { setEditingEntryId(entry.id); setEditingEntryName(entry.name); }}
-                  className="w-7 h-7 flex items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-800 transition-all text-sm">✏️</button>
-                <button onClick={() => deleteEntry(entry)}
-                  className="w-7 h-7 flex items-center justify-center rounded-xl text-red-500 hover:bg-red-600 hover:text-white transition-all text-xs font-black">✕</button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Polia */}
-        <div className="divide-y divide-zinc-800/40">
-          {fields.map((f, idx) => {
-            const pwKey = `${entry.id}-${idx}`;
-            const isEditingThis = editingField?.entryId === entry.id && editingField?.idx === idx;
-            return (
-              <div key={idx} className="group/field hover:bg-zinc-900/40 transition-colors">
-                {isEditingThis ? (
-                  <div className="px-5 py-4 space-y-2.5">
-                    <div className="flex flex-wrap gap-1.5 mb-1">
-                      {FIELD_SUGGESTIONS.map(s => (
-                        <button key={s} type="button" onClick={() => setEditFieldLabel(s)}
-                          className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${editFieldLabel === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'}`}>
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                    <input autoFocus value={editFieldLabel} onChange={e => setEditFieldLabel(e.target.value)}
-                      placeholder="Názov poľa"
-                      className="w-full bg-black border border-zinc-700 px-3 py-2 rounded-xl text-white font-bold text-xs outline-none focus:border-zinc-500" />
-                    <input value={editFieldValue} onChange={e => setEditFieldValue(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') saveField(entry.id, idx); if (e.key === 'Escape') setEditingField(null); }}
-                      placeholder="Hodnota"
-                      className="w-full bg-black border border-zinc-700 px-3 py-2 rounded-xl text-white font-bold text-xs outline-none focus:border-zinc-500 font-mono" />
-                    <div className="flex gap-3">
-                      <button onClick={() => setEditingField(null)} className="text-xs text-zinc-600 font-black hover:text-zinc-400">Zrušiť</button>
-                      <button onClick={() => saveField(entry.id, idx)} className="text-xs text-green-400 font-black hover:text-green-300">Uložiť</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 px-5 py-3">
-                    <span className="text-base shrink-0 mt-0.5 select-none">{fieldIcon(f.label)}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mb-0.5">{f.label}</p>
-                      <div className="text-sm font-bold leading-snug">
-                        <FieldValue label={f.label} value={f.value} revealed={showPasswords[pwKey]} onToggle={() => togglePw(pwKey)} />
-                      </div>
-                    </div>
-                    <div className="opacity-0 group-hover/field:opacity-100 flex gap-1 transition-opacity shrink-0 mt-0.5">
-                      <button onClick={() => { setEditingField({ entryId: entry.id, idx }); setEditFieldLabel(f.label); setEditFieldValue(f.value); setAddingFieldFor(null); }}
-                        className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-800 hover:text-white transition-all text-xs">✏️</button>
-                      <button onClick={() => deleteField(entry.id, idx)}
-                        className="w-6 h-6 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-600 hover:text-white transition-all text-xs font-black">✕</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Pridať pole */}
-          {isAddingField ? (
-            <div className="px-5 py-4 space-y-3 bg-zinc-900/30">
-              <div className="flex flex-wrap gap-1.5">
-                {FIELD_SUGGESTIONS.map(s => (
-                  <button key={s} type="button" onClick={() => setNewFieldLabel(s)}
-                    className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${newFieldLabel === s ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700'}`}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <input value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)}
-                placeholder="Vlastný názov poľa..."
-                className="w-full bg-black border border-zinc-700 px-4 py-2.5 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-500" />
-              <input value={newFieldValue} onChange={e => setNewFieldValue(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addField(entry.id)}
-                placeholder="Hodnota"
-                className="w-full bg-black border border-zinc-700 px-4 py-2.5 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-500 font-mono" />
-              <div className="flex gap-2">
-                <button onClick={() => { setAddingFieldFor(null); setNewFieldLabel(''); setNewFieldValue(''); }}
-                  className="flex-1 py-2.5 rounded-2xl bg-zinc-900 text-zinc-500 font-black text-[10px] uppercase tracking-widest hover:bg-zinc-800 transition-colors">
-                  Zrušiť
-                </button>
-                <button onClick={() => addField(entry.id)}
-                  className="flex-[2] py-2.5 rounded-2xl bg-red-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-all shadow-lg">
-                  Pridať pole
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setAddingFieldFor(entry.id); setNewFieldLabel(''); setNewFieldValue(''); setEditingField(null); }}
-              className="w-full px-5 py-3 text-left text-[10px] text-zinc-700 hover:text-zinc-400 font-black uppercase tracking-widest transition-colors hover:bg-zinc-900/30">
-              + pridať pole
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   function CatDetail() {
     if (!activeCat) return null;
     const catIdx = categories.findIndex(c => c.id === activeCat.id);
     const col = catColor(catIdx);
-
     return (
       <div className="space-y-4">
         <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl ${col.bg} ${col.text}`}>
@@ -433,7 +438,12 @@ export default function KontaktyPage() {
         )}
 
         <div className="space-y-4">
-          {entries.map(e => <EntryCard key={e.id} entry={e} />)}
+          {entries.map(e => (
+            <EntryCard key={e.id} entry={e}
+              onUpdateFields={updateEntryFields}
+              onDeleteEntry={deleteEntry}
+              onSaveName={saveEntryName} />
+          ))}
         </div>
 
         {addingEntry ? (
@@ -474,7 +484,7 @@ export default function KontaktyPage() {
                 const col = catColor(categories.indexOf(cat));
                 return (
                   <button key={cat.id} onClick={() => { setSearch(''); setActiveCat(cat); }}
-                    className={`w-full text-left px-4 py-3 rounded-2xl font-black text-sm uppercase italic tracking-tighter ${col.bg} ${col.text} transition-opacity hover:opacity-90`}>
+                    className={`w-full text-left px-4 py-3 rounded-2xl font-black text-sm uppercase italic tracking-tighter ${col.bg} ${col.text} hover:opacity-90`}>
                     {highlight(cat.name)}
                   </button>
                 );
@@ -543,7 +553,7 @@ export default function KontaktyPage() {
       {q ? <SearchResults /> : (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
 
-          {/* ĽAVÝ PANEL — kategórie */}
+          {/* ĽAVÝ PANEL */}
           <div className="space-y-2">
             {loading ? (
               <div className="h-10 rounded-2xl bg-zinc-900 animate-pulse" />
@@ -552,7 +562,6 @@ export default function KontaktyPage() {
               const isActive = activeCat?.id === cat.id;
               const isEditingThis = editingCatId === cat.id;
               const count = allEntries.filter(e => e.category_id === cat.id).length;
-
               return (
                 <div key={cat.id} className="relative group">
                   {isEditingThis ? (
@@ -564,7 +573,7 @@ export default function KontaktyPage() {
                       <button onClick={() => setEditingCatId(null)} className="text-zinc-600 font-black text-xs hover:text-zinc-400">✕</button>
                     </div>
                   ) : (
-                    <button onClick={() => { setActiveCat(cat); setAddingEntry(false); setAddingFieldFor(null); }}
+                    <button onClick={() => { setActiveCat(cat); setAddingEntry(false); }}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm uppercase italic tracking-tighter transition-all text-left ${isActive ? `${col.bg} ${col.text}` : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600'}`}>
                       <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isActive ? 'bg-white/40' : col.dot}`} />
                       <span className="flex-1 truncate">{cat.name}</span>
@@ -600,7 +609,7 @@ export default function KontaktyPage() {
             )}
           </div>
 
-          {/* PRAVÝ PANEL — detail kategórie */}
+          {/* PRAVÝ PANEL */}
           <div>
             {activeCat ? <CatDetail /> : (
               <div className="flex items-center justify-center h-48">
