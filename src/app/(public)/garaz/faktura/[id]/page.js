@@ -73,7 +73,10 @@ export default function DetailFakturyPage() {
 
   const generateQRValue = () => {
     if (!inv || !myCompany.bank) return '';
-    return `SPD*1.0*ACC:${myCompany.bank.replace(/\s/g, '')}*AM:${inv.total_amount}*CUR:EUR*VS:${String(inv.invoice_number).replace(/\D/g, '')}*MSG:Oprava vozidla ${inv.car_details?.plate || inv.car_details?.plate_number || ''}`;
+    const vs = String(inv.invoice_number).replace(/\D/g, '');
+    const plate = inv.car_details?.plate || inv.car_details?.plate_number || '';
+    const rn = myCompany.name ? `*RN:${myCompany.name}` : '';
+    return `SPD*1.0*ACC:${myCompany.bank.replace(/\s/g, '')}*AM:${inv.total_amount}*CUR:EUR*VS:${vs}${rn}*MSG:Oprava vozidla ${plate}`.trim();
   };
 
   const handlePrint = () => window.print();

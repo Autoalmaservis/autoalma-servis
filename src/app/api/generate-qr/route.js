@@ -49,7 +49,7 @@ function base32encode(input) {
  * PAY by square v1.0.0 (SBA 2013) — priamy encode bez beneficiary bloku.
  * Verzia 1.0.0 = version nibble 0x00 vo header, VÚB ju plne podporuje.
  */
-function encodePayBySquare100(iban, amount, vs, note) {
+function encodePayBySquare100(iban, amount, vs, note, beneficiaryName) {
   const tab = '\t';
   // Tab-separated fields per PAY by square v1.0.0 spec (Table 15)
   const fields = [
@@ -67,6 +67,9 @@ function encodePayBySquare100(iban, amount, vs, note) {
     '1',           // bankAccountsCount
     iban,          // IBAN
     '',            // BIC
+    beneficiaryName || '',  // beneficiaryName
+    '',            // beneficiaryAddressLine1
+    '',            // beneficiaryAddressLine2
     '0',           // standingOrderExt
     '0',           // directDebitExt
   ];
@@ -122,7 +125,9 @@ export async function POST(req) {
     const cleanVS = variableSymbol ? String(variableSymbol).replace(/\D/g, '').substring(0, 10) : '';
     const cleanNote = paymentNote ? paymentNote.normalize('NFD').replace(/[̀-ͯ]/g, '') : '';
 
-    const bySquareStr = encodePayBySquare100(cleanIban, parsedAmount.toString(), cleanVS, cleanNote);
+    const cleanBeneficiary = beneficiaryName ? beneficiaryName.normalize('NFD').replace(/[̀-ͯ]/g, '').substring(0, 70) : '';
+
+    const bySquareStr = encodePayBySquare100(cleanIban, parsedAmount.toString(), cleanVS, cleanNote, cleanBeneficiary);
 
     const pngDataUrl = await QRCode.toDataURL(bySquareStr, {
       errorCorrectionLevel: 'L',
