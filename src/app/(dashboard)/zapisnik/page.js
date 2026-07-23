@@ -30,6 +30,11 @@ export default function ZapisnikPage() {
 
   const [confirmModal, setConfirmModal] = useState(null); // { message, onConfirm }
 
+  const [editingCatId, setEditingCatId] = useState(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [editingEntryContent, setEditingEntryContent] = useState('');
+
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [uploadingVoice, setUploadingVoice] = useState(false);
@@ -73,6 +78,14 @@ export default function ZapisnikPage() {
     setNewCatName(''); setShowNewCat(false);
   };
 
+  const saveCategory = async (id) => {
+    if (!editingCatName.trim()) return;
+    await supabase.from('notes_categories').update({ name: editingCatName.trim() }).eq('id', id);
+    setCategories(p => p.map(c => c.id === id ? { ...c, name: editingCatName.trim() } : c));
+    if (selectedCat?.id === id) setSelectedCat(p => ({ ...p, name: editingCatName.trim() }));
+    setEditingCatId(null);
+  };
+
   const deleteCategory = async (id) => {
     await supabase.from('notes_entries').delete().eq('category_id', id);
     await supabase.from('notes_categories').delete().eq('id', id);
@@ -97,6 +110,13 @@ export default function ZapisnikPage() {
     const checked = !entry.checked;
     setEntries(p => p.map(e => e.id === entry.id ? { ...e, checked } : e));
     await supabase.from('notes_entries').update({ checked }).eq('id', entry.id);
+  };
+
+  const saveEntry = async (id) => {
+    if (!editingEntryContent.trim()) return;
+    await supabase.from('notes_entries').update({ content: editingEntryContent.trim() }).eq('id', id);
+    setEntries(p => p.map(e => e.id === id ? { ...e, content: editingEntryContent.trim() } : e));
+    setEditingEntryId(null);
   };
 
   const deleteEntry = async (id) => {
@@ -186,13 +206,26 @@ export default function ZapisnikPage() {
       <div className="min-h-screen bg-black text-white flex flex-col">
         <ConfirmModal />
         <div className={`sticky top-0 z-10 backdrop-blur-md border-b px-4 py-4 flex items-center gap-3 ${c.bg} ${c.border}`}>
-          <button onClick={() => { setSelectedCat(null); setAddingType(null); setNewContent(''); }}
+          <button onClick={() => { setSelectedCat(null); setAddingType(null); setNewContent(''); setEditingCatId(null); }}
             className="bg-black/40 hover:bg-black/60 p-3 rounded-2xl transition-all text-base shrink-0">←</button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
-              <h1 className={`text-xl font-black uppercase italic tracking-tighter truncate ${c.text}`}>{selectedCat.name}</h1>
-            </div>
+            {editingCatId === selectedCat.id ? (
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+                <input autoFocus value={editingCatName} onChange={e => setEditingCatName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveCategory(selectedCat.id); if (e.key === 'Escape') setEditingCatId(null); }}
+                  className="flex-1 bg-black/40 border border-zinc-600 focus:border-white rounded-xl px-3 py-1.5 text-white font-black text-base outline-none uppercase italic tracking-tighter" />
+                <button onClick={() => saveCategory(selectedCat.id)} className="text-green-400 font-black text-xs px-3 py-1.5 bg-green-900/30 border border-green-800/40 rounded-xl shrink-0">OK</button>
+                <button onClick={() => setEditingCatId(null)} className="text-zinc-500 text-xs px-2 shrink-0">✕</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+                <h1 className={`text-xl font-black uppercase italic tracking-tighter truncate ${c.text}`}>{selectedCat.name}</h1>
+                <button onClick={() => { setEditingCatId(selectedCat.id); setEditingCatName(selectedCat.name); }}
+                  className="text-zinc-600 hover:text-zinc-300 transition-all text-sm shrink-0 p-1">✏️</button>
+              </div>
+            )}
             {tasks.length > 0 && <p className="text-[10px] text-zinc-600 uppercase tracking-widest ml-4">{doneTasks}/{tasks.length} splnených</p>}
           </div>
           <button onClick={() => askConfirm('Vymazať celú kategóriu aj so všetkými položkami?', () => deleteCategory(selectedCat.id))}
@@ -207,14 +240,28 @@ export default function ZapisnikPage() {
               <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3">☑ Úlohy</p>
               <div className="space-y-2">
                 {tasks.map(e => (
-                  <div key={e.id} className="flex items-center gap-3 bg-blue-950/20 border border-blue-900/40 p-4 rounded-2xl">
-                    <button onClick={() => toggleCheck(e)}
-                      className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${e.checked ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-800 hover:border-blue-500'}`}>
-                      {e.checked && <span className="text-[10px] font-black">✓</span>}
-                    </button>
-                    <span className={`flex-1 font-bold text-sm leading-snug ${e.checked ? 'line-through text-zinc-600' : 'text-white'}`}>{e.content}</span>
-                    <button onClick={() => askConfirm('Vymazať túto úlohu?', () => deleteEntry(e.id))}
-                      className="text-zinc-600 hover:text-red-500 transition-all text-xs shrink-0 p-1">✕</button>
+                  <div key={e.id} className="bg-blue-950/20 border border-blue-900/40 p-4 rounded-2xl">
+                    {editingEntryId === e.id ? (
+                      <div className="flex gap-2">
+                        <input autoFocus value={editingEntryContent} onChange={ev => setEditingEntryContent(ev.target.value)}
+                          onKeyDown={ev => { if (ev.key === 'Enter') saveEntry(e.id); if (ev.key === 'Escape') setEditingEntryId(null); }}
+                          className="flex-1 bg-black/40 border border-blue-700 focus:border-blue-400 rounded-xl px-3 py-2 text-white font-bold text-sm outline-none" />
+                        <button onClick={() => saveEntry(e.id)} className="text-green-400 hover:text-green-300 font-black text-xs px-3 py-2 bg-green-900/30 border border-green-800/40 rounded-xl transition-all">Uložiť</button>
+                        <button onClick={() => setEditingEntryId(null)} className="text-zinc-500 hover:text-white px-2 rounded-xl transition-all text-xs">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => toggleCheck(e)}
+                          className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${e.checked ? 'bg-blue-600 border-blue-600 text-white' : 'border-blue-800 hover:border-blue-500'}`}>
+                          {e.checked && <span className="text-[10px] font-black">✓</span>}
+                        </button>
+                        <span className={`flex-1 font-bold text-sm leading-snug ${e.checked ? 'line-through text-zinc-600' : 'text-white'}`}>{e.content}</span>
+                        <button onClick={() => { setEditingEntryId(e.id); setEditingEntryContent(e.content); }}
+                          className="text-zinc-600 hover:text-zinc-300 transition-all text-xs shrink-0 p-1">✏️</button>
+                        <button onClick={() => askConfirm('Vymazať túto úlohu?', () => deleteEntry(e.id))}
+                          className="text-zinc-600 hover:text-red-500 transition-all text-xs shrink-0 p-1">✕</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -228,12 +275,28 @@ export default function ZapisnikPage() {
               <div className="space-y-3">
                 {texts.map(e => (
                   <div key={e.id} className="bg-amber-950/20 border border-amber-900/40 p-5 rounded-2xl">
-                    <div className="flex items-start gap-2">
-                      <p className="flex-1 text-sm text-zinc-200 font-bold whitespace-pre-wrap leading-relaxed">{e.content}</p>
-                      <button onClick={() => askConfirm('Vymazať túto poznámku?', () => deleteEntry(e.id))}
-                        className="text-zinc-600 hover:text-red-500 transition-all text-xs shrink-0 p-1 mt-0.5">✕</button>
-                    </div>
-                    <p className="text-[9px] text-zinc-700 mt-3 uppercase">{fmtDate(e.created_at)}</p>
+                    {editingEntryId === e.id ? (
+                      <div className="space-y-2">
+                        <textarea autoFocus value={editingEntryContent} onChange={ev => setEditingEntryContent(ev.target.value)}
+                          rows={4}
+                          className="w-full bg-black/40 border border-amber-700 focus:border-amber-400 rounded-xl px-3 py-2 text-white font-bold text-sm outline-none resize-none" />
+                        <div className="flex gap-2">
+                          <button onClick={() => saveEntry(e.id)} className="flex-1 text-green-400 hover:text-green-300 font-black text-xs py-2 bg-green-900/30 border border-green-800/40 rounded-xl transition-all">Uložiť</button>
+                          <button onClick={() => setEditingEntryId(null)} className="text-zinc-500 hover:text-white px-4 py-2 rounded-xl transition-all text-xs bg-zinc-900">Zrušiť</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-2">
+                          <p className="flex-1 text-sm text-zinc-200 font-bold whitespace-pre-wrap leading-relaxed">{e.content}</p>
+                          <button onClick={() => { setEditingEntryId(e.id); setEditingEntryContent(e.content); }}
+                            className="text-zinc-600 hover:text-zinc-300 transition-all text-xs shrink-0 p-1 mt-0.5">✏️</button>
+                          <button onClick={() => askConfirm('Vymazať túto poznámku?', () => deleteEntry(e.id))}
+                            className="text-zinc-600 hover:text-red-500 transition-all text-xs shrink-0 p-1 mt-0.5">✕</button>
+                        </div>
+                        <p className="text-[9px] text-zinc-700 mt-3 uppercase">{fmtDate(e.created_at)}</p>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -350,15 +413,37 @@ export default function ZapisnikPage() {
         <div className="space-y-2">
           {categories.map((cat, idx) => {
             const c = CAT_COLORS[idx % CAT_COLORS.length];
+            const isEditing = editingCatId === cat.id;
             return (
               <div key={cat.id} className={`flex items-center border rounded-2xl transition-all ${c.bg} ${c.border}`}>
-                <button onClick={() => setSelectedCat(cat)} className="flex-1 px-5 py-4 text-left flex items-center gap-3 active:opacity-70">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
-                  <h3 className={`font-black uppercase italic tracking-tight text-base ${c.text}`}>{cat.name}</h3>
-                  <span className="ml-auto text-zinc-700 text-xs">{entryCounts[cat.id] || 0}</span>
-                </button>
-                <button onClick={() => askConfirm(`Vymazať kategóriu „${cat.name}"?`, () => deleteCategory(cat.id))}
-                  className="px-4 py-4 text-zinc-700 hover:text-red-500 transition-all text-sm shrink-0">🗑️</button>
+                {isEditing ? (
+                  <div className="flex-1 flex items-center gap-2 px-4 py-3">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
+                    <input
+                      autoFocus
+                      value={editingCatName}
+                      onChange={e => setEditingCatName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveCategory(cat.id); if (e.key === 'Escape') setEditingCatId(null); }}
+                      className="flex-1 bg-black/40 border border-zinc-700 focus:border-red-500 rounded-xl px-3 py-2 text-white font-black text-sm outline-none uppercase italic tracking-tight"
+                    />
+                    <button onClick={() => saveCategory(cat.id)} className="text-green-400 hover:text-green-300 font-black text-xs px-3 py-2 bg-green-900/30 border border-green-800/40 rounded-xl transition-all">Uložiť</button>
+                    <button onClick={() => setEditingCatId(null)} className="text-zinc-500 hover:text-white px-2 py-2 rounded-xl transition-all text-xs">✕</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setSelectedCat(cat)} className="flex-1 px-5 py-4 text-left flex items-center gap-3 active:opacity-70">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.dot}`} />
+                    <h3 className={`font-black uppercase italic tracking-tight text-base ${c.text}`}>{cat.name}</h3>
+                    <span className="ml-auto text-zinc-700 text-xs">{entryCounts[cat.id] || 0}</span>
+                  </button>
+                )}
+                {!isEditing && (
+                  <button onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }}
+                    className="px-3 py-4 text-zinc-600 hover:text-zinc-300 transition-all text-sm shrink-0">✏️</button>
+                )}
+                {!isEditing && (
+                  <button onClick={() => askConfirm(`Vymazať kategóriu „${cat.name}"?`, () => deleteCategory(cat.id))}
+                    className="px-4 py-4 text-zinc-700 hover:text-red-500 transition-all text-sm shrink-0">🗑️</button>
+                )}
               </div>
             );
           })}
