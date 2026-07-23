@@ -30,6 +30,7 @@ export default function DetailZakazkyPage() {
   const [ukonSearch, setUkonSearch] = useState('');
   const [showItemDropdown, setShowItemDropdown] = useState(false);
   const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
   const dropdownRef = useRef(null);
   const [rateCategories, setRateCategories] = useState([]);
   const [activeOffer, setActiveOffer] = useState(null);
@@ -674,7 +675,7 @@ export default function DetailZakazkyPage() {
   };
 
   const addItem = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!newItem.name) return;
     if (!await ensureAuth()) return;
 
@@ -708,6 +709,7 @@ export default function DetailZakazkyPage() {
       const keepWorker = newItem.mechanic_splits[0]?.worker_id || '';
       setNewItem({ name: isPraca ? `Servisná práca ${newItem.rateType}` : '', quantity: 1, unit: isPraca ? 'hod' : 'ks', unit_price: isPraca ? getRateValue(newItem.rateType) : 0, type: newItem.type, rateType: newItem.rateType, worker_id: keepWorker, mechanic_hours: isUkon ? newItem.mechanic_hours : '', mechanic_splits: [{ worker_id: keepWorker, hours: '' }] });
       setUkonSearch('');
+      setShowAddItemModal(false);
       fetchItems();
     }
   };
@@ -1033,6 +1035,12 @@ export default function DetailZakazkyPage() {
             </div>
 
             <div className="no-print flex gap-2 items-center">
+              <button
+                onClick={() => { setShowAddItemModal(true); setShowItemDropdown(false); }}
+                className="bg-red-600 border border-red-600 text-white px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-500 transition-all shadow-lg"
+              >
+                + Pridať položku
+              </button>
               <button
                 onClick={() => setShowFormSelector(true)}
                 className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-zinc-700 hover:text-white transition-all shadow-lg"
@@ -1523,6 +1531,250 @@ export default function DetailZakazkyPage() {
         tax={tax}
         total={total}
       />
+
+      {/* ADD ITEM MODAL */}
+      {showAddItemModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[300] flex items-center justify-center p-4 no-print overflow-y-auto">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-[3rem] w-full max-w-xl shadow-2xl my-auto">
+            {/* Header */}
+            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+              <h2 className="text-xl font-black uppercase italic tracking-tighter">Pridať <span className="text-red-600">položku</span></h2>
+              <button onClick={() => { setShowAddItemModal(false); setShowItemDropdown(false); }} className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors font-black">✕</button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* TYP */}
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Typ položky</label>
+                <div className="flex gap-2">
+                  {[{v:'Materiál',c:'bg-orange-600'},{v:'Práca',c:'bg-blue-600'},{v:'Úkon',c:'bg-purple-600'}].map(({v,c}) => (
+                    <button key={v} type="button"
+                      onClick={() => {
+                        const isPraca = v === 'Práca';
+                        const isUkon = v === 'Úkon';
+                        setNewItem({
+                          ...newItem, type: v,
+                          unit: isPraca ? 'hod' : 'ks',
+                          unit_price: isPraca ? getRateValue(newItem.rateType) : 0,
+                          name: isPraca ? `Servisná práca ${newItem.rateType}` : '',
+                        });
+                        setNewItemVatStr(isPraca ? (getRateValue(newItem.rateType) * 1.23).toFixed(2) : '');
+                        if (isUkon) setUkonSearch('');
+                        setShowItemDropdown(false);
+                      }}
+                      className={`flex-1 py-3 rounded-2xl font-black text-xs uppercase transition-all ${newItem.type === v ? `${c} text-white shadow-lg` : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* SADZBA (len pre Práca) */}
+              {newItem.type === 'Práca' && (
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Hodinová sadzba</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {rateCategories.map(c => (
+                      <button key={c.key} type="button"
+                        onClick={() => {
+                          const v = getRateValue(c.key);
+                          setNewItem({ ...newItem, rateType: c.key, unit_price: v, name: `Servisná práca ${c.key}` });
+                          setNewItemVatStr((v * 1.23).toFixed(2));
+                        }}
+                        className={`px-4 py-2 rounded-xl font-black text-xs uppercase transition-all ${newItem.rateType === c.key ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>
+                        {c.key} — {c.value} €/h
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* NÁZOV */}
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Názov položky</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Zadaj alebo vyber zo zoznamu..."
+                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 text-sm font-black uppercase italic"
+                    value={newItem.name}
+                    autoComplete="off"
+                    onFocus={() => setShowItemDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowItemDropdown(false), 150)}
+                    onChange={(e) => { setNewItem({ ...newItem, name: e.target.value }); setShowItemDropdown(true); }}
+                  />
+                  {/* Materiál dropdown */}
+                  {showItemDropdown && newItem.type === 'Materiál' && (
+                    <div className="absolute z-[400] top-full left-0 w-full mt-1 bg-zinc-950 border border-zinc-700 rounded-2xl overflow-hidden shadow-2xl max-h-56 overflow-y-auto">
+                      {(() => {
+                        const q = nd(newItem.name);
+                        const wFiltered = warehouseItems.filter(w => nd(w.name).includes(q) || (w.part_number && nd(w.part_number).includes(q))).slice(0, 8);
+                        const cFiltered = catalog.filter(c => !warehouseItems.some(w => w.name === c.name) && nd(c.name).includes(q)).slice(0, 5);
+                        return (<>
+                          {wFiltered.length > 0 && (<>
+                            <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-zinc-600 bg-black/60 sticky top-0">🏭 Sklad</div>
+                            {wFiltered.map(w => (
+                              <button key={w.id} type="button" onMouseDown={() => { selectWarehouseItem(w); setShowItemDropdown(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40">
+                                <div className="min-w-0">
+                                  <span className="text-white font-black text-xs uppercase italic block">{w.name}</span>
+                                  {w.part_number && <span className="text-yellow-400 text-[9px] font-black">{w.part_number}</span>}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg border ${w.quantity > 0 ? 'text-green-400 border-green-600/30 bg-green-500/10' : 'text-red-400 border-red-600/30 bg-red-500/10'}`}>{parseFloat(w.quantity).toFixed(0)} {w.unit}</span>
+                                  <span className="text-white font-black text-xs">{parseFloat(w.sale_price).toFixed(2)} €</span>
+                                </div>
+                              </button>
+                            ))}
+                          </>)}
+                          {cFiltered.length > 0 && (<>
+                            <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-zinc-600 bg-black/60 sticky top-0">📦 Katalóg</div>
+                            {cFiltered.map((c, i) => (
+                              <button key={i} type="button" onMouseDown={() => { selectCatalogItem(c); setShowItemDropdown(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40">
+                                <span className="text-zinc-300 font-black text-xs uppercase italic">{c.name}</span>
+                                <span className="text-zinc-400 font-black text-xs">{parseFloat(c.unit_price).toFixed(2)} €</span>
+                              </button>
+                            ))}
+                          </>)}
+                          {wFiltered.length === 0 && cFiltered.length === 0 && newItem.name && (
+                            <div className="px-4 py-4 text-zinc-600 font-black text-xs uppercase italic text-center">Zadaj manuálne</div>
+                          )}
+                        </>);
+                      })()}
+                    </div>
+                  )}
+                  {/* Úkon dropdown */}
+                  {newItem.type === 'Úkon' && showItemDropdown && (
+                    <div className="absolute z-[400] top-full left-0 w-full mt-1 bg-zinc-950 border border-purple-600/40 rounded-2xl overflow-hidden shadow-2xl max-h-56 overflow-y-auto">
+                      {(() => {
+                        const q = nd(newItem.name);
+                        const filtered = serviceActions.filter(u => nd(u.name).includes(q)).slice(0, 10);
+                        return filtered.length === 0 ? (
+                          <div className="px-4 py-4 text-zinc-600 font-black text-xs uppercase italic text-center">{serviceActions.length === 0 ? 'Žiadne úkony' : 'Žiadne výsledky'}</div>
+                        ) : (<>
+                          <div className="px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-purple-500 bg-black/60 sticky top-0">⚡ Úkony</div>
+                          {filtered.map(u => (
+                            <button key={u.id} type="button"
+                              onMouseDown={() => {
+                                setNewItem(prev => ({
+                                  ...prev, name: u.name, unit_price: parseFloat(u.unit_price), unit: u.unit || 'ks',
+                                  mechanic_hours: u.mechanic_hours ? String(u.mechanic_hours) : prev.mechanic_hours,
+                                  mechanic_splits: u.mechanic_hours ? prev.mechanic_splits.map((s, i) => i === 0 ? { ...s, hours: String(u.mechanic_hours) } : s) : prev.mechanic_splits,
+                                }));
+                                setNewItemVatStr((parseFloat(u.unit_price) * 1.23).toFixed(2));
+                                setUkonSearch(u.name);
+                                setShowItemDropdown(false);
+                              }}
+                              className="w-full text-left px-4 py-3 hover:bg-zinc-800 transition-all flex items-center justify-between gap-3 border-b border-zinc-800/40">
+                              <span className="text-purple-200 font-black text-xs uppercase italic">{u.name}</span>
+                              <div className="text-right shrink-0">
+                                <span className="text-white font-black text-xs block">{parseFloat(u.unit_price).toFixed(2)} €</span>
+                                <span className="text-zinc-500 text-[9px]">{u.unit}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </>);
+                      })()}
+                    </div>
+                  )}
+                </div>
+                {newItem.type === 'Materiál' && (
+                  <button type="button" onClick={() => { setShowAddItemModal(false); setWarehouseModalOpen(true); }}
+                    className="mt-2 w-full py-2.5 rounded-2xl bg-zinc-900 border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all text-xs font-black uppercase tracking-widest">
+                    🏭 Prehľadávať celý sklad (multi-výber)
+                  </button>
+                )}
+              </div>
+
+              {/* MNOŽSTVO + CENA */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Množstvo ({newItem.unit})</label>
+                  <input type="number" min="0" step="any"
+                    value={newItem.quantity}
+                    onChange={(e) => {
+                      const qty = e.target.value;
+                      const isPraca = newItem.type === 'Práca';
+                      const singleSplit = newItem.mechanic_splits.length === 1;
+                      setNewItem(prev => ({
+                        ...prev, quantity: qty,
+                        mechanic_splits: (isPraca && singleSplit) ? [{ ...prev.mechanic_splits[0], hours: qty }] : prev.mechanic_splits,
+                      }));
+                    }}
+                    onFocus={e => e.target.select()}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-center text-lg font-black outline-none focus:border-red-600" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Cena bez DPH (€)</label>
+                  <input type="number" step="any" min="0"
+                    value={newItem.unit_price || ''}
+                    placeholder="0.00"
+                    onChange={e => { const v = parseFloat(e.target.value) || 0; setNewItem({...newItem, unit_price: v}); setNewItemVatStr((v * 1.23).toFixed(2)); }}
+                    onFocus={e => e.target.select()}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-right text-lg font-black outline-none focus:border-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-amber-600 block mb-2">Cena s DPH 23% (€)</label>
+                <input type="number" step="any" min="0"
+                  value={newItemVatStr}
+                  placeholder="0.00"
+                  onChange={e => { setNewItemVatStr(e.target.value); setNewItem({...newItem, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0}); }}
+                  onFocus={e => e.target.select()}
+                  className="w-full bg-zinc-900 border border-amber-600/30 p-4 rounded-2xl text-amber-300 text-right text-lg font-black outline-none focus:border-amber-500" />
+              </div>
+
+              {/* MECHANIK (pre Práca / Úkon) */}
+              {(newItem.type === 'Práca' || newItem.type === 'Úkon') && (
+                <div className="bg-zinc-900/50 border border-yellow-600/20 rounded-2xl p-4 space-y-3">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-yellow-600 block">Mechanik & čas</label>
+                  {newItem.mechanic_splits.map((split, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select value={split.worker_id} onChange={e => updateNewSplit(idx, 'worker_id', e.target.value)}
+                        className="flex-1 bg-black border border-yellow-600/40 p-3 rounded-xl text-white text-xs font-black uppercase outline-none focus:border-yellow-500 cursor-pointer">
+                        <option value="">— Mechanik —</option>
+                        {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                      </select>
+                      <input type="number" min="0" step="any" placeholder="hod"
+                        value={split.hours} onChange={e => updateNewSplit(idx, 'hours', e.target.value)}
+                        onFocus={e => e.target.select()}
+                        className="w-20 bg-black border border-yellow-600/30 p-3 rounded-xl text-white text-xs font-black text-center outline-none focus:border-yellow-500" />
+                      {newItem.mechanic_splits.length > 1 && (
+                        <button type="button" onClick={() => removeNewSplit(idx)} className="text-red-500 hover:text-red-400 font-black text-sm w-6 shrink-0">✕</button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" onClick={addNewSplit} className="text-[9px] font-black text-yellow-600 hover:text-yellow-400 uppercase tracking-widest">+ Pridať mechanika</button>
+                  {newItem.type === 'Úkon' && (
+                    <div>
+                      <label className="text-[9px] font-black uppercase tracking-widest text-yellow-600/70 block mb-1">Čas normy (hod/ks)</label>
+                      <input type="number" min="0" step="any"
+                        value={newItem.mechanic_hours}
+                        onChange={e => setNewItem({ ...newItem, mechanic_hours: e.target.value })}
+                        onFocus={e => e.target.select()}
+                        placeholder="napr. 0.5"
+                        className="w-full bg-black border border-yellow-800/40 p-3 rounded-xl text-yellow-300 font-black text-center outline-none focus:border-yellow-500" />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-zinc-800 flex gap-3">
+              <button type="button" onClick={() => { setShowAddItemModal(false); setShowItemDropdown(false); }}
+                className="flex-1 py-4 rounded-2xl bg-zinc-900 text-zinc-400 font-black text-xs uppercase tracking-widest hover:bg-zinc-800 transition-colors">
+                Zrušiť
+              </button>
+              <button type="button" onClick={addItem}
+                className="flex-[2] py-4 rounded-2xl bg-red-600 text-white font-black text-sm uppercase tracking-widest hover:bg-red-500 transition-all shadow-xl">
+                + Pridať do zákazky
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {warehouseModalOpen && (
         <WarehouseModal

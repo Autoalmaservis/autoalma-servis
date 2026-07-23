@@ -18,6 +18,8 @@ export default function KlientiPage() {
   const [isCarModalOpen, setIsCarModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [historyModal, setHistoryModal] = useState(null);
+  const [sortMode, setSortMode] = useState('abc');
+  const [askVehicleForClient, setAskVehicleForClient] = useState(null);
   
   const [clientForm, setClientForm] = useState({ 
     customer_name: '', customer_phone: '', customer_email: '',
@@ -78,6 +80,7 @@ export default function KlientiPage() {
           ic_dph: c.ic_dph || '',
           all_plates: [],
           client_type: c.client_type || (c.company_name ? 'Firma' : 'Osoba'),
+          created_at: c.created_at,
         };
       }
     });
@@ -97,7 +100,7 @@ export default function KlientiPage() {
       }
     });
 
-    setKlienti(Object.values(mapaKlientov).sort((a, b) => (a.customer_name || '').localeCompare(b.customer_name || '')));
+    setKlienti(Object.values(mapaKlientov));
     setLoading(false);
   };
 
@@ -283,7 +286,8 @@ export default function KlientiPage() {
       }
 
       setIsClientModalOpen(false);
-      fetchKlienti();
+      await fetchKlienti();
+      if (!editMode) setAskVehicleForClient(clientForm.customer_name);
     } catch (err) { alert("Chyba: " + err.message); }
     finally { setLoading(false); }
   };
@@ -336,13 +340,30 @@ export default function KlientiPage() {
     setIsCarModalOpen(true);
   };
 
+  const handleAddVehicleAfterCreate = () => {
+    const k = klienti.find(k => k.customer_name === askVehicleForClient);
+    if (k) {
+      setSelectedKlient(k.customer_name);
+      nacitajVozidla(k);
+    }
+    setCarForm({ id: '', plate_number: '', brand: '', model: '', vin_number: '', engine_volume: '', engine_power: '', year_produced: '', fuel_type: 'Diesel', mileage: '' });
+    setEditMode(false);
+    setAskVehicleForClient(null);
+    setIsCarModalOpen(true);
+  };
+
 
   const nd = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const stripDia = s => s ? s.normalize('NFD').replace(/[̀-ͯ]/g, '') : s;
-  const filteredKlienti = klienti.filter(k => {
-    const s = nd(searchTerm);
-    return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
-  });
+  const filteredKlienti = klienti
+    .filter(k => {
+      const s = nd(searchTerm);
+      return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
+    })
+    .sort((a, b) => {
+      if (sortMode === 'date') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      return (a.customer_name || '').localeCompare(b.customer_name || '', 'sk');
+    });
 
   return (
     <div className="p-6 md:p-10 min-h-screen bg-black text-white select-none font-bold">
@@ -360,8 +381,12 @@ export default function KlientiPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         {/* ZOZNAM KLIENTOV */}
         <div className="lg:col-span-1">
-          <input type="text" placeholder="Hľadať partnera / ŠPZ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-6 shadow-inner" />
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+          <input type="text" placeholder="Hľadať partnera / ŠPZ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-3 shadow-inner" />
+          <div className="flex gap-2 mb-5">
+            <button onClick={() => setSortMode('abc')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'abc' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>A – Z</button>
+            <button onClick={() => setSortMode('date')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'date' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>Najnovší</button>
+          </div>
+          <div className="space-y-3 max-h-[65vh] overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             {filteredKlienti.map((k, i) => (
               <div key={i} className="relative group">
                 <button onClick={() => nacitajVozidla(k)} className={`w-full text-left p-6 rounded-3xl border transition-all relative font-bold ${selectedKlient === k.customer_name ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}`}>
@@ -527,6 +552,20 @@ export default function KlientiPage() {
               )) : (
                 <p className="text-center text-zinc-600 uppercase font-black text-xs py-10 tracking-widest">Žiadna história návštev</p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL OPÝTAŤ SA NA VOZIDLO */}
+      {askVehicleForClient && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200] flex items-center justify-center p-6 font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-w-sm w-full shadow-2xl text-center">
+            <p className="text-3xl font-black uppercase italic tracking-tighter mb-2">Pridať vozidlo?</p>
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mb-8">Partner <span className="text-white">{askVehicleForClient}</span> bol vytvorený.</p>
+            <div className="flex gap-4">
+              <button onClick={() => setAskVehicleForClient(null)} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-black text-[10px] uppercase tracking-widest hover:bg-zinc-700 transition-colors">Nie, neskôr</button>
+              <button onClick={handleAddVehicleAfterCreate} className="flex-1 py-4 rounded-2xl bg-red-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-colors shadow-xl">Áno, pridať</button>
             </div>
           </div>
         </div>
