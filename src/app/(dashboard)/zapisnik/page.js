@@ -499,7 +499,8 @@ export default function ZapisnikPage() {
           </button>
         ))}
 
-        {!q && <div className="space-y-2">
+        {!q && (
+        <div className="space-y-2">
           {categories.map((cat, idx) => {
             const c = CAT_COLORS[idx % CAT_COLORS.length];
             const isEditing = editingCatId === cat.id;
@@ -536,14 +537,13 @@ export default function ZapisnikPage() {
               </div>
             );
           })}
-        </div>
-
           {categories.length === 0 && !showNewCat && (
             <div className="text-center py-20 text-zinc-800 uppercase text-xs tracking-widest font-black">
               Zatiaľ žiadne kategórie.<br />Vytvorte prvú.
             </div>
           )}
-        </div>}
+        </div>
+        )}
       </div>
     </div>
   );
