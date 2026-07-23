@@ -608,27 +608,25 @@ export default function KalendarPage() {
             eventResize={handleEventChange}
             eventClick={handleEventClick}
             eventContent={(arg) => {
-              if (!arg.event.extendedProps.isBlocked) return undefined;
-              const worker = arg.event.extendedProps.employeeName || '';
-              const reason = arg.event.extendedProps.pureTitle || '';
-              const label = [worker, reason].filter(Boolean).join(' – ');
+              if (arg.event.extendedProps.isBlocked) {
+                const worker = arg.event.extendedProps.employeeName || '';
+                const reason = arg.event.extendedProps.pureTitle || '';
+                const label = ('🚫 ' + [worker, reason].filter(Boolean).join(' – ')).split('');
+                return (
+                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden', paddingTop: '3px', gap: '0px' }}>
+                    {label.map((ch, i) => (
+                      <span key={i} style={{ fontSize: '7px', fontWeight: 900, color: 'rgba(255,255,255,0.9)', lineHeight: 1.15, textTransform: 'uppercase', userSelect: 'none', flexShrink: 0 }}>
+                        {ch === ' ' ? ' ' : ch}
+                      </span>
+                    ))}
+                  </div>
+                );
+              }
+              // Explicitný render pre bežné eventy (FullCalendar nevie fallbackovať na default keď je eventContent definovaný)
               return (
-                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: '2px 0' }}>
-                  <span style={{
-                    writingMode: 'vertical-lr',
-                    transform: 'rotate(180deg)',
-                    fontSize: '8px',
-                    fontWeight: '900',
-                    color: 'rgba(255,255,255,0.85)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    maxHeight: '100%',
-                    lineHeight: 1.2,
-                  }}>
-                    🚫 {label}
-                  </span>
+                <div style={{ padding: '2px 4px', overflow: 'hidden', height: '100%' }}>
+                  {arg.timeText && <div style={{ fontSize: '10px', opacity: 0.75, fontWeight: 700, lineHeight: 1.2 }}>{arg.timeText}</div>}
+                  <div style={{ fontSize: '11px', fontWeight: 800, lineHeight: 1.3, overflow: 'hidden' }}>{arg.event.title}</div>
                 </div>
               );
             }}
