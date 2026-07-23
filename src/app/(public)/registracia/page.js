@@ -105,6 +105,18 @@ export default function RegistraciaPage() {
           }),
         }).catch(() => {});
 
+        fetch('/api/notify-new-customer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.full_name,
+            email: formData.email.trim(),
+            phone: formData.phone,
+            clientType,
+            companyName: formData.company_name,
+          }),
+        }).catch(() => {});
+
         trackRegistrationSuccess(clientType);
         if (authData.session === null) {
             alert("Registrácia úspešná! Skontrolujte si e-mailovú schránku a potvrďte svoju adresu kliknutím na odkaz.");
