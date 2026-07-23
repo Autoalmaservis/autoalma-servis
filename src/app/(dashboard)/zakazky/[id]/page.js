@@ -1081,124 +1081,41 @@ export default function DetailZakazkyPage() {
               </thead>
               <tbody className="divide-y divide-zinc-800 font-black italic uppercase">
                 {items.map((item) => (
-                  editingItemId === item.id ? (
-                    <tr key={item.id} className="bg-zinc-900/60 border-l-2 border-blue-500">
-                      <td className="p-3"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800' : 'text-orange-400 border-orange-800'}`}>{item.type}</span></td>
-                      <td className="p-3">
-                        <input type="text" value={editItemForm.name}
-                          onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
-                          className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs font-black uppercase italic outline-none focus:border-blue-500" />
-                        {(item.type === 'Práca' || item.type === 'Úkon') && (
-                          <div className="mt-1.5 space-y-1">
-                            {editItemForm.mechanic_splits.map((split, idx) => (
-                              <div key={idx} className="flex gap-1 items-center">
-                                <select
-                                  value={split.worker_id}
-                                  onChange={e => updateEditSplit(idx, 'worker_id', e.target.value)}
-                                  className="flex-1 bg-black border border-yellow-600/40 p-1.5 rounded-lg text-white text-[9px] font-black uppercase outline-none focus:border-yellow-500 cursor-pointer"
-                                >
-                                  <option value="">— Mechanik —</option>
-                                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                                </select>
-                                <input
-                                  type="number" min="0" step="any" placeholder="h"
-                                  value={split.hours}
-                                  onChange={e => updateEditSplit(idx, 'hours', e.target.value)}
-                                  onFocus={e => e.target.select()}
-                                  className="w-14 bg-black border border-yellow-600/30 p-1.5 rounded-lg text-white text-[9px] font-black text-center outline-none focus:border-yellow-500"
-                                />
-                                {editItemForm.mechanic_splits.length > 1 && (
-                                  <button type="button" onClick={() => removeEditSplit(idx)} className="text-red-500 hover:text-red-400 font-black text-xs w-4 shrink-0">✕</button>
-                                )}
-                              </div>
-                            ))}
-                            <button type="button" onClick={addEditSplit} className="text-[8px] font-black text-yellow-600 hover:text-yellow-400 uppercase tracking-widest">+ Mechanik</button>
-                          </div>
-                        )}
-                        {item.type === 'Úkon' && (
-                          <input
-                            type="number" min="0" step="any"
-                            placeholder="hod/ks (norma)"
-                            value={editItemForm.mechanic_hours}
-                            onChange={e => setEditItemForm(p => ({...p, mechanic_hours: e.target.value}))}
-                            onFocus={e => e.target.select()}
-                            className="w-full mt-1 bg-black border border-zinc-700 p-1.5 rounded-lg text-white text-[9px] font-black outline-none focus:border-zinc-500 placeholder:text-zinc-600"
-                          />
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <input type="number" value={editItemForm.quantity}
-                          onChange={e => setEditItemForm(p => ({...p, quantity: e.target.value}))}
-                          onFocus={e => e.target.select()}
-                          className="w-full bg-black border border-zinc-700 p-2 rounded-lg text-white text-xs text-center font-bold outline-none focus:border-blue-500" />
-                      </td>
-                      <td className="p-3">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-1">
-                            <span className="text-[8px] text-zinc-500 font-black shrink-0 w-11">bez DPH</span>
-                            <input type="number" step="any" value={editItemForm.unit_price}
-                              onChange={e => { const v = parseFloat(e.target.value) || 0; setEditItemForm(p => ({...p, unit_price: v})); setEditItemVatStr((v * 1.23).toFixed(2)); }}
-                              onFocus={e => e.target.select()}
-                              className="flex-1 bg-black border border-zinc-700 p-1.5 rounded-lg text-white text-xs text-right font-black outline-none focus:border-blue-500" />
-                            <span className="text-[8px] text-zinc-600 shrink-0">€</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[8px] text-amber-500 font-black shrink-0 w-11">s DPH</span>
-                            <input type="number" step="any" value={editItemVatStr}
-                              onChange={e => { setEditItemVatStr(e.target.value); setEditItemForm(p => ({...p, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0})); }}
-                              onFocus={e => e.target.select()}
-                              className="flex-1 bg-black border border-amber-600/30 p-1.5 rounded-lg text-amber-300 text-xs text-right font-black outline-none focus:border-amber-500" />
-                            <span className="text-[8px] text-zinc-600 shrink-0">€</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-right font-mono text-xs text-zinc-400">
-                        {(parseFloat(editItemForm.quantity || 0) * parseFloat(editItemForm.unit_price || 0)).toFixed(2)} €
-                      </td>
-                      <td className="p-3 no-print">
-                        <div className="flex gap-1 justify-center">
-                          <button onClick={() => saveEditItem(item.id)} className="w-8 h-8 flex items-center justify-center bg-green-600/20 hover:bg-green-600 text-green-400 hover:text-white rounded-xl transition-all font-black text-sm">✓</button>
-                          <button onClick={() => setEditingItemId(null)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl transition-all font-black text-sm">✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={item.id} className="hover:bg-white/5 transition-all">
-                      <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
-                      <td className="p-4 font-black uppercase text-xs tracking-tight">
-                        {item.name}
-                        {(item.type === 'Práca' || item.type === 'Úkon') && (
-                          <>
-                            {item.mechanic_splits?.length > 1 ? (
-                              item.mechanic_splits.filter(s => s.worker_id && Number(s.hours) > 0).map((s, si) => (
-                                <span key={si} className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
-                                  ↳ {employees.find(e => e.id === s.worker_id)?.name || s.worker_id} · {Number(s.hours).toFixed(1)}h
-                                </span>
-                              ))
-                            ) : item.worker_id ? (
-                              <span className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
-                                ↳ {employees.find(e => e.id === item.worker_id)?.name || ''}
-                                {item.type === 'Úkon' && item.mechanic_hours != null && ` · ${item.mechanic_hours}h/ks`}
-                                {item.mechanic_splits?.[0]?.hours && ` · ${Number(item.mechanic_splits[0].hours).toFixed(1)}h`}
+                  <tr key={item.id} className="hover:bg-white/5 transition-all">
+                    <td className="p-4"><span className={`text-[8px] font-black px-2 py-1 rounded border ${item.type === 'Práca' ? 'text-blue-400 border-blue-800 shadow-lg' : item.type === 'Úkon' ? 'text-purple-400 border-purple-800 shadow-lg' : 'text-orange-400 border-orange-800 shadow-lg'}`}>{item.type}</span></td>
+                    <td className="p-4 font-black uppercase text-xs tracking-tight">
+                      {item.name}
+                      {(item.type === 'Práca' || item.type === 'Úkon') && (
+                        <>
+                          {item.mechanic_splits?.length > 1 ? (
+                            item.mechanic_splits.filter(s => s.worker_id && Number(s.hours) > 0).map((s, si) => (
+                              <span key={si} className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
+                                ↳ {employees.find(e => e.id === s.worker_id)?.name || s.worker_id} · {Number(s.hours).toFixed(1)}h
                               </span>
-                            ) : null}
-                          </>
-                        )}
-                      </td>
-                      <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
-                      <td className="p-4 text-right">
-                        <p className="font-mono text-xs text-white">{parseFloat(item.unit_price).toFixed(2)} €</p>
-                        <p className="font-mono text-[9px] text-amber-500/60">{(parseFloat(item.unit_price) * 1.23).toFixed(2)} € s DPH</p>
-                      </td>
-                      <td className="p-4 text-right font-black text-xs">{(item.quantity * item.unit_price).toFixed(2)} €</td>
-                      <td className="p-4 text-center no-print">
-                        <div className="flex gap-1.5 justify-center">
-                          <button onClick={() => openEditItem(item)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-blue-600/20 text-zinc-500 hover:text-blue-400 rounded-xl transition-all text-sm">✏️</button>
-                          <button onClick={() => deleteItem(item.id)} className="w-8 h-8 flex items-center justify-center bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white rounded-xl transition-all font-black text-base">✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
+                            ))
+                          ) : item.worker_id ? (
+                            <span className="block text-[9px] font-black text-yellow-400/70 not-italic normal-case tracking-normal mt-0.5">
+                              ↳ {employees.find(e => e.id === item.worker_id)?.name || ''}
+                              {item.type === 'Úkon' && item.mechanic_hours != null && ` · ${item.mechanic_hours}h/ks`}
+                              {item.mechanic_splits?.[0]?.hours && ` · ${Number(item.mechanic_splits[0].hours).toFixed(1)}h`}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+                    <td className="p-4 text-center font-mono text-xs">{item.quantity} {item.unit}</td>
+                    <td className="p-4 text-right">
+                      <p className="font-mono text-xs text-white">{parseFloat(item.unit_price).toFixed(2)} €</p>
+                      <p className="font-mono text-[9px] text-amber-500/60">{(parseFloat(item.unit_price) * 1.23).toFixed(2)} € s DPH</p>
+                    </td>
+                    <td className="p-4 text-right font-black text-xs">{(item.quantity * item.unit_price).toFixed(2)} €</td>
+                    <td className="p-4 text-center no-print">
+                      <div className="flex gap-1.5 justify-center">
+                        <button onClick={() => openEditItem(item)} className="w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-blue-600/20 text-zinc-500 hover:text-blue-400 rounded-xl transition-all text-sm">✏️</button>
+                        <button onClick={() => deleteItem(item.id)} className="w-8 h-8 flex items-center justify-center bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white rounded-xl transition-all font-black text-base">✕</button>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
                 
                 <tr className="no-print bg-black/50 border-t-2 border-red-600/20">
@@ -1541,6 +1458,126 @@ export default function DetailZakazkyPage() {
         tax={tax}
         total={total}
       />
+
+      {/* EDIT ITEM MODAL */}
+      {editingItemId && (() => {
+        const editedItem = items.find(i => i.id === editingItemId);
+        if (!editedItem) return null;
+        const isUkon = editedItem.type === 'Úkon';
+        const isPraca = editedItem.type === 'Práca';
+        const typeColor = isPraca ? 'text-blue-400 border-blue-600/30 bg-blue-600/10' : isUkon ? 'text-purple-400 border-purple-600/30 bg-purple-600/10' : 'text-orange-400 border-orange-600/30 bg-orange-600/10';
+        return (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[300] flex items-center justify-center p-4 no-print overflow-y-auto">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-[3rem] w-full max-w-xl shadow-2xl my-auto">
+              <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-black uppercase italic tracking-tighter">Upraviť <span className="text-red-600">položku</span></h2>
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded border mt-1 inline-block ${typeColor}`}>{editedItem.type}</span>
+                </div>
+                <button onClick={() => setEditingItemId(null)} className="w-9 h-9 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-white transition-colors font-black">✕</button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* NÁZOV */}
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Názov položky</label>
+                  <input type="text" value={editItemForm.name}
+                    onChange={e => setEditItemForm(p => ({...p, name: e.target.value}))}
+                    className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 text-sm font-black uppercase italic" />
+                </div>
+
+                {/* MNOŽSTVO + CENA */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Množstvo ({editItemForm.unit})</label>
+                    <input type="number" min="0" step="any"
+                      value={editItemForm.quantity}
+                      onChange={e => {
+                        const qty = e.target.value;
+                        setEditItemForm(p => ({
+                          ...p, quantity: qty,
+                          mechanic_splits: (isPraca && p.mechanic_splits.length === 1)
+                            ? [{ ...p.mechanic_splits[0], hours: qty }]
+                            : p.mechanic_splits,
+                        }));
+                      }}
+                      onFocus={e => e.target.select()}
+                      className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-center text-lg font-black outline-none focus:border-red-600" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-2">Cena bez DPH (€)</label>
+                    <input type="number" step="any" min="0"
+                      value={editItemForm.unit_price}
+                      onChange={e => { const v = parseFloat(e.target.value) || 0; setEditItemForm(p => ({...p, unit_price: v})); setEditItemVatStr((v * 1.23).toFixed(2)); }}
+                      onFocus={e => e.target.select()}
+                      className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white text-right text-lg font-black outline-none focus:border-blue-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-amber-600 block mb-2">Cena s DPH 23% (€)</label>
+                  <input type="number" step="any" min="0"
+                    value={editItemVatStr}
+                    onChange={e => { setEditItemVatStr(e.target.value); setEditItemForm(p => ({...p, unit_price: parseFloat((parseFloat(e.target.value || 0) / 1.23).toFixed(4)) || 0})); }}
+                    onFocus={e => e.target.select()}
+                    className="w-full bg-zinc-900 border border-amber-600/30 p-4 rounded-2xl text-amber-300 text-right text-lg font-black outline-none focus:border-amber-500" />
+                </div>
+
+                {/* MECHANIK (pre Práca / Úkon) */}
+                {(isPraca || isUkon) && (
+                  <div className="bg-zinc-900/50 border border-yellow-600/20 rounded-2xl p-4 space-y-3">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-yellow-600 block">Mechanik & čas</label>
+                    {editItemForm.mechanic_splits.map((split, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <select value={split.worker_id} onChange={e => updateEditSplit(idx, 'worker_id', e.target.value)}
+                          className="flex-1 bg-black border border-yellow-600/40 p-3 rounded-xl text-white text-xs font-black uppercase outline-none focus:border-yellow-500 cursor-pointer">
+                          <option value="">— Mechanik —</option>
+                          {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                        </select>
+                        <input type="number" min="0" step="any" placeholder="hod"
+                          value={split.hours} onChange={e => updateEditSplit(idx, 'hours', e.target.value)}
+                          onFocus={e => e.target.select()}
+                          className="w-20 bg-black border border-yellow-600/30 p-3 rounded-xl text-white text-xs font-black text-center outline-none focus:border-yellow-500" />
+                        {editItemForm.mechanic_splits.length > 1 && (
+                          <button type="button" onClick={() => removeEditSplit(idx)} className="text-red-500 hover:text-red-400 font-black text-sm w-6 shrink-0">✕</button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={addEditSplit} className="text-[9px] font-black text-yellow-600 hover:text-yellow-400 uppercase tracking-widest">+ Pridať mechanika</button>
+                    {isUkon && (
+                      <div>
+                        <label className="text-[9px] font-black uppercase tracking-widest text-yellow-600/70 block mb-1">Čas normy (hod/ks)</label>
+                        <input type="number" min="0" step="any"
+                          value={editItemForm.mechanic_hours}
+                          onChange={e => setEditItemForm(p => ({...p, mechanic_hours: e.target.value}))}
+                          onFocus={e => e.target.select()}
+                          placeholder="napr. 0.5"
+                          className="w-full bg-black border border-yellow-800/40 p-3 rounded-xl text-yellow-300 font-black text-center outline-none focus:border-yellow-500" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SUMA */}
+                <div className="flex justify-between items-center px-2 py-3 border-t border-zinc-800">
+                  <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Spolu bez DPH</span>
+                  <span className="text-white font-black text-xl">{(parseFloat(editItemForm.quantity || 0) * parseFloat(editItemForm.unit_price || 0)).toFixed(2)} €</span>
+                </div>
+              </div>
+
+              <div className="p-5 border-t border-zinc-800 flex gap-3">
+                <button type="button" onClick={() => setEditingItemId(null)}
+                  className="flex-1 py-4 rounded-2xl bg-zinc-900 text-zinc-400 font-black text-xs uppercase tracking-widest hover:bg-zinc-800 transition-colors">
+                  Zrušiť
+                </button>
+                <button type="button" onClick={() => saveEditItem(editingItemId)}
+                  className="flex-[2] py-4 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase tracking-widest hover:bg-blue-500 transition-all shadow-xl">
+                  Uložiť zmeny
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ADD ITEM MODAL */}
       {showAddItemModal && (
