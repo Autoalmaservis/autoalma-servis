@@ -16,8 +16,15 @@
     type text NOT NULL,
     name text,
     value text NOT NULL,
+    username text,
+    password text,
+    notes text,
     created_at timestamptz DEFAULT now()
   );
+  -- Ak tabuľka už existuje, pridaj stĺpce:
+  -- ALTER TABLE contacts_entries ADD COLUMN IF NOT EXISTS username text;
+  -- ALTER TABLE contacts_entries ADD COLUMN IF NOT EXISTS password text;
+  -- ALTER TABLE contacts_entries ADD COLUMN IF NOT EXISTS notes text;
   ALTER TABLE contacts_entries ENABLE ROW LEVEL SECURITY;
   CREATE POLICY "auth full access" ON contacts_entries FOR ALL TO authenticated USING (true) WITH CHECK (true);
 */
@@ -76,7 +83,8 @@ export default function KontaktyPage() {
   const [newCatName, setNewCatName] = useState('');
   const [addingCat, setAddingCat] = useState(false);
 
-  const [newEntry, setNewEntry] = useState({ type: 'web', name: '', value: '' });
+  const [newEntry, setNewEntry] = useState({ type: 'web', name: '', value: '', username: '', password: '', notes: '' });
+  const [showPassword, setShowPassword] = useState({});
   const [addingEntry, setAddingEntry] = useState(false);
 
   const [confirmModal, setConfirmModal] = useState(null);
@@ -84,7 +92,7 @@ export default function KontaktyPage() {
   const [editingCatId, setEditingCatId] = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
   const [editingEntryId, setEditingEntryId] = useState(null);
-  const [editingEntryForm, setEditingEntryForm] = useState({ type: 'web', name: '', value: '' });
+  const [editingEntryForm, setEditingEntryForm] = useState({ type: 'web', name: '', value: '', username: '', password: '', notes: '' });
 
   useEffect(() => { fetchCategories(); }, []);
   useEffect(() => { if (activeCat) fetchEntries(activeCat.id); }, [activeCat]);
@@ -139,7 +147,13 @@ export default function KontaktyPage() {
   const addEntry = async () => {
     const value = newEntry.value.trim();
     if (!value || !activeCat) return;
-    const row = { category_id: activeCat.id, type: newEntry.type, name: newEntry.name.trim() || null, value };
+    const row = {
+      category_id: activeCat.id, type: newEntry.type,
+      name: newEntry.name.trim() || null, value,
+      username: newEntry.username.trim() || null,
+      password: newEntry.password.trim() || null,
+      notes: newEntry.notes.trim() || null,
+    };
     const { data, error } = await supabase.from('contacts_entries').insert([row]).select().single();
     if (!error && data) {
       setNewEntry({ type: newEntry.type, name: '', value: '' });
@@ -151,7 +165,14 @@ export default function KontaktyPage() {
 
   const saveEntry = async (id) => {
     if (!editingEntryForm.value.trim()) return;
-    const update = { type: editingEntryForm.type, name: editingEntryForm.name.trim() || null, value: editingEntryForm.value.trim() };
+    const update = {
+      type: editingEntryForm.type,
+      name: editingEntryForm.name.trim() || null,
+      value: editingEntryForm.value.trim(),
+      username: editingEntryForm.username.trim() || null,
+      password: editingEntryForm.password.trim() || null,
+      notes: editingEntryForm.notes.trim() || null,
+    };
     await supabase.from('contacts_entries').update(update).eq('id', id);
     setEntries(p => p.map(e => e.id === id ? { ...e, ...update } : e));
     setAllEntries(p => p.map(e => e.id === id ? { ...e, ...update } : e));
@@ -184,7 +205,7 @@ export default function KontaktyPage() {
     </div>
   );
 
-  const EntryEditForm = ({ e, onSave, onCancel }) => (
+  const EntryEditForm = ({ onSave, onCancel }) => (
     <div className="space-y-3 p-4 bg-zinc-900/60 rounded-2xl border border-zinc-700">
       <div className="flex gap-2">
         {Object.entries(TYPE_META).map(([k, m]) => (
@@ -202,8 +223,24 @@ export default function KontaktyPage() {
         placeholder={editingEntryForm.type === 'web' ? 'https://example.com' : editingEntryForm.type === 'phone' ? '+421 900 000 000' : 'Text...'}
         value={editingEntryForm.value}
         onChange={ev => setEditingEntryForm(p => ({ ...p, value: ev.target.value }))}
-        onKeyDown={ev => ev.key === 'Enter' && onSave()}
         className="w-full bg-black border border-zinc-600 p-3 rounded-xl text-white font-black text-sm outline-none focus:border-red-600 font-mono" />
+      {editingEntryForm.type === 'web' && (
+        <div className="grid grid-cols-2 gap-2">
+          <input type="text" placeholder="Prihlasovacie meno"
+            value={editingEntryForm.username}
+            onChange={ev => setEditingEntryForm(p => ({ ...p, username: ev.target.value }))}
+            className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold text-sm outline-none focus:border-blue-600" />
+          <input type="text" placeholder="Heslo"
+            value={editingEntryForm.password}
+            onChange={ev => setEditingEntryForm(p => ({ ...p, password: ev.target.value }))}
+            className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-mono text-sm outline-none focus:border-blue-600" />
+        </div>
+      )}
+      <textarea placeholder="Poznámka (nepovinné)"
+        value={editingEntryForm.notes}
+        onChange={ev => setEditingEntryForm(p => ({ ...p, notes: ev.target.value }))}
+        rows={2}
+        className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white font-bold text-sm outline-none focus:border-zinc-500 resize-none" />
       <div className="flex gap-2">
         <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-zinc-800 text-zinc-400 font-black text-xs uppercase tracking-widest hover:bg-zinc-700 transition-colors">Zrušiť</button>
         <button onClick={onSave} className="flex-[2] py-2.5 rounded-xl bg-green-700 text-white font-black text-xs uppercase tracking-widest hover:bg-green-600 transition-all">Uložiť</button>
@@ -255,20 +292,47 @@ export default function KontaktyPage() {
                     onCancel={() => setEditingEntryId(null)}
                   />
                 ) : (
-                  <div className={`flex items-start gap-4 p-4 rounded-2xl border ${meta.color} group`}>
-                    <span className="text-xl shrink-0 mt-0.5">{meta.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      {e.name && <p className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-0.5">{e.name}</p>}
-                      <div className="text-sm font-bold">{formatValue(e.type, e.value)}</div>
+                  <div className={`p-4 rounded-2xl border ${meta.color} group`}>
+                    <div className="flex items-start gap-4">
+                      <span className="text-xl shrink-0 mt-0.5">{meta.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        {e.name && <p className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-0.5">{e.name}</p>}
+                        <div className="text-sm font-bold">{formatValue(e.type, e.value)}</div>
+                        {e.type === 'web' && (e.username || e.password) && (
+                          <div className="mt-2 space-y-1">
+                            {e.username && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest w-14 shrink-0">Login</span>
+                                <span className="text-xs font-mono text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded-lg select-all">{e.username}</span>
+                              </div>
+                            )}
+                            {e.password && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest w-14 shrink-0">Heslo</span>
+                                <span className="text-xs font-mono text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded-lg select-all">
+                                  {showPassword[e.id] ? e.password : '••••••••'}
+                                </span>
+                                <button onClick={() => setShowPassword(p => ({ ...p, [e.id]: !p[e.id] }))}
+                                  className="text-[10px] text-zinc-600 hover:text-zinc-300 transition-colors">
+                                  {showPassword[e.id] ? '🙈' : '👁️'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {e.notes && (
+                          <p className="mt-2 text-xs text-zinc-500 font-bold leading-relaxed border-t border-white/10 pt-2">{e.notes}</p>
+                        )}
+                      </div>
+                      <button onClick={() => { setEditingEntryId(e.id); setEditingEntryForm({ type: e.type, name: e.name || '', value: e.value, username: e.username || '', password: e.password || '', notes: e.notes || '' }); }}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-800 transition-all text-sm">
+                        ✏️
+                      </button>
+                      <button onClick={() => deleteEntry(e)}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-xl text-red-500 hover:bg-red-600 hover:text-white transition-all text-sm font-black">
+                        ✕
+                      </button>
                     </div>
-                    <button onClick={() => { setEditingEntryId(e.id); setEditingEntryForm({ type: e.type, name: e.name || '', value: e.value }); }}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-800 transition-all text-sm">
-                      ✏️
-                    </button>
-                    <button onClick={() => deleteEntry(e)}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-xl text-red-500 hover:bg-red-600 hover:text-white transition-all text-sm font-black">
-                      ✕
-                    </button>
                   </div>
                 )}
               </div>
@@ -303,8 +367,24 @@ export default function KontaktyPage() {
               onChange={e => setNewEntry(p => ({ ...p, value: e.target.value }))}
               onKeyDown={e => e.key === 'Enter' && addEntry()}
               className="w-full bg-black border border-zinc-700 p-4 rounded-2xl text-white font-black text-sm outline-none focus:border-red-600 font-mono" />
+            {newEntry.type === 'web' && (
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" placeholder="Prihlasovacie meno"
+                  value={newEntry.username}
+                  onChange={e => setNewEntry(p => ({ ...p, username: e.target.value }))}
+                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-600 font-mono" />
+                <input type="text" placeholder="Heslo"
+                  value={newEntry.password}
+                  onChange={e => setNewEntry(p => ({ ...p, password: e.target.value }))}
+                  className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-600 font-mono" />
+              </div>
+            )}
+            <textarea placeholder="Poznámky (nepovinné)" rows={2}
+              value={newEntry.notes}
+              onChange={e => setNewEntry(p => ({ ...p, notes: e.target.value }))}
+              className="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-white font-bold text-sm outline-none focus:border-zinc-600 resize-none" />
             <div className="flex gap-3">
-              <button onClick={() => { setAddingEntry(false); setNewEntry({ type: newEntry.type, name: '', value: '' }); }}
+              <button onClick={() => { setAddingEntry(false); setNewEntry({ type: newEntry.type, name: '', value: '', username: '', password: '', notes: '' }); }}
                 className="flex-1 py-3 rounded-2xl bg-zinc-900 text-zinc-400 font-black text-xs uppercase tracking-widest hover:bg-zinc-800 transition-colors">
                 Zrušiť
               </button>

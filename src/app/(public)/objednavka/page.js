@@ -31,6 +31,8 @@ export default function VerejnaObjednavkaPage() {
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
+  const [letTechDecideTime, setLetTechDecideTime] = useState(false);
+  const [customerNote, setCustomerNote] = useState('');
   const [dayEvents, setDayEvents] = useState([]);
   const [workHours, setWorkHours] = useState({ start: '07', end: '17' });
 
@@ -93,6 +95,8 @@ export default function VerejnaObjednavkaPage() {
     setCustomItems([]);
     setSelectedDay('');
     setSelectedSlot('');
+    setLetTechDecideTime(false);
+    setCustomerNote('');
     setCalendarMonth(new Date());
     setStep(2);
   };
@@ -103,8 +107,8 @@ export default function VerejnaObjednavkaPage() {
       alert('Prosím vyberte aspoň jeden servisný úkon alebo pridajte vlastný popis.');
       return;
     }
-    if (!selectedDay || !selectedSlot) {
-      alert('Prosím vyberte deň a čas príchodu.');
+    if (!selectedDay || (!selectedSlot && !letTechDecideTime)) {
+      alert('Prosím vyberte deň príchodu a čas, alebo zvoľte „Čas určí technik".');
       return;
     }
     setSubmitting(true);
@@ -127,8 +131,8 @@ export default function VerejnaObjednavkaPage() {
       const normMinutes = selectedNorms.reduce((a, n) => a + n.duration_minutes, 0);
       const customMinutes = customItems.filter(i => i.duration !== 'technik').reduce((a, i) => a + i.duration, 0);
       const estimatedMinutes = normMinutes + customMinutes || 60;
-      const [h, m] = selectedSlot.split(':').map(Number);
-      const endDate = new Date(`${selectedDay}T${selectedSlot}:00`);
+      const timeForEvent = letTechDecideTime ? '08:00' : selectedSlot;
+      const endDate = new Date(`${selectedDay}T${timeForEvent}:00`);
       endDate.setMinutes(endDate.getMinutes() + estimatedMinutes);
       const endStr = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
 
@@ -173,8 +177,12 @@ export default function VerejnaObjednavkaPage() {
       // --- Uloženie calendar_event ---
       const { error } = await supabase.from('calendar_events').insert([{
         title: `ONLINE: ${plateFinal || customerData.name}`,
-        start_datetime: `${selectedDay}T${selectedSlot}:00`,
+        start_datetime: `${selectedDay}T${timeForEvent}:00`,
         end_datetime: `${selectedDay}T${endStr}:00`,
+        customer_note: [
+          letTechDecideTime ? '⏰ Čas príchodu: určí prijímací technik' : null,
+          customerNote ? `Poznámka: ${customerNote}` : null,
+        ].filter(Boolean).join(' | ') || null,
         plate_number: plateFinal || null,
         issue_description: issueDescription,
         customer_name: customerData.name.trim(),
@@ -196,8 +204,9 @@ export default function VerejnaObjednavkaPage() {
           customerName: customerData.name.trim(),
           plateNumber: plateFinal,
           date: selectedDay,
-          time: selectedSlot,
+          time: letTechDecideTime ? 'Čas určí technik' : selectedSlot,
           services: issueDescription,
+          customerNote: customerNote || null,
           phone: customerData.phone,
           email: customerData.email,
           source: 'Online objednávka',
@@ -214,8 +223,9 @@ export default function VerejnaObjednavkaPage() {
             customerName: customerData.name,
             plateNumber: plateFinal,
             date: selectedDay,
-            startTime: selectedSlot,
+            startTime: letTechDecideTime ? 'Čas určí technik' : selectedSlot,
             issueDescription,
+            customerNote: customerNote || null,
             type: 'received',
           }),
         }).catch(() => {});
@@ -585,12 +595,31 @@ export default function VerejnaObjednavkaPage() {
                         <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
                         <div className="grid grid-cols-4 gap-2">
                           {timeSlots.map(slot => (
-                            <button key={slot} type="button" onClick={() => setSelectedSlot(slot)}
-                              className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                            <button key={slot} type="button" onClick={() => { setSelectedSlot(slot); setLetTechDecideTime(false); }}
+                              className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot && !letTechDecideTime ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
                               {slot}
                             </button>
                           ))}
                         </div>
+                        <button type="button" onClick={() => { setLetTechDecideTime(true); setSelectedSlot(''); }}
+                          className={`w-full mt-3 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all not-italic ${letTechDecideTime ? 'bg-zinc-700 border-zinc-500 text-white' : 'bg-zinc-900/60 border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}>
+                          🔧 {letTechDecideTime ? '✓ Čas určí prijímací technik' : 'Čas nech určí prijímací technik'}
+                        </button>
+                        {letTechDecideTime && (
+                          <p className="text-[9px] text-amber-400 font-black uppercase tracking-widest text-center mt-1.5 not-italic">Zavoláme vám a dohodneme presný čas</p>
+                        )}
+                      </div>
+
+                      {/* Poznámka */}
+                      <div>
+                        <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Poznámka (nepovinné)</p>
+                        <textarea
+                          value={customerNote}
+                          onChange={e => setCustomerNote(e.target.value)}
+                          placeholder="Napr. preferovaný čas, špeciálne požiadavky..."
+                          rows={3}
+                          className="w-full bg-zinc-900 border border-zinc-700 focus:border-zinc-500 rounded-2xl px-4 py-3 text-white text-xs font-bold outline-none resize-none not-italic normal-case placeholder:text-zinc-600 placeholder:font-bold placeholder:normal-case placeholder:not-italic"
+                        />
                       </div>
                     </div>
                   )}
@@ -598,7 +627,7 @@ export default function VerejnaObjednavkaPage() {
                   {/* Odoslať */}
                   <button
                     type="submit"
-                    disabled={submitting || !selectedDay || !selectedSlot || (selectedNorms.length === 0 && customItems.length === 0)}
+                    disabled={submitting || !selectedDay || (!selectedSlot && !letTechDecideTime) || (selectedNorms.length === 0 && customItems.length === 0)}
                     className="mt-auto w-full bg-red-600 hover:bg-red-500 text-white font-black uppercase text-xs tracking-[0.2em] py-5 rounded-2xl transition-all disabled:opacity-30 not-italic shadow-[0_10px_30px_rgba(220,38,38,0.2)]"
                   >
                     {submitting ? 'Odosielam...' : '✓ Odoslať žiadosť o termín'}

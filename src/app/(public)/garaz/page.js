@@ -39,6 +39,8 @@ export default function GarazPage() {
   // POMOCNÉ STAVY PRE NOVÝ VÝBER TERMÍNU
   const [selectedDay, setSelectedDay] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
+  const [letTechDecideTime, setLetTechDecideTime] = useState(false);
+  const [customerNote, setCustomerNote] = useState('');
   const timeSlots = [
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
     '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'
@@ -310,8 +312,8 @@ export default function GarazPage() {
       alert("Prosím vyberte si deň príchodu.");
       return;
     }
-    if (!selectedSlot) {
-      alert("Prosím vyberte si konkrétny čas príchodu.");
+    if (!selectedSlot && !letTechDecideTime) {
+      alert("Prosím vyberte si čas príchodu alebo zvoľte 'Čas určí technik'.");
       return;
     }
 
@@ -336,7 +338,8 @@ export default function GarazPage() {
         : '';
       const finalDescription = [normsList, customList].filter(Boolean).join('\n\n');
 
-      const finalDateTime = `${selectedDay}T${selectedSlot}:00`;
+      const timeForEvent = letTechDecideTime ? '08:00' : selectedSlot;
+      const finalDateTime = `${selectedDay}T${timeForEvent}:00`;
       const startTime = new Date(finalDateTime);
       const endTime = new Date(startTime.getTime() + estimatedMinutes * 60000);
       const endTimeStr = `${selectedDay}T${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}:00`;
@@ -348,7 +351,11 @@ export default function GarazPage() {
           description: `Objednávka z klientskej zóny.`,
           issue_description: finalDescription,
           planned_work: "Bude určené technikom",
-          customer_note: `Odhadované trvanie: ${estimatedMinutes} min.`,
+          customer_note: [
+            `Odhadované trvanie: ${estimatedMinutes} min.`,
+            letTechDecideTime ? '⏰ Čas príchodu: určí prijímací technik' : null,
+            customerNote ? `Poznámka zákazníka: ${customerNote}` : null,
+          ].filter(Boolean).join(' | '),
           start_datetime: finalDateTime,
           end_datetime: endTimeStr,
           plate_number: orderingVehicle.license_plate,
@@ -372,8 +379,9 @@ export default function GarazPage() {
           plateNumber: orderingVehicle.license_plate,
           carModel: orderingVehicle.brand_model || '',
           date: selectedDay,
-          time: selectedSlot,
+          time: letTechDecideTime ? 'Čas určí technik' : selectedSlot,
           services: finalDescription,
+          customerNote: customerNote || null,
           phone: userProfile?.phone || null,
           email: userProfile?.email || user.email,
           source: 'Klientska garáž',
@@ -391,8 +399,9 @@ export default function GarazPage() {
             customerName: userProfile?.full_name || '',
             plateNumber: orderingVehicle.license_plate,
             date: selectedDay,
-            startTime: selectedSlot,
+            startTime: letTechDecideTime ? 'Čas určí technik' : selectedSlot,
             issueDescription: finalDescription,
+            customerNote: customerNote || null,
             type: 'received',
           }),
         }).catch(() => {});
@@ -1120,12 +1129,31 @@ export default function GarazPage() {
                           <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Čas príchodu</p>
                           <div className="grid grid-cols-4 gap-2">
                             {timeSlots.map((slot) => (
-                              <button key={slot} type="button" onClick={() => setSelectedSlot(slot)}
-                                className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
+                              <button key={slot} type="button" onClick={() => { setSelectedSlot(slot); setLetTechDecideTime(false); }}
+                                className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${selectedSlot === slot && !letTechDecideTime ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-white hover:border-zinc-600'}`}>
                                 {slot}
                               </button>
                             ))}
                           </div>
+                          <button type="button" onClick={() => { setLetTechDecideTime(true); setSelectedSlot(''); }}
+                            className={`w-full mt-3 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all not-italic ${letTechDecideTime ? 'bg-zinc-700 border-zinc-500 text-white' : 'bg-zinc-900/60 border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'}`}>
+                            🔧 {letTechDecideTime ? '✓ Čas určí prijímací technik' : 'Čas nech určí prijímací technik'}
+                          </button>
+                          {letTechDecideTime && (
+                            <p className="text-[9px] text-amber-400 font-black uppercase tracking-widest text-center mt-1.5 not-italic">Zavoláme vám a dohodneme presný čas</p>
+                          )}
+                        </div>
+
+                        {/* Poznámka */}
+                        <div>
+                          <p className="text-[9px] text-white uppercase ml-1 font-black tracking-widest mb-2">Poznámka (nepovinné)</p>
+                          <textarea
+                            value={customerNote}
+                            onChange={e => setCustomerNote(e.target.value)}
+                            placeholder="Napr. preferovaný čas, špeciálne požiadavky..."
+                            rows={3}
+                            className="w-full bg-zinc-900 border border-zinc-700 focus:border-zinc-500 rounded-2xl px-4 py-3 text-white text-xs font-bold outline-none resize-none not-italic normal-case placeholder:text-zinc-600"
+                          />
                         </div>
                       </div>
                     )}

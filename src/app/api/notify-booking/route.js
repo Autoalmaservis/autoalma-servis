@@ -3,7 +3,7 @@ import { getCompanySettings } from '@/app/lib/companySettings';
 
 export async function POST(request) {
   try {
-    const { customerName, plateNumber, carModel, date, time, services, source, phone, email } = await request.json();
+    const { customerName, plateNumber, carModel, date, time, services, source, phone, email, customerNote } = await request.json();
 
     if (!customerName?.trim() || !plateNumber?.trim()) {
       return Response.json({ error: 'Chýba meno zákazníka alebo ŠPZ' }, { status: 400 });
@@ -36,6 +36,7 @@ export async function POST(request) {
       time ? ['Čas', time] : null,
       phone ? ['Telefón', phone] : null,
       email ? ['E-mail', email] : null,
+      customerNote ? ['Poznámka', customerNote] : null,
     ].filter(Boolean);
 
     const tableRows = rows.map(([label, value]) => `
