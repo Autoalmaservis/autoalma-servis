@@ -180,15 +180,16 @@ export default function DashboardLayout({ children }) {
 
             <MenuLink href="/CP" icon="📄" label="Cenové ponuky" collapsed={isCollapsed} active={pathname.startsWith('/ponuky')} />
             <MenuLink href="/faktury" icon="💰" label="Faktúry a Doklady" collapsed={isCollapsed} active={pathname === '/faktury'} />
-            <MenuLink href="/statistiky" icon="📊" label="Štatistiky" collapsed={isCollapsed} active={pathname === '/statistiky'} />
-            <MenuLink href="/sms-email" icon="📱" label="SMS / Email" collapsed={isCollapsed} active={pathname === '/sms-email'} />
+            <MenuLink href="/kasa" icon="💵" label="Kasa" collapsed={isCollapsed} active={pathname === '/kasa'} />
+            <MenuLink href="/kontakty" icon="📒" label="Kontakty" collapsed={isCollapsed} active={pathname === '/kontakty'} />
 
             <div className="pt-4 mt-4 border-t border-zinc-900">
               {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Správa</p>}
+              <MenuLink href="/statistiky" icon="📊" label="Štatistiky" collapsed={isCollapsed} active={pathname === '/statistiky'} />
+              <MenuLink href="/sms-email" icon="📱" label="SMS / Email" collapsed={isCollapsed} active={pathname === '/sms-email'} />
               <MenuLink href="/databaza" icon="🗄️" label="Práce / Diely / Úkony" collapsed={isCollapsed} active={pathname === '/databaza'} />
               <MenuLink href="/nastavenia" icon="⚙️" label="Nastavenia" collapsed={isCollapsed} active={pathname === '/nastavenia'} />
               <MenuLink href="/spravovat-web" icon="🌐" label="Spravovať web" collapsed={isCollapsed} active={pathname.startsWith('/spravovat-web')} />
-              <MenuLink href="/kasa" icon="💵" label="Kasa" collapsed={isCollapsed} active={pathname === '/kasa'} />
             </div>
 
             {/* TO-DO — stránka */}
