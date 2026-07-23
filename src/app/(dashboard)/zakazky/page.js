@@ -312,6 +312,7 @@ export default function ZakazkyZoznamPage() {
 
             <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end">
               <div className="hidden sm:block text-right border-r border-zinc-800 pr-6">
+                <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-0.5">{job.job_number || `#${job.id.slice(0,8).toUpperCase()}`}</p>
                 <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Mat / Práca</p>
                 <p className="text-[11px] font-black italic text-zinc-400 font-bold">
                   {job.materialPrice.toFixed(2)}€ / {job.workPrice.toFixed(2)}€
