@@ -936,7 +936,8 @@ export default function DetailZakazkyPage() {
                 )}
                 <div className="pt-4 border-t border-zinc-800/50">
                   <p className="text-lg font-black uppercase text-zinc-300 italic tracking-tight leading-none">{zakazka.car_brand_model}</p>
-                  <p className="font-mono text-[10px] text-zinc-500 tracking-widest uppercase mt-1">VIN: {zakazka.vin_number || '---'}</p>
+                  {zakazka.plate_number && <p className="text-lg font-black uppercase text-white tracking-widest mt-1">{zakazka.plate_number}</p>}
+                  <p className="font-mono text-sm text-zinc-400 tracking-widest uppercase mt-1">VIN: {zakazka.vin_number || '---'}</p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
                     {zakazka.year_produced && <p className="text-[10px] text-zinc-400 font-bold">Rok: <span className="text-zinc-200">{zakazka.year_produced}</span></p>}
                     {zakazka.engine_volume && <p className="text-[10px] text-zinc-400 font-bold">Objem: <span className="text-zinc-200">{zakazka.engine_volume} cm³</span></p>}
