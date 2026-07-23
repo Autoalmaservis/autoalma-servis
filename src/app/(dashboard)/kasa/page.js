@@ -67,6 +67,8 @@ export default function KasaPage() {
   const totalPrijem = entries.filter(e => e.type === 'prijem').reduce((s, e) => s + Number(e.amount), 0);
   const totalVydaj  = entries.filter(e => e.type === 'vydaj').reduce((s, e) => s + Number(e.amount), 0);
   const zostatok    = totalPrijem - totalVydaj;
+  const preneseny   = entries.filter(e => e.type === 'prijem' && e.description && e.description.startsWith('Prevod z týždňa')).reduce((s, e) => s + Number(e.amount), 0);
+  const zarobene    = zostatok - preneseny;
 
   const openModal = (day) => {
     setModalDay(day);
@@ -168,7 +170,7 @@ export default function KasaPage() {
         </div>
 
         {/* Súhrn týždňa */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-green-600/10 border border-green-600/30 rounded-[1.5rem] p-5 text-center">
             <p className="text-[10px] text-green-500 uppercase tracking-widest font-black mb-1">Príjmy</p>
             <p className="text-3xl font-black text-green-400 italic">+{totalPrijem.toFixed(2)} €</p>
@@ -180,6 +182,11 @@ export default function KasaPage() {
           <div className={`rounded-[1.5rem] p-5 text-center border ${zostatok >= 0 ? 'bg-white/5 border-white/10' : 'bg-orange-600/10 border-orange-600/30'}`}>
             <p className={`text-[10px] uppercase tracking-widest font-black mb-1 ${zostatok >= 0 ? 'text-zinc-400' : 'text-orange-400'}`}>Zostatok v kase</p>
             <p className={`text-3xl font-black italic ${zostatok >= 0 ? 'text-white' : 'text-orange-400'}`}>{zostatok >= 0 ? '+' : ''}{zostatok.toFixed(2)} €</p>
+          </div>
+          <div className={`rounded-[1.5rem] p-5 text-center border ${zarobene >= 0 ? 'bg-blue-600/10 border-blue-600/30' : 'bg-orange-600/10 border-orange-600/30'}`}>
+            <p className={`text-[10px] uppercase tracking-widest font-black mb-1 ${zarobene >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>Zarobené tento týždeň</p>
+            <p className={`text-3xl font-black italic ${zarobene >= 0 ? 'text-blue-300' : 'text-orange-400'}`}>{zarobene >= 0 ? '+' : ''}{zarobene.toFixed(2)} €</p>
+            {preneseny > 0 && <p className="text-[9px] text-zinc-600 mt-1 font-black uppercase tracking-widest">bez {preneseny.toFixed(0)} € prenosu</p>}
           </div>
         </div>
 

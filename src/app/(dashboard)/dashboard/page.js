@@ -45,7 +45,6 @@ export default function Dashboard() {
     unconfirmedTickets: 0,
     completedMonth: 0,
     weekReservations: 0,
-    weekCash: 0,
     totalJobs: 0,
     vehiclesCount: 0,
     activeWorkers: 0,
@@ -66,11 +65,6 @@ export default function Dashboard() {
         sunday.setDate(today.getDate() + daysToSunday);
         const sundayStr = sunday.toISOString().split('T')[0];
 
-        const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        const monday = new Date(today);
-        monday.setDate(today.getDate() - daysFromMonday);
-        const mondayStr = monday.toISOString().split('T')[0];
-
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
         const monthStartStr = monthStart.toISOString().split('T')[0];
 
@@ -83,7 +77,6 @@ export default function Dashboard() {
           { count: totalJobsCount },
           { count: vehiclesCount },
           { count: activeWorkersCount },
-          { data: kasaData },
         ] = await Promise.all([
           supabase.from('job_tickets').select('*', { count: 'exact', head: true }).eq('status', 'Prebieha'),
           supabase.from('calendar_events').select('*', { count: 'exact', head: true }).eq('is_confirmed', false).neq('plate_number', 'BLOK'),
@@ -93,10 +86,7 @@ export default function Dashboard() {
           supabase.from('job_tickets').select('*', { count: 'exact', head: true }),
           supabase.from('vehicles').select('*', { count: 'exact', head: true }),
           supabase.from('employees').select('*', { count: 'exact', head: true }).eq('active', true),
-          supabase.from('kasa_entries').select('amount').eq('type', 'prijem').gte('date', mondayStr).lte('date', sundayStr),
         ]);
-
-        const weekCash = kasaData ? kasaData.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) : 0;
 
         setStats({
           inProgress: inProgressCount || 0,
@@ -104,7 +94,6 @@ export default function Dashboard() {
           unconfirmedTickets: unconfirmedTicketsCount || 0,
           completedMonth: completedMonthCount || 0,
           weekReservations: weekCount || 0,
-          weekCash,
           totalJobs: totalJobsCount || 0,
           vehiclesCount: vehiclesCount || 0,
           activeWorkers: activeWorkersCount || 0,
@@ -174,7 +163,7 @@ export default function Dashboard() {
       </div>
 
       {/* RAD 2 — tento týždeň / mesiac */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <StatCard
           href="/zakazky"
           title="Dokončené tento mesiac"
@@ -191,15 +180,6 @@ export default function Dashboard() {
           unit="termínov"
           sub="Naplánované od dnes do nedele"
           accent="zinc"
-          loading={loading}
-        />
-        <StatCard
-          href="/faktury"
-          title="Hotovosť tento týždeň"
-          value={stats.weekCash.toLocaleString('sk-SK', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-          unit="€"
-          sub="Prijaté v hotovosti od pondelka"
-          accent="green"
           loading={loading}
         />
       </div>
