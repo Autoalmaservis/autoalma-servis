@@ -1243,7 +1243,7 @@ export default function DetailZakazkyPage() {
                           className="w-full bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-white outline-none focus:border-red-600 text-xs font-black uppercase italic"
                           value={newItem.name}
                           autoComplete="off"
-                          onFocus={() => setShowItemDropdown(true)}
+                          onFocus={(e) => { e.target.select(); setShowItemDropdown(true); }}
                           onChange={(e) => {
                             setNewItem({ ...newItem, name: e.target.value });
                             setShowItemDropdown(true);
@@ -1673,7 +1673,7 @@ export default function DetailZakazkyPage() {
                     className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none focus:border-red-600 text-sm font-black uppercase italic"
                     value={newItem.name}
                     autoComplete="off"
-                    onFocus={() => setShowItemDropdown(true)}
+                    onFocus={(e) => { e.target.select(); setShowItemDropdown(true); }}
                     onBlur={() => setTimeout(() => setShowItemDropdown(false), 150)}
                     onChange={(e) => { setNewItem({ ...newItem, name: e.target.value }); setShowItemDropdown(true); }}
                   />
