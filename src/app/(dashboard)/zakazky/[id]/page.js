@@ -663,7 +663,7 @@ export default function DetailZakazkyPage() {
         .maybeSingle();
       if (fetchErr) { console.error('Sklad SELECT chyba:', fetchErr.message); return; }
       if (!wItem) return;
-      const newQty = Math.max(0, parseFloat(wItem.quantity) - qty);
+      const newQty = parseFloat(wItem.quantity) - qty;
       const { error: updateErr } = await supabase
         .from('warehouse_items')
         .update({ quantity: newQty })
@@ -705,7 +705,7 @@ export default function DetailZakazkyPage() {
 
     if (!isPraca && !isUkon) syncToCatalog(itemToSave);
 
-    const { rateType: _rt, worker_id: _wid, mechanic_hours: _mh, mechanic_splits: _mspl, ...itemForDb } = itemToSave;
+    const { rateType: _rt, worker_id: _wid, mechanic_hours: _mh, mechanic_splits: _mspl, warehouseItemId: _whId, ...itemForDb } = itemToSave;
     const validSplits = newItem.mechanic_splits.filter(s => s.worker_id && Number(s.hours) > 0);
     // Pre Práca: aj split iba s worker_id (bez hodín) je platný — hodiny berieme z quantity
     const splitsWithWorker = (isPraca || isUkon) ? newItem.mechanic_splits.filter(s => s.worker_id) : [];
