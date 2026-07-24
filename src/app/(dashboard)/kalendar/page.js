@@ -555,7 +555,13 @@ export default function KalendarPage() {
         <div className="flex gap-3 items-center">
           {/* PREPÍNAČ ZOBRAZENIA */}
           <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1">
-            <button onClick={() => setViewMode('calendar')}
+            <button onClick={() => {
+                if (viewMode === 'calendar') {
+                  calendarRef.current?.getApi().today();
+                } else {
+                  setViewMode('calendar');
+                }
+              }}
               className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'calendar' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-white'}`}>
               📅 Kalendár
             </button>
