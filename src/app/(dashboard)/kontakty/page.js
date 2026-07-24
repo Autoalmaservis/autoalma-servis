@@ -338,7 +338,7 @@ export default function KontaktyPage() {
     const name = newEntryName.trim();
     if (!name || !activeCat) return;
     const { data, error } = await supabase.from('contacts_entries')
-      .insert({ category_id: activeCat.id, name, fields: [] })
+      .insert({ category_id: activeCat.id, name, fields: [], type: 'entry' })
       .select().single();
     if (error) { alert('Chyba: ' + error.message); return; }
     if (data) {
