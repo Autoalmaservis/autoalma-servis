@@ -337,9 +337,10 @@ export default function KontaktyPage() {
   const addEntry = async () => {
     const name = newEntryName.trim();
     if (!name || !activeCat) return;
-    const { data } = await supabase.from('contacts_entries')
+    const { data, error } = await supabase.from('contacts_entries')
       .insert({ category_id: activeCat.id, name, fields: [] })
       .select().single();
+    if (error) { alert('Chyba: ' + error.message); return; }
     if (data) {
       setEntries(e => [...e, data]);
       setAllEntries(a => [...a, data]);
