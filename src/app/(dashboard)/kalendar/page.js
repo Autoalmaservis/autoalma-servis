@@ -396,10 +396,20 @@ export default function KalendarPage() {
           issueDescription,
         });
       }
+      const dateToRestore = selectedDate;
       setIsModalOpen(false);
       setEditingEventId(null);
       setSelectionMode(null);
-      fetchData();
+      await fetchData();
+      if (dateToRestore) {
+        setTimeout(() => {
+          const api = calendarRef.current?.getApi();
+          if (api) {
+            api.changeView('timeGridWeek');
+            api.gotoDate(dateToRestore);
+          }
+        }, 50);
+      }
     } else {
       alert("Chyba pri ukladaní: " + error.message);
     }
