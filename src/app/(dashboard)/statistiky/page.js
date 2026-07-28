@@ -84,6 +84,20 @@ export default function StatistikyPage() {
   const [mechJobs, setMechJobs]   = useState([]);
 
   const [selectedJob, setSelectedJob] = useState(null);
+  const [modalDetail, setModalDetail] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  const openJobModal = async (job) => {
+    setSelectedJob(job);
+    setModalDetail(null);
+    setModalLoading(true);
+    const [{ data: ticket }, { data: tasks }] = await Promise.all([
+      supabase.from('job_tickets').select('car_brand_model, job_number').eq('id', job.id).single(),
+      supabase.from('job_tasks').select('task_description, is_completed').eq('job_id', job.id),
+    ]);
+    setModalDetail({ car_brand_model: ticket?.car_brand_model || '', job_number: ticket?.job_number || '', tasks: tasks || [] });
+    setModalLoading(false);
+  };
 
   // --- TAB: MECHANICI ---
   const [mechPeriod, setMechPeriod]         = useState('month');
@@ -111,7 +125,7 @@ export default function StatistikyPage() {
       { data: payouts },
     ] = await Promise.all([
       supabase.from('invoices').select('total_amount, is_official, created_at').gte('created_at', from).lte('created_at', to),
-      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, car_brand_model, job_number, created_at, status, job_items(name, quantity, unit_price, unit, type, worker_id, mechanic_hours, mechanic_splits), job_tasks(task_description, is_completed)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
+      supabase.from('job_tickets').select('id, assigned_worker_id, mechanic_splits, customer_name, plate_number, car_brand_model, job_number, created_at, status, job_items(name, quantity, unit_price, unit, type, worker_id, mechanic_hours, mechanic_splits)').gte('created_at', from).lte('created_at', to).in('status', ['Dokončené', 'Archivované']),
       supabase.from('kasa_entries').select('id, employee_id, amount, date, description').eq('type', 'vydaj').not('employee_id', 'is', null).gte('date', fromDate).lte('date', toDate).order('date', { ascending: false }),
     ]);
 
@@ -519,7 +533,7 @@ export default function StatistikyPage() {
                   <div className="space-y-2">
                     {mechJobs.map((job, i) => (
                       <div key={job.id}
-                        onClick={() => setSelectedJob(job)}
+                        onClick={() => openJobModal(job)}
                         className="flex items-center gap-4 bg-black rounded-2xl px-5 py-4 cursor-pointer hover:bg-zinc-800 active:bg-zinc-700 transition-all"
                       >
                         <div className="min-w-0 flex-1">
@@ -762,90 +776,92 @@ export default function StatistikyPage() {
       )}
 
       {/* ===== MODAL: DETAIL ZÁKAZKY ===== */}
-    {selectedJob && (
-      <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4" onClick={() => setSelectedJob(null)}>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-          <div className="p-8">
+      {selectedJob && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4" onClick={() => setSelectedJob(null)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-8">
 
-            {/* HEADER */}
-            <div className="flex items-start justify-between mb-8">
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-red-600 mb-1">{selectedJob.job_number || `#${selectedJob.id.slice(0,8).toUpperCase()}`}</p>
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none text-white">{selectedJob.customer_name}</h2>
-                <p className="text-zinc-400 text-sm font-black italic mt-1">{selectedJob.car_brand_model || ''}</p>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="bg-zinc-800 text-white font-mono font-black text-xs px-3 py-1 rounded-lg uppercase">{selectedJob.plate_number}</span>
-                  <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">{new Date(selectedJob.created_at).toLocaleDateString('sk-SK')}</span>
+              {/* HEADER */}
+              <div className="flex items-start justify-between mb-8">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-red-600 mb-1">{modalDetail?.job_number || `#${selectedJob.id.slice(0,8).toUpperCase()}`}</p>
+                  <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none text-white">{selectedJob.customer_name}</h2>
+                  <p className="text-zinc-400 text-sm font-black italic mt-1">{modalDetail?.car_brand_model || selectedJob.car_brand_model || ''}</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="bg-zinc-800 text-white font-mono font-black text-xs px-3 py-1 rounded-lg uppercase">{selectedJob.plate_number}</span>
+                    <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">{new Date(selectedJob.created_at).toLocaleDateString('sk-SK')}</span>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedJob(null)} className="text-zinc-600 hover:text-white text-2xl font-black transition-all leading-none">✕</button>
+              </div>
+
+              {/* ODPRACOVANÉ */}
+              <div className="flex gap-4 mb-8">
+                <div className="flex-1 bg-black rounded-2xl p-4 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-1">Hodiny</p>
+                  <p className="text-2xl font-black text-white">{fmtH(selectedJob.workHours)}</p>
+                </div>
+                <div className="flex-1 bg-black rounded-2xl p-4 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Výnos</p>
+                  <p className="text-2xl font-black text-white">{fmt(selectedJob.workRevenue)}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedJob(null)} className="text-zinc-600 hover:text-white text-2xl font-black transition-all leading-none">✕</button>
-            </div>
 
-            {/* ODPRACOVANÉ */}
-            <div className="flex gap-4 mb-8">
-              <div className="flex-1 bg-black rounded-2xl p-4 text-center">
-                <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mb-1">Hodiny</p>
-                <p className="text-2xl font-black text-white">{fmtH(selectedJob.workHours)}</p>
-              </div>
-              <div className="flex-1 bg-black rounded-2xl p-4 text-center">
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Výnos</p>
-                <p className="text-2xl font-black text-white">{fmt(selectedJob.workRevenue)}</p>
-              </div>
-            </div>
+              {modalLoading && <p className="text-center text-zinc-600 text-xs font-black uppercase tracking-widest animate-pulse py-4">Načítavam...</p>}
 
-            {/* ÚKONY */}
-            {selectedJob.job_tasks?.length > 0 && (
-              <div className="mb-6">
-                <p className="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-3">Vykonané úkony</p>
-                <div className="space-y-2">
-                  {selectedJob.job_tasks.map((t, i) => (
-                    <div key={i} className="flex items-center gap-3 bg-black rounded-xl px-4 py-3">
-                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${t.is_completed ? 'bg-green-600 border-green-600' : 'border-zinc-700'}`}>
-                        {t.is_completed && <span className="text-white text-[9px]">✓</span>}
+              {/* ÚKONY */}
+              {!modalLoading && modalDetail?.tasks?.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-3">Vykonané úkony</p>
+                  <div className="space-y-2">
+                    {modalDetail.tasks.map((t, i) => (
+                      <div key={i} className="flex items-center gap-3 bg-black rounded-xl px-4 py-3">
+                        <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${t.is_completed ? 'bg-green-600 border-green-600' : 'border-zinc-700'}`}>
+                          {t.is_completed && <span className="text-white text-[9px]">✓</span>}
+                        </div>
+                        <span className="text-zinc-300 text-xs font-bold">{t.task_description}</span>
                       </div>
-                      <span className="text-zinc-300 text-xs font-bold">{t.task_description}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* PRÁCE */}
-            {selectedJob.job_items?.filter(i => i.type === 'Práca' || i.type === 'Úkon').length > 0 && (
-              <div className="mb-4">
-                <p className="text-[9px] font-black uppercase tracking-widest text-red-600 mb-3">Práca</p>
-                <div className="space-y-1">
-                  {selectedJob.job_items.filter(i => i.type === 'Práca' || i.type === 'Úkon').map((item, i) => (
-                    <div key={i} className="flex items-center justify-between bg-black rounded-xl px-4 py-3 gap-4">
-                      <span className="text-zinc-300 text-xs font-bold flex-1">{item.name}</span>
-                      <span className="text-zinc-500 text-[10px] font-black shrink-0">{item.quantity} {item.unit || 'hod'}</span>
-                      <span className="text-white text-xs font-black shrink-0">{((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)} €</span>
-                    </div>
-                  ))}
+              {/* PRÁCE */}
+              {selectedJob.job_items?.filter(i => i.type === 'Práca' || i.type === 'Úkon').length > 0 && (
+                <div className="mb-4">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-red-600 mb-3">Práca</p>
+                  <div className="space-y-1">
+                    {selectedJob.job_items.filter(i => i.type === 'Práca' || i.type === 'Úkon').map((item, i) => (
+                      <div key={i} className="flex items-center justify-between bg-black rounded-xl px-4 py-3 gap-4">
+                        <span className="text-zinc-300 text-xs font-bold flex-1">{item.name}</span>
+                        <span className="text-zinc-500 text-[10px] font-black shrink-0">{item.quantity} {item.unit || 'hod'}</span>
+                        <span className="text-white text-xs font-black shrink-0">{((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)} €</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* MATERIÁL */}
-            {selectedJob.job_items?.filter(i => i.type === 'Materiál').length > 0 && (
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Materiál</p>
-                <div className="space-y-1">
-                  {selectedJob.job_items.filter(i => i.type === 'Materiál').map((item, i) => (
-                    <div key={i} className="flex items-center justify-between bg-black rounded-xl px-4 py-3 gap-4">
-                      <span className="text-zinc-400 text-xs font-bold flex-1">{item.name}</span>
-                      <span className="text-zinc-600 text-[10px] font-black shrink-0">{item.quantity} {item.unit || 'ks'}</span>
-                      <span className="text-zinc-400 text-xs font-black shrink-0">{((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)} €</span>
-                    </div>
-                  ))}
+              {/* MATERIÁL */}
+              {selectedJob.job_items?.filter(i => i.type === 'Materiál').length > 0 && (
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-3">Materiál</p>
+                  <div className="space-y-1">
+                    {selectedJob.job_items.filter(i => i.type === 'Materiál').map((item, i) => (
+                      <div key={i} className="flex items-center justify-between bg-black rounded-xl px-4 py-3 gap-4">
+                        <span className="text-zinc-400 text-xs font-bold flex-1">{item.name}</span>
+                        <span className="text-zinc-600 text-[10px] font-black shrink-0">{item.quantity} {item.unit || 'ks'}</span>
+                        <span className="text-zinc-400 text-xs font-black shrink-0">{((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)} €</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )}
 
     </div>
   );
