@@ -520,18 +520,18 @@ export default function StatistikyPage() {
                     {mechJobs.map((job, i) => (
                       <div key={job.id}
                         onClick={() => setSelectedJob(job)}
-                        className="flex items-center justify-between bg-black rounded-2xl px-5 py-4 cursor-pointer hover:bg-zinc-900 hover:border hover:border-zinc-700 border border-transparent transition-all group"
+                        className="flex items-center gap-4 bg-black rounded-2xl px-5 py-4 cursor-pointer hover:bg-zinc-800 active:bg-zinc-700 transition-all"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-white font-black text-sm">{job.customer_name || '—'}</p>
                           <p className="text-zinc-500 text-[10px] font-black uppercase italic">{job.car_brand_model || ''}</p>
                           <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">{job.plate_number} · {new Date(job.created_at).toLocaleDateString('sk-SK')}</p>
                         </div>
-                        <div className="text-right shrink-0 ml-4">
+                        <div className="text-right shrink-0">
                           <p className="text-amber-400 font-black text-base">{fmtH(job.workHours)}</p>
                           <p className="text-zinc-600 text-[10px] font-bold">{fmt(job.workRevenue)}</p>
-                          <p className="text-zinc-700 text-[9px] font-black uppercase tracking-widest group-hover:text-zinc-500 transition-colors">detail →</p>
                         </div>
+                        <div className="w-8 h-8 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0 text-zinc-400 text-sm">›</div>
                       </div>
                     ))}
                   </div>
