@@ -352,7 +352,7 @@ export default function StatistikyPage() {
   const handleSelMech = (id) => { setSelMech(id); setShowPayouts(false); };
 
   return (
-    <div className="p-6 md:p-10 max-w-6xl mx-auto">
+    <div className="p-6 md:p-10 max-w-6xl mx-auto relative">
 
       {/* HEADER */}
       <div className="mb-8">
@@ -761,9 +761,7 @@ export default function StatistikyPage() {
         </div>
       )}
 
-    </div>
-
-    {/* ===== MODAL: DETAIL ZÁKAZKY ===== */}
+      {/* ===== MODAL: DETAIL ZÁKAZKY ===== */}
     {selectedJob && (
       <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4" onClick={() => setSelectedJob(null)}>
         <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -849,5 +847,6 @@ export default function StatistikyPage() {
       </div>
     )}
 
+    </div>
   );
 }
