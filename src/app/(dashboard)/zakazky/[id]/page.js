@@ -498,10 +498,12 @@ export default function DetailZakazkyPage() {
   };
 
   // --- UPRAVENÁ FUNKCIA FINALIZÁCIE S ADRESAMI A SPLATNOSŤOU ---
-  const handleFinalizeJob = async (isOfficial, paymentMethod) => {
+  const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false) => {
     setInvoiceLoading(true);
     try {
       const { subtotal, tax, total } = calculateTotal();
+      const effectiveTax = noVat ? 0 : Number(tax) || 0;
+      const effectiveTotal = noVat ? Number(subtotal) : Number(total) || 0;
       const teraz = new Date();
       
       // LOGIKA SPLATNOSTI (+14 dní)
@@ -531,8 +533,8 @@ export default function DetailZakazkyPage() {
         customer_phone: zakazka.customer_phone || null,
         items_json: items,
         subtotal_amount: Number(subtotal) || 0,
-        tax_amount: Number(tax) || 0,
-        total_amount: Number(total) || 0,
+        tax_amount: effectiveTax,
+        total_amount: effectiveTotal,
         is_official: isOfficial,
         
         // ÚDAJE O DODÁVATEĽOVI z nastavení
@@ -562,6 +564,7 @@ export default function DetailZakazkyPage() {
             issue_date: teraz.toISOString(),
             due_date: datumSplatnosti.toISOString(),
             payment_method: isOfficial ? (paymentMethod === 'cash' ? 'Hotovosť' : 'Kartou') : 'Odložená platba',
+            no_vat: noVat || false,
         },
 
         car_details: { 
@@ -581,7 +584,7 @@ export default function DetailZakazkyPage() {
         await supabase.from('kasa_entries').insert([{
           date: today,
           type: 'prijem',
-          amount: Number(total),
+          amount: effectiveTotal,
           description: `Zákazka ${zakazka.job_number || zakazka.id.slice(0, 8)} — ${zakazka.car_brand_model || ''}`.trim(),
           spz: zakazka.plate_number,
           job_id: id,
@@ -1863,7 +1866,7 @@ export default function DetailZakazkyPage() {
           zakazka={zakazka}
           total={total}
           invoiceLoading={invoiceLoading}
-          onFinalize={(isOfficial, paymentMethod) => handleFinalizeJob(isOfficial, paymentMethod)}
+          onFinalize={(isOfficial, paymentMethod, noVat) => handleFinalizeJob(isOfficial, paymentMethod, noVat)}
           onClose={() => setIsInvoiceModalOpen(false)}
         />
       )}

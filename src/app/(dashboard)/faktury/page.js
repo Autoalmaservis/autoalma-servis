@@ -236,6 +236,12 @@ export default function FakturyDashboard() {
     setLoading(false);
   };
 
+  const togglePaid = async (invId, currentPaid) => {
+    const newVal = !currentPaid;
+    setInvoices(prev => prev.map(i => i.id === invId ? { ...i, is_paid: newVal } : i));
+    await supabase.from('invoices').update({ is_paid: newVal }).eq('id', invId);
+  };
+
   const filteredInvoices = invoices.filter(inv => {
     const isRightTab = activeTab === 'official' ? inv.is_official === true : inv.is_official === false;
     const s = searchTerm.toLowerCase();
@@ -362,7 +368,7 @@ export default function FakturyDashboard() {
         {filteredInvoices.length > 0 ? (
           filteredInvoices.map((inv) => (
             <Link href={`/faktury/${inv.id}`} key={inv.id} className="group block">
-              <div className="bg-zinc-900/20 border border-zinc-800 p-6 md:px-10 rounded-[2.5rem] hover:border-red-600 transition-all shadow-xl hover:shadow-red-900/5 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className={`bg-zinc-900/20 border-2 ${inv.is_paid ? 'border-green-500 hover:border-green-400' : 'border-red-600/40 hover:border-red-600'} p-6 md:px-10 rounded-[2.5rem] transition-all shadow-xl hover:shadow-red-900/5 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6`}>
 
                 {/* IDENTIFIKÁCIA */}
                 <div className="flex items-center gap-6 w-full md:w-auto">
@@ -401,6 +407,12 @@ export default function FakturyDashboard() {
                       {inv.total_amount.toFixed(2)} <span className="text-red-600 text-sm font-bold">€</span>
                     </p>
                   </div>
+                  <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); togglePaid(inv.id, inv.is_paid); }}
+                    className={`px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest border-2 transition-all ${inv.is_paid ? 'border-green-500 text-green-400 bg-green-500/10 hover:bg-green-500/20' : 'border-zinc-600 text-zinc-500 hover:border-green-500 hover:text-green-400'}`}
+                  >
+                    {inv.is_paid ? '✓ Uhradená' : 'Neuhradená'}
+                  </button>
                   <div className="bg-zinc-800 p-4 rounded-2xl group-hover:bg-red-600 transition-all shadow-lg">
                     <span className="text-white text-sm">➔</span>
                   </div>

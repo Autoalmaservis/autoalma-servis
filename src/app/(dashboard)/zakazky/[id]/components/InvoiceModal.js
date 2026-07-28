@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinalize, onClose }) {
   const [paymentMethod, setPaymentMethod] = useState('card');
+  const [noVat, setNoVat] = useState(false);
 
   return (
     <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print font-black">
@@ -23,10 +24,25 @@ export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinaliz
           </div>
         )}
 
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => setNoVat(v => !v)}
+            className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${noVat ? 'bg-amber-600 border-amber-500 text-white shadow-lg shadow-amber-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}
+          >
+            {noVat ? '✓ Fakturácia bez DPH (CZ firma)' : 'Fakturácia bez DPH (CZ firma)'}
+          </button>
+          {noVat && (
+            <p className="text-[9px] text-amber-400 font-black uppercase tracking-widest text-center mt-2">
+              DPH nebude účtovaná — platí pre zahraničné firmy s IČ DPH
+            </p>
+          )}
+        </div>
+
         <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Typ dokladu</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <button disabled={invoiceLoading} onClick={() => onFinalize(true, paymentMethod)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-xl font-bold font-sans">📄 VYSTAVIŤ FAKTÚRU</button>
-          <button disabled={invoiceLoading} onClick={() => onFinalize(false, paymentMethod)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all font-bold font-sans">📂 IBA ODLOŽIŤ</button>
+          <button disabled={invoiceLoading} onClick={() => onFinalize(true, paymentMethod, noVat)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-xl font-bold font-sans">📄 VYSTAVIŤ FAKTÚRU</button>
+          <button disabled={invoiceLoading} onClick={() => onFinalize(false, paymentMethod, noVat)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all font-bold font-sans">📂 IBA ODLOŽIŤ</button>
         </div>
         <button onClick={onClose} className="text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all italic font-black">Späť k úpravám</button>
       </div>

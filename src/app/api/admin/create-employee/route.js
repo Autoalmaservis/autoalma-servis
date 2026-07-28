@@ -58,7 +58,7 @@ export async function POST(request) {
   await sb.from('user_profiles').upsert([{
     id: userId,
     email: emailNorm,
-    role: 'mechanik',
+    role: (role === 'prijimacie_technik' || role === 'admin') ? 'admin' : 'mechanik',
   }]);
 
   return Response.json({ ok: true, id: userId });

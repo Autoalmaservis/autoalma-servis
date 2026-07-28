@@ -697,8 +697,9 @@ export default function NastaveniaPage() {
             <form onSubmit={addEmployee} className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-[3rem] shadow-xl space-y-6">
               <h3 className="text-sm font-black uppercase text-red-600 tracking-widest italic ml-2">Vytvoriť nový prístup</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input required type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Meno mechanika" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600" />
+                <input required type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Meno osoby" className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none focus:border-red-600" />
                 <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none">
+                  <option value="prijimacie_technik">Prijímací technik</option>
                   <option value="mechanik">Mechanik</option>
                   <option value="diagnostik">Diagnostik / Elektrikár</option>
                   <option value="klampiar">Klampiar</option>
@@ -796,6 +797,7 @@ export default function NastaveniaPage() {
                 {resetPwStatus && <p className="text-[9px] font-black text-green-400 ml-1">{resetPwStatus}</p>}
               </div>
               <select value={editForm.role} onChange={(e) => setEditForm({...editForm, role: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-white outline-none font-bold">
+                <option value="prijimacie_technik">Prijímací technik</option>
                 <option value="mechanik">Mechanik</option>
                 <option value="diagnostik">Diagnostik / Elektrikár</option>
                 <option value="klampiar">Klampiar</option>
