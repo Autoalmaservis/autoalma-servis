@@ -31,7 +31,24 @@ export default function MechanikPage() {
   const [pwLoading, setPwLoading] = useState(false);
   const [pwStatus, setPwStatus] = useState('');
 
+  // Moje Hodiny
+  const [mechHoursPeriod, setMechHoursPeriod] = useState('week');
+  const [mechHoursFrom, setMechHoursFrom] = useState('');
+  const [mechHoursTo, setMechHoursTo] = useState('');
+  const [mechHoursJobs, setMechHoursJobs] = useState([]);
+  const [mechHoursLoading, setMechHoursLoading] = useState(false);
+  const [hoursSelJob, setHoursSelJob] = useState(null);
+  const [hoursModalDetail, setHoursModalDetail] = useState(null);
+  const [hoursModalLoading, setHoursModalLoading] = useState(false);
+
   useEffect(() => { init(); }, []);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeTab === 'hodiny' && user && mechHoursPeriod !== 'custom') {
+      fetchMyHours(mechHoursPeriod, '', '');
+    }
+  }, [activeTab, mechHoursPeriod, user?.id]);
 
   const init = async () => {
     setLoading(true);
@@ -138,6 +155,58 @@ export default function MechanikPage() {
     await fetchCalendarData(user.id);
   };
 
+  const fetchMyHours = async (period, customFrom, customTo) => {
+    if (!user) return;
+    setMechHoursLoading(true);
+    const today = new Date();
+    let fromDate, toDate;
+    if (period === 'week') {
+      const dow = today.getDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + mondayOffset);
+      fromDate = monday.toISOString().split('T')[0];
+      toDate = today.toISOString().split('T')[0];
+    } else if (period === 'month') {
+      fromDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2,'0')}-01`;
+      toDate = today.toISOString().split('T')[0];
+    } else {
+      fromDate = customFrom;
+      toDate = customTo;
+    }
+    if (!fromDate || !toDate) { setMechHoursLoading(false); return; }
+    const { data } = await supabase
+      .from('job_tickets')
+      .select('id, customer_name, plate_number, car_brand_model, created_at, job_number, job_items(name, quantity, unit_price, unit, type)')
+      .eq('assigned_worker_id', user.id)
+      .in('status', ['Dokončené', 'Archivované'])
+      .gte('created_at', `${fromDate}T00:00:00`)
+      .lte('created_at', `${toDate}T23:59:59`)
+      .order('created_at', { ascending: false });
+    if (data) {
+      const computed = data.map(job => {
+        const workItems = (job.job_items || []).filter(i => i.type === 'Práca');
+        const totalHours = workItems.reduce((s, i) => s + parseFloat(i.quantity || 0), 0);
+        const totalRevenue = workItems.reduce((s, i) => s + parseFloat(i.quantity || 0) * parseFloat(i.unit_price || 0), 0);
+        return { ...job, totalHours, totalRevenue, workItems };
+      }).filter(j => j.totalHours > 0);
+      setMechHoursJobs(computed);
+    }
+    setMechHoursLoading(false);
+  };
+
+  const openHoursModal = async (job) => {
+    setHoursSelJob(job);
+    setHoursModalDetail(null);
+    setHoursModalLoading(true);
+    const { data: tasks } = await supabase
+      .from('job_tasks')
+      .select('task_description, is_completed')
+      .eq('job_id', job.id);
+    setHoursModalDetail({ tasks: tasks || [] });
+    setHoursModalLoading(false);
+  };
+
   const pendingJobs = jobs.filter(j => j.status === 'Prebieha');
   const completedJobs = jobs.filter(j => j.status === 'Dokončené');
 
@@ -192,7 +261,8 @@ export default function MechanikPage() {
         {[
           { key: 'pending',   label: `🔧 Aktuálne (${pendingJobs.length})` },
           { key: 'completed', label: `✓ Dokončené (${completedJobs.length})` },
-          { key: 'kalendar',  label: '📅 Môj Kalendár' },
+          { key: 'hodiny',    label: '⏱️ Moje Hodiny' },
+          { key: 'kalendar',  label: '📅 Kalendár' },
           { key: 'volno',     label: '🏖️ Voľno' },
           { key: 'heslo',     label: '🔑 Heslo' },
         ].map(t => (
@@ -240,6 +310,117 @@ export default function MechanikPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ===== TAB: MOJE HODINY ===== */}
+      {activeTab === 'hodiny' && (
+        <div className="space-y-6">
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-300 italic ml-2">Prehľad tvojich hodín a zákaziek</p>
+
+          {/* Výber obdobia */}
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-[2rem] p-4">
+            <div className="flex flex-wrap gap-2 mb-4">
+              {[
+                { key: 'week',   label: 'Tento týždeň' },
+                { key: 'month',  label: 'Tento mesiac' },
+                { key: 'custom', label: 'Vlastné' },
+              ].map(p => (
+                <button key={p.key} onClick={() => setMechHoursPeriod(p.key)}
+                  className={`px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border ${mechHoursPeriod === p.key ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {mechHoursPeriod === 'custom' && (
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Od</label>
+                  <input type="date" value={mechHoursFrom} onChange={e => setMechHoursFrom(e.target.value)}
+                    className="bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black outline-none text-sm transition-all" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block mb-1">Do</label>
+                  <input type="date" value={mechHoursTo} onChange={e => setMechHoursTo(e.target.value)}
+                    className="bg-black border border-zinc-800 focus:border-red-600 p-3 rounded-xl text-white font-black outline-none text-sm transition-all" />
+                </div>
+                <button onClick={() => fetchMyHours('custom', mechHoursFrom, mechHoursTo)}
+                  disabled={!mechHoursFrom || !mechHoursTo || mechHoursLoading}
+                  className="bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black px-6 py-3 rounded-xl text-[10px] uppercase tracking-widest transition-all">
+                  Hľadať
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Súhrn */}
+          {!mechHoursLoading && mechHoursJobs.length > 0 && (() => {
+            const totalH = mechHoursJobs.reduce((s, j) => s + j.totalHours, 0);
+            const totalR = mechHoursJobs.reduce((s, j) => s + j.totalRevenue, 0);
+            return (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-blue-600/10 border border-blue-600/30 rounded-2xl p-4 text-center">
+                  <p className="text-blue-400 text-[9px] font-black uppercase tracking-widest mb-1">Celkom hodín</p>
+                  <p className="text-blue-300 text-2xl font-black">{totalH.toFixed(1)}</p>
+                </div>
+                <div className="bg-green-600/10 border border-green-600/30 rounded-2xl p-4 text-center">
+                  <p className="text-green-400 text-[9px] font-black uppercase tracking-widest mb-1">Tržba za prácu</p>
+                  <p className="text-green-300 text-2xl font-black">{totalR.toFixed(0)} €</p>
+                </div>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-center">
+                  <p className="text-zinc-400 text-[9px] font-black uppercase tracking-widest mb-1">Zákaziek</p>
+                  <p className="text-white text-2xl font-black">{mechHoursJobs.length}</p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Loading */}
+          {mechHoursLoading && (
+            <div className="text-center py-16 text-red-600 font-black uppercase tracking-widest animate-pulse text-xs">
+              Načítavam zákazky...
+            </div>
+          )}
+
+          {/* Zoznam zákaziek */}
+          {!mechHoursLoading && (
+            <div className="space-y-3">
+              {mechHoursJobs.length === 0 ? (
+                <div className="py-16 text-center border-2 border-dashed border-zinc-900 rounded-[2rem] opacity-30">
+                  <p className="uppercase font-black tracking-widest text-xs">
+                    {mechHoursPeriod === 'custom' && (!mechHoursFrom || !mechHoursTo)
+                      ? 'Vyber obdobie a klikni Hľadať'
+                      : 'Žiadne zákazky v tomto období'}
+                  </p>
+                </div>
+              ) : mechHoursJobs.map(job => (
+                <button key={job.id} onClick={() => openHoursModal(job)}
+                  className="w-full text-left bg-zinc-900/40 border border-zinc-800 hover:border-red-600/40 p-5 rounded-[1.5rem] transition-all group hover:bg-zinc-900">
+                  <div className="flex justify-between items-center gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="bg-white text-black px-3 py-0.5 rounded-lg font-black text-sm tracking-widest uppercase shrink-0">{job.plate_number}</span>
+                        <p className="text-zinc-400 text-[9px] font-black uppercase">
+                          {new Date(job.created_at).toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <p className="text-white font-black uppercase italic text-sm leading-tight">{job.car_brand_model}</p>
+                      <p className="text-zinc-400 text-[10px] font-bold mt-0.5">{job.customer_name}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="text-blue-300 font-black text-lg">{job.totalHours.toFixed(1)} hod</p>
+                        <p className="text-green-400 font-black text-[10px]">{job.totalRevenue.toFixed(2)} €</p>
+                      </div>
+                      <div className="w-8 h-8 bg-zinc-800 group-hover:bg-red-600 rounded-xl flex items-center justify-center transition-all">
+                        <span className="text-white text-xs font-black">›</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ===== TAB: MÔJ KALENDÁR ===== */}
@@ -471,6 +652,80 @@ export default function MechanikPage() {
                   </button>
                 </div>
               ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== HODINY MODAL ===== */}
+      {hoursSelJob && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4"
+          onClick={() => { setHoursSelJob(null); setHoursModalDetail(null); }}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-1">Detail zákazky</p>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">{hoursSelJob.plate_number}</h2>
+                <p className="text-zinc-300 text-sm font-black uppercase italic mt-1">{hoursSelJob.car_brand_model}</p>
+              </div>
+              <button onClick={() => { setHoursSelJob(null); setHoursModalDetail(null); }}
+                className="w-10 h-10 bg-zinc-800 border border-zinc-700 rounded-xl hover:bg-red-600 transition-all flex items-center justify-center text-zinc-300 hover:text-white shrink-0">✕</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Zákazník</p>
+                <p className="text-white font-black text-sm">{hoursSelJob.customer_name}</p>
+              </div>
+              <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1">Dátum</p>
+                <p className="text-white font-black text-sm">
+                  {new Date(hoursSelJob.created_at).toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </p>
+              </div>
+              <div className="bg-blue-600/10 border border-blue-600/30 rounded-2xl p-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-1">Odpracované hodiny</p>
+                <p className="text-blue-300 font-black text-2xl">{hoursSelJob.totalHours.toFixed(1)} hod</p>
+              </div>
+              <div className="bg-green-600/10 border border-green-600/30 rounded-2xl p-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-green-400 mb-1">Tržba za prácu</p>
+                <p className="text-green-300 font-black text-2xl">{hoursSelJob.totalRevenue.toFixed(2)} €</p>
+              </div>
+            </div>
+
+            {hoursSelJob.workItems.length > 0 && (
+              <div className="mb-6">
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-3">Vykonané práce</p>
+                <div className="space-y-2">
+                  {hoursSelJob.workItems.map((item, i) => (
+                    <div key={i} className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl flex justify-between items-center gap-3">
+                      <p className="text-white text-xs font-black flex-1 min-w-0">{item.name}</p>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-blue-300 text-[10px] font-black">{parseFloat(item.quantity || 0).toFixed(1)} hod</span>
+                        <span className="text-green-300 text-[10px] font-black">{(parseFloat(item.quantity || 0) * parseFloat(item.unit_price || 0)).toFixed(2)} €</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {hoursModalLoading ? (
+              <div className="text-center py-6 text-zinc-500 text-[10px] font-black uppercase animate-pulse">Načítavam úkony...</div>
+            ) : hoursModalDetail?.tasks?.length > 0 && (
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-3">Úkony zákazky</p>
+                <div className="space-y-1.5">
+                  {hoursModalDetail.tasks.map((t, i) => (
+                    <div key={i} className={`flex items-center gap-3 p-2.5 rounded-xl border ${t.is_completed ? 'border-green-600/20 bg-green-600/5' : 'border-zinc-800 bg-zinc-950'}`}>
+                      <span className={`shrink-0 font-black ${t.is_completed ? 'text-green-400' : 'text-zinc-600'}`}>{t.is_completed ? '✓' : '○'}</span>
+                      <p className={`text-xs font-bold ${t.is_completed ? 'text-green-300' : 'text-zinc-300'}`}>{t.task_description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
