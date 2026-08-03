@@ -17,6 +17,7 @@ const TONE_DESCRIPTIONS = {
   witty_phil:  'filozofický a trochu absurdný, auto ako metafora života',
   witty_buddy: 'veľmi neformálny, kamarátsky, hovorový tón, akoby písal kamarát',
   witty_drama: 'dramatický, patetický, ale s úsmevom — záchrana vozidla ako hrdinský príbeh',
+  witty_detective: 'detektívsky — mechanik ako vyšetrovateľ, oprava ako uzavretý prípad, suchý humor, formát policajnej správy',
 };
 
 export async function POST(request) {

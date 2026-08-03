@@ -143,6 +143,7 @@ export default function DetailFakturyPage() {
     { key: 'witty_phil',   emoji: '🧠', name: 'Filozofický',   preview: 'Auto je predĺžením osobnosti majiteľa. Vaše nám toho prezradilo…' },
     { key: 'witty_buddy',  emoji: '👊', name: 'Kamarátsky',    preview: 'Čau! Tvoje auto sme dali dokopy — trvalo to trochu, ale…' },
     { key: 'witty_drama',  emoji: '🎭', name: 'Dramatický',    preview: 'Bolo to tesné, ale vaše vozidlo to zvládlo. Naši mechanici…' },
+    { key: 'witty_detective', emoji: '🕵️', name: 'Detektívsky', preview: 'Prípad č. ${invoiceNum} — uzavretý. Páchateľ: opotrebovaný…' },
   ];
 
   const buildEmailBody = (tone, invoiceData, company) => {
@@ -223,6 +224,17 @@ Faktúra č. ${invoiceNum} na sumu ${total} € je priložená. Dramatický prí
 
 S úctou a adrenalínom,
 ${companyName}`;
+
+    if (tone === 'witty_detective') return `Správa z vyšetrovania — prípad č. ${invoiceNum}
+
+Vážený ${name},
+
+po dôkladnom preskúmaní vozidla ${carStr} môžem s istotou vyhlásiť: prípad je uzavretý. Páchateľ bol identifikovaný, neutralizovaný a vozidlo je opäť v prevádzkyschopnom stave.
+
+Dôkazový materiál — faktúra na sumu ${total} € — je priložený k tomuto hláseniu. Odporúčam uchovať pre prípad ďalšieho vyšetrovania.
+
+Inspektor ${companyName}
+(Oddelenie automobilovej kriminalistiky)`;
 
     return buildEmailBody('friendly', invoiceData, company);
   };
