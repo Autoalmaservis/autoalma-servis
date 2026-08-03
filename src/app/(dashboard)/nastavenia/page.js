@@ -364,10 +364,18 @@ export default function NastaveniaPage() {
       { id: 'company_bank', value: billingData.bank_account },
       { id: 'accountant_email', value: billingData.accountant_email },
     ];
-    const { error } = await supabase.from('business_settings').upsert(payload);
-    if (!error) {
+    // Upsert jeden po druhom — obchádza RLS problém s batch INSERT nových kľúčov
+    let lastError = null;
+    for (const item of payload) {
+      const { error } = await supabase.from('business_settings').upsert(item);
+      if (error) lastError = error;
+    }
+    if (!lastError) {
       setBillingSaveStatus('Uložené!');
       setTimeout(() => setBillingSaveStatus(''), 3000);
+    } else {
+      setBillingSaveStatus('Chyba: ' + lastError.message);
+      setTimeout(() => setBillingSaveStatus(''), 5000);
     }
   };
 
