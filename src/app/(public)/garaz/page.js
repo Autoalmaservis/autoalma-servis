@@ -442,6 +442,7 @@ export default function GarazPage() {
   // --- LOGIKA VOZIDIEL (ZACHOVANÉ) ---
   const openEditModal = (vehicle) => {
     setOrderingVehicle(vehicle);
+    setEditingVehicle(vehicle);
     setEditForm({
       brand_model: vehicle.brand_model || '', license_plate: vehicle.license_plate || '',
       vin_number: vehicle.vin_number || '', year_produced: vehicle.year_produced || '',
