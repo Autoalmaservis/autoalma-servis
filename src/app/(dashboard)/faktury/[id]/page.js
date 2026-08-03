@@ -160,8 +160,8 @@ export default function DetailFakturyPage() {
         import('jspdf'),
       ]);
 
-      // Canvas 2D trick: prekonvertuje oklab/oklch/hsl/... na bezpečné rgb()
-      // Getkomputedstyle v modernom Chrome vracia oklab() → canvas to vždy preloží na rgb
+      // Canvas 2D trick: prekonvertuje oklab/oklch na bezpečné rgb()
+      // getComputedStyle v Chrome 111+ môže vrátiť oklab() — canvas ImageData vždy dá rgb
       const colorCvs = document.createElement('canvas');
       colorCvs.width = colorCvs.height = 1;
       const colorCtx = colorCvs.getContext('2d', { willReadFrequently: true });
@@ -176,22 +176,17 @@ export default function DetailFakturyPage() {
         } catch { return cssColor; }
       };
 
-      // Uložíme pôvodné inline štýly a aplikujeme printové hodnoty
+      // Uložíme a prepíšeme inline štýly na printové hodnoty
       const allEls = [element, ...element.querySelectorAll('*')];
       const savedStyles = allEls.map(el => ({
-        el,
-        color: el.style.color,
-        bg: el.style.backgroundColor,
-        border: el.style.borderColor,
-        shadow: el.style.boxShadow,
+        el, color: el.style.color, bg: el.style.backgroundColor,
+        border: el.style.borderColor, shadow: el.style.boxShadow,
       }));
-
       allEls.forEach(el => {
         const cs = window.getComputedStyle(el);
         const cls = typeof el.className === 'string' ? el.className : '';
         el.style.color = /text-red/.test(cls) ? '#dc2626' : '#000000';
-        const computedBg = toRgb(cs.backgroundColor);
-        el.style.backgroundColor = (computedBg === 'transparent' || /bg-zinc|bg-black|bg-neutral/.test(cls)) ? (el === element ? '#ffffff' : 'transparent') : computedBg;
+        el.style.backgroundColor = /bg-zinc|bg-black|bg-neutral/.test(cls) ? '#ffffff' : toRgb(cs.backgroundColor);
         el.style.borderColor = /border-zinc|border-black/.test(cls) ? '#cccccc' : toRgb(cs.borderColor);
         el.style.boxShadow = 'none';
       });
@@ -199,14 +194,22 @@ export default function DetailFakturyPage() {
       element.style.border = '1px solid #e5e5e5';
       element.style.borderRadius = '8px';
 
-      // foreignObjectRendering: browser renderuje natívne — html2canvas neparsu CSS vôbec
-      // → oklch/oklab v Tailwind CSS nespôsobí crash
+      // onclone: nahradíme oklch/oklab v CSS štýloch klonu → html2canvas ich neparsu
+      // (foreignObjectRendering produkuje prázdne PDF, preto ideme cez štandardný renderer)
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
-        foreignObjectRendering: true,
+        onclone: (clonedDoc) => {
+          clonedDoc.querySelectorAll('style').forEach(s => {
+            s.textContent = s.textContent
+              .replace(/oklch\([^)]+\)/g, 'rgb(0,0,0)')
+              .replace(/oklab\([^)]+\)/g, 'rgb(0,0,0)')
+              .replace(/lab\([^)]+\)/g, 'rgb(0,0,0)');
+          });
+          clonedDoc.querySelectorAll('.no-print').forEach(e => e.remove());
+        },
       });
 
       // Obnovíme pôvodné štýly
