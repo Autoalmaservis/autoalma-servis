@@ -32,6 +32,7 @@ export async function middleware(req) {
     '/dashboard', '/klienti', '/kalendar', '/zakazky', '/CP',
     '/faktury', '/nastavenia', '/databaza', '/spravovat-web',
     '/statistiky', '/prijem', '/historia',
+    '/kasa', '/sms-email', '/kontakty', '/todo', '/zapisnik',
   ];
   const isAdminRoute    = ADMIN_ROUTES.some(r => path === r || path.startsWith(r + '/'));
   const isMechanikRoute = path.startsWith('/mechanik');
@@ -85,6 +86,11 @@ export const config = {
     '/statistiky/:path*',
     '/prijem/:path*',
     '/historia/:path*',
+    '/kasa/:path*',
+    '/sms-email/:path*',
+    '/kontakty/:path*',
+    '/todo/:path*',
+    '/zapisnik/:path*',
     '/mechanik/:path*',
     '/garaz/:path*',
   ],
