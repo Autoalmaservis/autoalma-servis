@@ -495,15 +495,15 @@ Inspektor ${companyName}
                       <tbody>
                         <tr style={{ fontSize: '9pt', color: '#000' }}>
                           <td style={{ paddingBottom: '2pt' }}>Základ dane:</td>
-                          <td align="right">{inv.subtotal_amount.toFixed(2)} €</td>
+                          <td align="right">{Number(inv.subtotal_amount || 0).toFixed(2)} €</td>
                         </tr>
                         <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
                           <td style={{ paddingBottom: '2pt' }}>DPH (23%):</td>
-                          <td align="right">{inv.tax_amount.toFixed(2)} €</td>
+                          <td align="right">{Number(inv.tax_amount || 0).toFixed(2)} €</td>
                         </tr>
                         <tr style={{ color: '#000' }}>
                           <td style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '11pt', color: '#dc2626' }}>CELKOM:</td>
-                          <td align="right" style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '18pt' }}>{inv.total_amount.toFixed(2)} €</td>
+                          <td align="right" style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '18pt' }}>{Number(inv.total_amount || 0).toFixed(2)} €</td>
                         </tr>
                       </tbody>
                     </table>
@@ -554,7 +554,7 @@ Inspektor ${companyName}
           <div className="bg-black p-10 rounded-[2.5rem] border border-zinc-800 min-w-[340px] shadow-2xl">
             <div className="flex justify-between items-end pt-2">
               <span className="text-red-600 font-black uppercase text-2xl">Celkom:</span>
-              <span className="text-5xl font-black text-white">{inv.total_amount.toFixed(2)} <span className="text-red-600 text-lg">€</span></span>
+              <span className="text-5xl font-black text-white">{Number(inv.total_amount || 0).toFixed(2)} <span className="text-red-600 text-lg">€</span></span>
             </div>
           </div>
         </div>
