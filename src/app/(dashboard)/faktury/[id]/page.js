@@ -134,6 +134,16 @@ export default function DetailFakturyPage() {
     fetchQr();
   }, [inv, myCompany.bank]);
 
+  const EMAIL_TEMPLATES = [
+    { key: 'formal',       emoji: '🤝', name: 'Formálny',      preview: 'V prílohe Vám zasielame faktúru za vykonaný servis vozidla…' },
+    { key: 'friendly',     emoji: '😊', name: 'Priateľský',    preview: 'Ahoj! Posielame faktúru za servis. Ak máš otázky, ozvi sa…' },
+    { key: 'witty_exit',   emoji: '🚗', name: 'Spokojné auto', preview: 'Vaše auto odišlo z dielne v lepšom stave, ako prišlo…' },
+    { key: 'witty_tech',   emoji: '🔧', name: 'Odborný vtip',  preview: 'Absolvovalo preventívnu prevenciu pred tým, čo by sa stalo…' },
+    { key: 'witty_phil',   emoji: '🧠', name: 'Filozofický',   preview: 'Auto je predĺžením osobnosti majiteľa. Vaše nám toho prezradilo…' },
+    { key: 'witty_buddy',  emoji: '👊', name: 'Kamarátsky',    preview: 'Čau! Tvoje auto sme dali dokopy — trvalo to trochu, ale…' },
+    { key: 'witty_drama',  emoji: '🎭', name: 'Dramatický',    preview: 'Bolo to tesné, ale vaše vozidlo to zvládlo. Naši mechanici…' },
+  ];
+
   const buildEmailBody = (tone, invoiceData, company) => {
     const name = invoiceData?.company_details?.company_name || invoiceData?.customer_name || 'zákazník';
     const plate = invoiceData?.car_details?.plate || invoiceData?.car_details?.plate_number || '';
@@ -156,27 +166,64 @@ V prípade akýchkoľvek otázok nás neváhajte kontaktovať na ${phone}${email
 S úctou,
 tím ${companyName}`;
 
-    if (tone === 'witty') return `Dobrý deň, ${name},
+    if (tone === 'friendly') return `Ahoj ${name},
+
+posielame ti faktúru č. ${invoiceNum} za servis ${carStr}. Celková suma je ${total} €.
+
+Faktúra je priložená k tomuto e-mailu. Ak máš akékoľvek otázky, neváhaj nám zavolať alebo napísať — vždy radi pomôžeme.
+
+Ďakujeme, že si nás navštívil, a tešíme sa na ďalšie stretnutie!
+
+Tím ${companyName}`;
+
+    if (tone === 'witty_exit') return `Dobrý deň, ${name},
 
 vaše ${carStr} odišlo z našej dielne spokojné — a v lepšom stave, ako prišlo. Čo je presne ten výsledok, za ktorý platíte.
 
 Faktúra č. ${invoiceNum} na sumu ${total} € je priložená. Áno, je to skutočná suma. Nie, nejde o preklep.
 
-Dúfame, že ${brand ? brand : 'vaše auto'} bude odmietať kaziť sa aspoň do budúceho servisu — ale keď aj predsa, viete, kde nás nájdete.
+Dúfame, že ${brand || 'vaše auto'} bude odmietať kaziť sa aspoň do budúceho servisu — ale keď aj predsa, viete, kde nás nájdete.
 
 S motoristickým pozdravom,
 ${companyName}`;
 
-    // friendly (default)
-    return `Ahoj ${name},
+    if (tone === 'witty_tech') return `Dobrý deň, ${name},
 
-posielame vám faktúru č. ${invoiceNum} za servis ${carStr}. Celková suma je ${total} €.
+vaše ${carStr} absolvovalo u nás preventívnu prevenciu pred tým, čo by sa mohlo stať, keby ste na servis nechali ísť dlhšie. Zjednodušene: prišlo, videlo, bolo opravené.
 
-Faktúra je priložená k tomuto e-mailu. Ak máte akékoľvek otázky, neváhajte nám zavolať alebo napísať — vždy radi pomôžeme.
+Faktúra č. ${invoiceNum} na sumu ${total} € je v prílohe. Áno, každé euro bolo vynaložené zmysluplne — máme na to doklady (práve čítate jeden z nich).
 
-Ďakujeme, že ste nás navštívili, a tešíme sa na ďalšie stretnutie!
+S odborným pozdravom,
+${companyName}`;
 
-Tím ${companyName}`;
+    if (tone === 'witty_phil') return `Dobrý deň, ${name},
+
+hovorí sa, že auto je predĺžením osobnosti svojho majiteľa. Vaše ${carStr} nám teda o Vás prezradilo dosť — ale nebojte, zachovávame profesionálnu diskrétnosť.
+
+Faktúra č. ${invoiceNum} na sumu ${total} € je v prílohe. Berte ju ako investíciu do harmónie medzi Vami a Vašim vozidlom.
+
+S filozofickým pozdravom,
+${companyName}`;
+
+    if (tone === 'witty_buddy') return `Čau ${name}!
+
+tvoje ${carStr} sme dali dokopy — trvalo to trochu, ale výsledok stojí za to. Aspoň sa ti to nebude kaziť cestou na dovolenku (sľubujeme, robili sme, čo sme mohli).
+
+Faktúrka č. ${invoiceNum} je v prílohe, ${total} €. Za tú cenu sme to naozaj poriadne skontrolovali. Naozaj.
+
+Maj sa,
+${companyName}`;
+
+    if (tone === 'witty_drama') return `Vážený ${name},
+
+bolo to tesné, ale vaše ${carStr} to zvládlo. Naši mechanici pracovali s chirurgickou presnosťou a zodpovedajúcou hudbou na pozadí. Výsledok: vozidlo žije a je pripravené na ďalšie kilometre.
+
+Faktúra č. ${invoiceNum} na sumu ${total} € je priložená. Dramatický príbeh má — ako správne — šťastný koniec.
+
+S úctou a adrenalínom,
+${companyName}`;
+
+    return buildEmailBody('friendly', invoiceData, company);
   };
 
   const handlePrint = () => {
@@ -543,125 +590,120 @@ Tím ${companyName}`;
       {emailModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
           onClick={() => setEmailModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl"
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-5xl w-full shadow-2xl max-h-[92vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}>
 
-            <div className="mb-6">
-              <p className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-500 mb-1">Odoslať faktúru</p>
-              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">
-                {inv.invoice_number}
-              </h2>
-              <p className="text-zinc-500 text-[10px] font-bold mt-1 uppercase">{inv.car_details?.plate} — {inv.customer_name}</p>
-            </div>
-
-            {/* TON MAILU */}
-            <div className="mb-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Štýl správy</p>
-              <div className="flex gap-2">
-                {[
-                  { key: 'formal', label: '🤝 Formálny' },
-                  { key: 'friendly', label: '😊 Priateľský' },
-                  { key: 'witty', label: '😄 Vtipný' },
-                ].map(({ key, label }) => (
-                  <button key={key}
-                    onClick={() => { setEmailTone(key); setEmailBody(buildEmailBody(key, inv, myCompany)); }}
-                    className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${emailTone === key ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}>
-                    {label}
-                  </button>
-                ))}
+            {/* HLAVIČKA */}
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-500 mb-1">Odoslať faktúru</p>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">{inv.invoice_number}</h2>
+                <p className="text-zinc-500 text-[10px] font-bold mt-1 uppercase">{inv.car_details?.plate} — {inv.customer_name}</p>
               </div>
+              <button onClick={() => setEmailModal(false)} className="text-zinc-600 hover:text-white text-xl font-black transition-colors">✕</button>
             </div>
 
-            {/* TEXT MAILU */}
-            <div className="mb-5">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Text e-mailu <span className="text-zinc-600 normal-case font-bold tracking-normal">(môžeš upraviť)</span></p>
-              <textarea
-                value={emailBody}
-                onChange={e => setEmailBody(e.target.value)}
-                rows={10}
-                className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-4 rounded-2xl text-zinc-300 font-mono text-xs outline-none resize-none leading-relaxed transition-all"
-              />
-            </div>
+            {/* 2-STĹPCOVÝ LAYOUT */}
+            <div className="flex gap-5">
 
-            {/* PDF príloha */}
-            <div className="mb-5 p-4 bg-zinc-950 border-2 border-dashed border-zinc-700 rounded-2xl">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">PDF príloha</p>
-              <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  onClick={handleModalDownloadPdf}
-                  className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border-2 bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all"
-                >
-                  ⬇ Stiahnuť PDF
-                </button>
-                <span className="text-zinc-600 text-[10px]">→ ulož ako PDF → nahraj:</span>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
-                    {pdfFile ? '✓ Nahraté' : '📎 Vybrať súbor'}
-                  </span>
-                  {pdfFile && <span className="text-zinc-500 text-xs truncate max-w-[140px]">{pdfFile.name}</span>}
-                  <input type="file" accept="application/pdf,.pdf" onChange={e => { setPdfFile(e.target.files[0] || null); setPdfReady(null); }} className="hidden" />
-                </label>
+              {/* ĽAVÝ STĹPEC — šablóny + príjemcovia + PDF */}
+              <div className="w-56 shrink-0 space-y-5">
+
+                {/* Šablóny */}
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Šablóna</p>
+                  <div className="space-y-1.5">
+                    {EMAIL_TEMPLATES.map(t => (
+                      <button key={t.key}
+                        onClick={() => { setEmailTone(t.key); setEmailBody(buildEmailBody(t.key, inv, myCompany)); }}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl border-2 transition-all ${emailTone === t.key ? 'border-blue-500 bg-blue-600/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
+                        <p className="text-[11px] font-black text-white">{t.emoji} {t.name}</p>
+                        <p className="text-[9px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{t.preview}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* PDF príloha */}
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">PDF príloha</p>
+                  <div className="space-y-2">
+                    <button onClick={handleModalDownloadPdf}
+                      className="w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all">
+                      ⬇ Stiahnuť PDF
+                    </button>
+                    <label className="flex items-center gap-2 cursor-pointer w-full">
+                      <span className={`w-full text-center px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
+                        {pdfFile ? '✓ ' + pdfFile.name.substring(0, 16) + '…' : '📎 Nahrať PDF'}
+                      </span>
+                      <input type="file" accept="application/pdf,.pdf" onChange={e => { setPdfFile(e.target.files[0] || null); setPdfReady(null); }} className="hidden" />
+                    </label>
+                    {!pdfFile && <p className="text-[9px] text-zinc-600 italic leading-snug">Stiahnite faktúru, uložte ako PDF, potom nahrajte.</p>}
+                  </div>
+                </div>
+
+                {/* Príjemcovia */}
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Príjemcovia</p>
+                  <div className="space-y-2">
+                    <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToCustomer && customerEmail ? 'border-blue-500/50 bg-blue-600/5' : 'border-zinc-800'} ${!customerEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input type="checkbox" checked={sendToCustomer} disabled={!customerEmail} onChange={e => setSendToCustomer(e.target.checked)} className="mt-0.5 w-3.5 h-3.5 accent-blue-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Zákazník</p>
+                        {customerEmail
+                          ? <p className="text-white font-bold text-[10px] break-all">{customerEmail}</p>
+                          : <p className="text-zinc-600 text-[9px] italic">Nezadaný v zákazke</p>}
+                      </div>
+                    </label>
+                    <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToAccountant && accountantEmail ? 'border-amber-500/50 bg-amber-600/5' : 'border-zinc-800'} ${!accountantEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input type="checkbox" checked={sendToAccountant} disabled={!accountantEmail} onChange={e => setSendToAccountant(e.target.checked)} className="mt-0.5 w-3.5 h-3.5 accent-amber-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Účtovníčka</p>
+                        {accountantEmail
+                          ? <p className="text-white font-bold text-[10px] break-all">{accountantEmail}</p>
+                          : <p className="text-zinc-600 text-[9px] italic">Nastaviť v Nastaveniach</p>}
+                      </div>
+                    </label>
+                    <input type="email" value={customEmailInput} onChange={e => setCustomEmailInput(e.target.value)}
+                      placeholder="iná@adresa.sk"
+                      className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-2.5 rounded-xl text-white font-bold outline-none text-[11px] transition-all placeholder:text-zinc-600" />
+                  </div>
+                </div>
+
               </div>
-            </div>
 
-            <div className="space-y-3 mb-6">
-              {/* Zákazník */}
-              <label className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${sendToCustomer && customerEmail ? 'border-blue-500/50 bg-blue-600/5' : 'border-zinc-800 bg-zinc-950'} ${!customerEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                <input type="checkbox" checked={sendToCustomer} disabled={!customerEmail}
-                  onChange={e => setSendToCustomer(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 accent-blue-500 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-0.5">Zákazník</p>
-                  {customerEmail
-                    ? <p className="text-white font-bold text-sm break-all">{customerEmail}</p>
-                    : <p className="text-zinc-600 text-xs italic">E-mail zákazníka nie je zadaný v zákazke</p>
-                  }
-                </div>
-              </label>
-
-              {/* Účtovníčka */}
-              <label className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${sendToAccountant && accountantEmail ? 'border-amber-500/50 bg-amber-600/5' : 'border-zinc-800 bg-zinc-950'} ${!accountantEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                <input type="checkbox" checked={sendToAccountant} disabled={!accountantEmail}
-                  onChange={e => setSendToAccountant(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 accent-amber-500 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-0.5">Účtovníčka</p>
-                  {accountantEmail
-                    ? <p className="text-white font-bold text-sm break-all">{accountantEmail}</p>
-                    : <p className="text-zinc-600 text-xs italic">Nastaviť v Nastavenia → Firemné údaje</p>
-                  }
-                </div>
-              </label>
-
-              {/* Iný e-mail */}
-              <div className="p-4 bg-zinc-950 border-2 border-zinc-800 rounded-2xl">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Iná adresa (voliteľné)</p>
-                <input
-                  type="email"
-                  value={customEmailInput}
-                  onChange={e => setCustomEmailInput(e.target.value)}
-                  placeholder="iná@adresa.sk"
-                  className="w-full bg-black border border-zinc-800 focus:border-blue-500 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all placeholder:text-zinc-600"
+              {/* PRAVÝ STĹPEC — text mailu */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">
+                  Text e-mailu <span className="text-zinc-600 normal-case font-bold tracking-normal">(môžeš upraviť)</span>
+                </p>
+                <textarea
+                  value={emailBody}
+                  onChange={e => setEmailBody(e.target.value)}
+                  className="flex-1 w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-4 rounded-2xl text-zinc-300 font-mono text-xs outline-none resize-none leading-relaxed transition-all"
+                  style={{ minHeight: '420px' }}
                 />
               </div>
             </div>
 
-            {emailStatus && (
-              <p className={`text-[10px] font-black uppercase tracking-widest mb-4 ${emailStatus.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
-                {emailStatus}
-              </p>
-            )}
-
-            <div className="flex gap-3">
-              <button onClick={handleSendEmail} disabled={emailSending || (!sendToCustomer && !sendToAccountant && !customEmailInput.trim())}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+            {/* PÄTA */}
+            <div className="mt-4 flex items-center gap-3">
+              <button onClick={handleSendEmail}
+                disabled={emailSending || (!sendToCustomer && !sendToAccountant && !customEmailInput.trim())}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 {emailSending ? '📤 Odosielam...' : '📧 Odoslať faktúru'}
               </button>
+              {emailStatus && (
+                <p className={`text-[10px] font-black uppercase tracking-widest ${emailStatus.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
+                  {emailStatus}
+                </p>
+              )}
               <button onClick={() => setEmailModal(false)}
-                className="px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                className="px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 Zrušiť
               </button>
             </div>
+
           </div>
         </div>
       )}
