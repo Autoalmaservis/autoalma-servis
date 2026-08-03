@@ -11,7 +11,7 @@ const sb = createClient(
 export async function GET(request) {
   const authHeader = request.headers.get('authorization');
   const secret = process.env.CRON_SECRET;
-  if (secret && authHeader !== `Bearer ${secret}`) {
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
