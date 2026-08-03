@@ -634,7 +634,7 @@ export default function DetailZakazkyPage() {
   };
 
   const selectWarehouseItems = async (selectedList) => {
-    await ensureAuth();
+    if (!await ensureAuth()) return;
     for (const { item: w, qty } of selectedList) {
       const price = parseFloat(w.sale_price) || 0;
       const quantity = parseFloat(qty) || 1;
