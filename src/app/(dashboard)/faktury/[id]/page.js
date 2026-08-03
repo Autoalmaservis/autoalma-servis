@@ -163,8 +163,37 @@ export default function DetailFakturyPage() {
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#18181b',
+        allowTaint: true,
+        backgroundColor: '#ffffff',
         logging: false,
+        onclone: (clonedDoc) => {
+          const style = clonedDoc.createElement('style');
+          style.textContent = `
+            .printable-area {
+              background: #ffffff !important;
+              border: 1px solid #e5e5e5 !important;
+              border-radius: 8px !important;
+              box-shadow: none !important;
+              color: #000 !important;
+            }
+            .printable-area *, .printable-area p, .printable-area span,
+            .printable-area h1, .printable-area h2, .printable-area h3,
+            .printable-area td, .printable-area th, .printable-area div {
+              color: #000 !important;
+            }
+            .printable-area .text-red-600, .printable-area .text-red-500 { color: #dc2626 !important; }
+            .printable-area .text-blue-500, .printable-area .text-blue-400 { color: #2563eb !important; }
+            .printable-area .text-zinc-400, .printable-area .text-zinc-500,
+            .printable-area .text-zinc-600 { color: #555 !important; }
+            .printable-area [class*="bg-zinc"], .printable-area [class*="bg-black"] { background: #fff !important; }
+            .printable-area [class*="bg-white"] { background: #fff !important; }
+            .printable-area [class*="border-zinc"] { border-color: #ccc !important; }
+            .printable-area [class*="border-black"] { border-color: #000 !important; }
+            .no-print, .section-header { display: none !important; }
+            .print-only-table { display: table !important; }
+          `;
+          clonedDoc.head.appendChild(style);
+        },
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
