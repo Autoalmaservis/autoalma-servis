@@ -12,12 +12,12 @@ async function isAuthenticated(request) {
 const TONE_DESCRIPTIONS = {
   formal:          'formálny, profesionálny, úctivý, bez humoru',
   friendly:        'priateľský, teplý, povzbudzujúci, ale stále slušný',
-  witty_exit:      'vtipný — auto odišlo spokojné, s nadhľadom a miernou sebairóniou autoservisu',
-  witty_tech:      'vtipný s odborným humorom o oprave a prevencii, akoby mechanik písal esej',
-  witty_phil:      'filozofický a trochu absurdný, auto ako metafora života',
-  witty_buddy:     'veľmi neformálny, kamarátsky, hovorový tón, akoby písal kamarát',
-  witty_drama:     'dramatický, patetický, ale s úsmevom — záchrana vozidla ako hrdinský príbeh',
-  witty_detective: 'detektívsky — mechanik ako vyšetrovateľ, oprava ako uzavretý prípad, suchý humor, formát policajnej správy',
+  witty_exit:      'vtipný — auto dorazilo do dobrých rúk, s nadhľadom a sebairóniou autoservisu',
+  witty_tech:      'vtipný s odborným humorom o diagnostike a oprave, akoby mechanik písal technickú správu',
+  witty_phil:      'filozofický a trochu absurdný, cesta auta do servisu ako metafora života',
+  witty_buddy:     'veľmi neformálny, kamarátsky, hovorový tón, akoby písal kamarát čo opravuje auto',
+  witty_drama:     'dramatický, patetický, ale s úsmevom — prijatie vozidla ako hrdinský moment',
+  witty_detective: 'detektívsky — mechanik ako vyšetrovateľ, zákazka ako otvorený prípad, suchý humor, formát policajnej správy',
 };
 
 export async function POST(request) {
@@ -25,35 +25,42 @@ export async function POST(request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { tone, name, carStr, jobNum, total, companyName, previousText } = await request.json();
+  const { tone, name, carStr, jobNum, total, companyName, complaints, previousText } = await request.json();
 
   const toneDesc = TONE_DESCRIPTIONS[tone] || 'priateľský';
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const complaintsLine = complaints ? `- Zákazník hlási závady: ${complaints}` : '';
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 500,
     messages: [{
       role: 'user',
-      content: `Napíš krátky e-mail zákazníkovi autoservisu. Posiela sa spolu so servisným protokolom (nie faktúrou) po dokončení opravy vozidla.
+      content: `Napíš krátky e-mail zákazníkovi autoservisu. E-mail sa posiela pri PREVZATÍ vozidla do opravy (nie po dokončení). Zákazník dostane servisný protokol v prílohe.
 
 TON: ${toneDesc}
 JAZYK: slovenčina
 
-ÚDAJE O ZÁKAZKE:
+OSLOVI zákazníka ako "pán [Priezvisko]" alebo "pani [Priezvisko]" podľa mena: ${name}
+(slovenské ženské priezviská končia na -ová, inak pán)
+
+ÚDAJE:
 - Zákazník: ${name}
 - Vozidlo: ${carStr}
 - Zákazka č.: ${jobNum}
-- Celková suma: ${total} €
+${complaintsLine}
 - Autoservis: ${companyName}
 
-POŽIADAVKY:
-- Spomeň zákazku č. ${jobNum} a sumu ${total} €
+OBSAH:
+- Potvrď prevzatie vozidla do opravy
+${complaints ? '- Krátko spomeň čo zákazník hlási / čo budeme riešiť' : ''}
+- Spomeň zákazku č. ${jobNum}
 - Servisný protokol je priložený ako PDF
-- Záver: "S pozdravom, ${companyName}"
+- Záver s pozdravom od ${companyName}
 - Maximálne 5–7 viet, len čistý text (žiadne nadpisy, žiadne odrážky)
-- Každý e-mail musí znieť úplne inak ako predošlé — iné obraty, iný úvod, iná záverečná veta${previousText ? `\n\nPREDOŠLÁ VERZIA (túto NEOPAKUJ, vymysli niečo iné):\n${previousText.substring(0, 300)}` : ''}`,
+- Každý e-mail musí znieť úplne inak ako predošlé${previousText ? `\n\nPREDOŠLÁ VERZIA (NEOPAKUJ):\n${previousText.substring(0, 300)}` : ''}`,
     }],
   });
 

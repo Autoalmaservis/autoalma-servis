@@ -788,18 +788,29 @@ export default function DetailZakazkyPage() {
   const handlePrint = () => window.print();
 
   const JOB_EMAIL_TEMPLATES = [
-    { key: 'formal',          emoji: '🤝', name: 'Formálny',      preview: 'V prílohe zasielame kópiu servisného protokolu k zákazke…' },
-    { key: 'friendly',        emoji: '😊', name: 'Priateľský',    preview: 'Posielame ti kópiu servisného protokolu k tvojmu autu…' },
-    { key: 'witty_exit',      emoji: '🚗', name: 'Spokojné auto', preview: 'Vaše auto odišlo z dielne v lepšom stave, ako prišlo…' },
-    { key: 'witty_tech',      emoji: '🔧', name: 'Odborný vtip',  preview: 'Absolvovalo preventívnu prevenciu pred tým, čo by sa stalo…' },
-    { key: 'witty_phil',      emoji: '🧠', name: 'Filozofický',   preview: 'Auto je predĺžením osobnosti majiteľa. Vaše nám toho prezradilo…' },
-    { key: 'witty_buddy',     emoji: '👊', name: 'Kamarátsky',    preview: 'Čau! Tvoje auto sme dali dokopy — trvalo to trochu, ale…' },
-    { key: 'witty_drama',     emoji: '🎭', name: 'Dramatický',    preview: 'Bolo to tesné, ale vaše vozidlo to zvládlo. Naši mechanici…' },
-    { key: 'witty_detective', emoji: '🕵️', name: 'Detektívsky',  preview: 'Prípad uzavretý. Páchateľ bol identifikovaný a neutralizovaný…' },
+    { key: 'formal',          emoji: '🤝', name: 'Formálny',      preview: 'Dobrý deň, pán/pani … vozidlo sme prevzali a pristupujeme k oprave…' },
+    { key: 'friendly',        emoji: '😊', name: 'Priateľský',    preview: 'Ahoj! Tvoje auto je u nás a už na ňom pracujeme…' },
+    { key: 'witty_exit',      emoji: '🚗', name: 'Auto v dobrých rukách', preview: 'Vaše auto dorazilo — odovzdali ste ho do správnych rúk…' },
+    { key: 'witty_tech',      emoji: '🔧', name: 'Technický humor', preview: 'Diagnostika spustená. Váš prípad bol zaradený do fronty opráv…' },
+    { key: 'witty_phil',      emoji: '🧠', name: 'Filozofický',   preview: 'Každá cesta musí raz zastať. Vaša práve zastavila u nás…' },
+    { key: 'witty_buddy',     emoji: '👊', name: 'Kamarátsky',    preview: 'Čau! Auto je u nás, už sa na to vrháme…' },
+    { key: 'witty_drama',     emoji: '🎭', name: 'Dramatický',    preview: 'Vozidlo dorazilo. Naši mechanici ho prevzali s plnou vážnosťou…' },
+    { key: 'witty_detective', emoji: '🕵️', name: 'Detektívsky',  preview: 'Prípad č. [zákazka] — otvorený. Vyšetrovanie začalo…' },
   ];
 
+  const getJobGreeting = (z) => {
+    if (z?.ico) return 'Dobrý deň,';
+    const name = (z?.customer_name || '').trim();
+    if (!name) return 'Dobrý deň,';
+    const parts = name.split(/\s+/);
+    const last = parts[parts.length - 1];
+    const first = parts[0];
+    if (last.toLowerCase().endsWith('ová') || last.toLowerCase().endsWith('ova')) return `Dobrý deň, pani ${last},`;
+    if (first.toLowerCase().endsWith('a') && first.length > 3 && parts.length > 1) return `Dobrý deň, pani ${last},`;
+    return `Dobrý deň, pán ${last},`;
+  };
+
   const buildJobEmailBody = (tone, z, company) => {
-    const name = z?.customer_name || 'zákazník';
     const plate = z?.plate_number || '';
     const brand = z?.car_brand_model || '';
     const jobNum = z?.job_number || '';
@@ -807,85 +818,79 @@ export default function DetailZakazkyPage() {
     const companyName = company?.name || 'AutoAlma Servis';
     const phone = company?.phone || '';
     const email = company?.email || '';
-    const totalStr = total?.toFixed ? total.toFixed(2) : '0.00';
+    const complaints = z?.complaints ? `\nZákazník hlási: ${z.complaints}\n` : '';
+    const greeting = getJobGreeting(z);
 
-    if (tone === 'formal') return `Dobrý deň, ${name},
+    if (tone === 'formal') return `${greeting}
 
-v prílohe Vám zasielame kópiu servisného protokolu č. ${jobNum} k vozidlu ${carStr}.
-
-Celková suma za vykonané práce: ${totalStr} €
-
-V prípade akýchkoľvek otázok nás neváhajte kontaktovať na ${phone}${email ? ' alebo ' + email : ''}.
+dovoľujeme si Vás informovať, že sme prevzali Vaše vozidlo ${carStr} do opravy. V prílohe nájdete kópiu servisného protokolu č. ${jobNum}.
+${complaints}
+Budeme Vás priebežne informovať o postupe prác. V prípade otázok nás kontaktujte na ${phone}${email ? ' alebo ' + email : ''}.
 
 S úctou,
 tím ${companyName}`;
 
-    if (tone === 'friendly') return `Ahoj ${name},
+    if (tone === 'friendly') return `${greeting}
 
-posielame ti kópiu servisného protokolu č. ${jobNum} k tvojmu ${carStr}. Celková suma je ${totalStr} €.
-
-Protokol nájdeš v prílohe tohto mailu. Ak máš otázky, neváhaj sa ozvať — vždy radi pomôžeme.
-
-Ďakujeme, že si nás navštívil!
+vozidlo ${carStr} sme prevzali a už na ňom pracujeme! V prílohe ti posielame kópiu servisného protokolu č. ${jobNum}.
+${complaints}
+Ak budeš mať akékoľvek otázky, neváhaj sa ozvať — vždy radi pomôžeme.
 
 Tím ${companyName}`;
 
-    if (tone === 'witty_exit') return `Dobrý deň, ${name},
+    if (tone === 'witty_exit') return `${greeting}
 
-vaše ${carStr} odišlo z našej dielne spokojné — a v lepšom stave, ako prišlo. Čo je presne ten výsledok, za ktorý sa platí.
-
-Servisný protokol č. ${jobNum} na sumu ${totalStr} € je priložený. Áno, je to skutočná suma. Nie, nejde o preklep.
-
-Dúfame, že ${brand || 'vaše auto'} bude odmietať kaziť sa aspoň do budúceho servisu — ale keď aj predsa, viete, kde nás nájdete.
+vaše ${carStr} dorazilo do dobrých rúk — a my sme sa ho chopili s nadšením, aké si zaslúži každé vozidlo, ktoré niekomu záleží na srdci.
+${complaints}
+Servisný protokol č. ${jobNum} je v prílohe. O výsledku Vás budeme informovať — dúfame, že čím skôr.
 
 S motoristickým pozdravom,
 ${companyName}`;
 
-    if (tone === 'witty_tech') return `Dobrý deň, ${name},
+    if (tone === 'witty_tech') return `${greeting}
 
-vaše ${carStr} absolvovalo u nás preventívnu prevenciu pred tým, čo by sa mohlo stať, keby ste na servis nechali ísť dlhšie. Zjednodušene: prišlo, videlo, bolo opravené.
-
-Servisný protokol č. ${jobNum} na sumu ${totalStr} € je v prílohe. Áno, každé euro bolo vynaložené zmysluplne.
+prijali sme ${carStr} do starostlivosti a spúšťame plnú diagnostiku. Váš prípad č. ${jobNum} bol zaradený do fronty s najvyššou prioritou (každý zákazník má najvyššiu prioritu — to je náš systém).
+${complaints}
+Protokol je v prílohe. Výsledky diagnostiky Vám podáme čo najskôr.
 
 S odborným pozdravom,
 ${companyName}`;
 
-    if (tone === 'witty_phil') return `Dobrý deň, ${name},
+    if (tone === 'witty_phil') return `${greeting}
 
-hovorí sa, že auto je predĺžením osobnosti svojho majiteľa. Vaše ${carStr} nám teda o Vás prezradilo dosť — ale nebojte, zachovávame profesionálnu diskrétnosť.
-
-Servisný protokol č. ${jobNum} na sumu ${totalStr} € je v prílohe. Berte ho ako doklad o investícii do harmónie medzi Vami a Vašim vozidlom.
+každá cesta musí raz zastať. Tá Vášho ${carStr} zastavila práve u nás — a to je, dovolíme si povedať, dobré miesto na pauzu.
+${complaints}
+Zákazka č. ${jobNum} je otvorená a my sa pustíme do práce. Protokol nájdete v prílohe.
 
 S filozofickým pozdravom,
 ${companyName}`;
 
-    if (tone === 'witty_buddy') return `Čau ${name}!
+    if (tone === 'witty_buddy') return `${greeting}
 
-tvoje ${carStr} sme dali dokopy — trvalo to trochu, ale výsledok stojí za to. Aspoň sa ti to nebude kaziť cestou na dovolenku (sľubujeme, robili sme, čo sme mohli).
+tvoje ${carStr} je u nás a my sa na to už vrháme! Zákazka č. ${jobNum} beží — protokol je v prílohe.
+${complaints}
+Dáme ti vedieť, ako to ide. Zatiaľ sa spoliehal na nás — to je správne rozhodnutie.
 
-Protokol č. ${jobNum} je v prílohe, ${totalStr} €. Za tú cenu sme to naozaj poriadne skontrolovali. Naozaj.
-
-Maj sa,
 ${companyName}`;
 
-    if (tone === 'witty_drama') return `Vážený ${name},
+    if (tone === 'witty_drama') return `${greeting}
 
-bolo to tesné, ale vaše ${carStr} to zvládlo. Naši mechanici pracovali s chirurgickou presnosťou a zodpovedajúcou hudbou na pozadí. Výsledok: vozidlo žije a je pripravené na ďalšie kilometre.
+vozidlo ${carStr} dorazilo. Naši mechanici ho prevzali s plnou vážnosťou situácie a zákazka č. ${jobNum} bola slávnostne otvorená.
+${complaints}
+Bitka s poruchou sa začína. Protokol je priložený ako svedok tohto historického momentu.
 
-Servisný protokol č. ${jobNum} na sumu ${totalStr} € je priložený. Dramatický príbeh má — ako správne — šťastný koniec.
-
-S úctou a adrenalínom,
+S úctou a odhodlaním,
 ${companyName}`;
 
     if (tone === 'witty_detective') return `Správa z vyšetrovania — zákazka č. ${jobNum}
 
-Vážený ${name},
+${greeting}
 
-po dôkladnom preskúmaní vozidla ${carStr} môžem s istotou vyhlásiť: prípad je uzavretý. Páchateľ bol identifikovaný, neutralizovaný a vozidlo je opäť v prevádzkyschopnom stave.
+vozidlo ${carStr} bolo prevzaté. Prípad bol otvorený a vyšetrovanie sa začalo. Naši agenti pristúpili k dôkladnej obhliadke miesta činu.
+${complaints}
+Zákazka č. ${jobNum} je v prílohe. O pokroku vyšetrovania Vás budeme informovať.
 
-Dôkazový materiál — servisný protokol na sumu ${totalStr} € — je priložený k tomuto hláseniu.
-
-Inspektor ${companyName}
+Inšpektor ${companyName}
 (Oddelenie automobilovej kriminalistiky)`;
 
     return buildJobEmailBody('friendly', z, company);
@@ -915,6 +920,7 @@ Inspektor ${companyName}
           jobNum: zakazka?.job_number || '',
           total: total?.toFixed ? total.toFixed(2) : '0.00',
           companyName: myCompany?.name || 'AutoAlma Servis',
+          complaints: zakazka?.complaints || '',
           previousText: jobEmailBody,
         }),
       });
