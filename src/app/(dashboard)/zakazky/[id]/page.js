@@ -231,9 +231,10 @@ export default function DetailZakazkyPage() {
         const { data, error } = await supabase
             .from('price_offers')
             .select(`
-                id, 
-                offer_number, 
-                created_at, 
+                id,
+                job_id,
+                offer_number,
+                created_at,
                 total_amount,
                 items_json,
                 job_tickets!inner(plate_number)
