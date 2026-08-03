@@ -160,58 +160,61 @@ export default function DetailFakturyPage() {
         import('jspdf'),
       ]);
 
-      // Pred zachytením: vynútime bezpečné RGB farby na každom elemente
-      // (html2canvas nepodporuje moderné CSS farby oklch/lab z Tailwindu)
-      const allEls = element.querySelectorAll('*');
-      const savedStyles = [];
+      // Canvas 2D trick: prekonvertuje oklab/oklch/hsl/... na bezpečné rgb()
+      // Getkomputedstyle v modernom Chrome vracia oklab() → canvas to vždy preloží na rgb
+      const colorCvs = document.createElement('canvas');
+      colorCvs.width = colorCvs.height = 1;
+      const colorCtx = colorCvs.getContext('2d', { willReadFrequently: true });
+      const toRgb = (cssColor) => {
+        if (!cssColor || cssColor === 'transparent') return 'transparent';
+        try {
+          colorCtx.clearRect(0, 0, 1, 1);
+          colorCtx.fillStyle = cssColor;
+          colorCtx.fillRect(0, 0, 1, 1);
+          const d = colorCtx.getImageData(0, 0, 1, 1).data;
+          return d[3] < 10 ? 'transparent' : `rgb(${d[0]},${d[1]},${d[2]})`;
+        } catch { return cssColor; }
+      };
+
+      // Uložíme pôvodné inline štýly a aplikujeme printové hodnoty
+      const allEls = [element, ...element.querySelectorAll('*')];
+      const savedStyles = allEls.map(el => ({
+        el,
+        color: el.style.color,
+        bg: el.style.backgroundColor,
+        border: el.style.borderColor,
+        shadow: el.style.boxShadow,
+      }));
+
       allEls.forEach(el => {
         const cs = window.getComputedStyle(el);
-        savedStyles.push({
-          el,
-          color: el.style.color,
-          bg: el.style.backgroundColor,
-          border: el.style.borderColor,
-        });
-        el.style.color = cs.color;                       // prehliadač vráti rgb()
-        el.style.backgroundColor = cs.backgroundColor;
-        el.style.borderColor = cs.borderColor;
+        const cls = typeof el.className === 'string' ? el.className : '';
+        el.style.color = /text-red/.test(cls) ? '#dc2626' : '#000000';
+        const computedBg = toRgb(cs.backgroundColor);
+        el.style.backgroundColor = (computedBg === 'transparent' || /bg-zinc|bg-black|bg-neutral/.test(cls)) ? (el === element ? '#ffffff' : 'transparent') : computedBg;
+        el.style.borderColor = /border-zinc|border-black/.test(cls) ? '#cccccc' : toRgb(cs.borderColor);
+        el.style.boxShadow = 'none';
       });
-      // Printové štýly — biele pozadie, čierny text
-      const savedElStyle = { bg: element.style.backgroundColor, color: element.style.color, shadow: element.style.boxShadow, border: element.style.border, radius: element.style.borderRadius };
       element.style.backgroundColor = '#ffffff';
-      element.style.color = '#000000';
-      element.style.boxShadow = 'none';
       element.style.border = '1px solid #e5e5e5';
       element.style.borderRadius = '8px';
-      allEls.forEach(el => {
-        const cls = el.className || '';
-        if (typeof cls === 'string') {
-          if (cls.includes('bg-zinc') || cls.includes('bg-black') || cls.includes('bg-neutral')) el.style.backgroundColor = '#ffffff';
-          if (cls.includes('text-zinc-4') || cls.includes('text-zinc-5') || cls.includes('text-zinc-6') || cls.includes('text-zinc-7') || cls.includes('text-zinc-8') || cls.includes('text-zinc-9') || cls.includes('text-gray')) el.style.color = '#555555';
-          if (cls.includes('text-white')) el.style.color = '#000000';
-          if (cls.includes('text-red')) el.style.color = '#dc2626';
-          if (cls.includes('border-zinc') || cls.includes('border-black')) el.style.borderColor = '#cccccc';
-        }
-      });
 
+      // foreignObjectRendering: browser renderuje natívne — html2canvas neparsu CSS vôbec
+      // → oklch/oklab v Tailwind CSS nespôsobí crash
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
-        allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
+        foreignObjectRendering: true,
       });
 
       // Obnovíme pôvodné štýly
-      element.style.backgroundColor = savedElStyle.bg;
-      element.style.color = savedElStyle.color;
-      element.style.boxShadow = savedElStyle.shadow;
-      element.style.border = savedElStyle.border;
-      element.style.borderRadius = savedElStyle.radius;
-      savedStyles.forEach(({ el, color, bg, border }) => {
+      savedStyles.forEach(({ el, color, bg, border, shadow }) => {
         el.style.color = color;
         el.style.backgroundColor = bg;
         el.style.borderColor = border;
+        el.style.boxShadow = shadow;
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
@@ -220,9 +223,7 @@ export default function DetailFakturyPage() {
       const pdfH = doc.internal.pageSize.getHeight();
       const ratio = canvas.height / canvas.width;
       const imgH = pdfW * ratio;
-      let posY = 0;
-      let remaining = imgH;
-      let firstPage = true;
+      let posY = 0, remaining = imgH, firstPage = true;
       while (remaining > 0) {
         if (!firstPage) doc.addPage();
         doc.addImage(imgData, 'JPEG', 0, -posY, pdfW, imgH);
@@ -231,11 +232,20 @@ export default function DetailFakturyPage() {
         firstPage = false;
       }
 
-      const pdfBase64 = doc.output('datauristring');
       const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const pdfFilename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
-      setEmailStatus('Odosielam...');
 
+      // Automatické stiahnutie PDF na PC
+      const pdfBlob = doc.output('blob');
+      const dlUrl = URL.createObjectURL(pdfBlob);
+      const dlLink = document.createElement('a');
+      dlLink.href = dlUrl;
+      dlLink.download = pdfFilename;
+      dlLink.click();
+      URL.revokeObjectURL(dlUrl);
+
+      setEmailStatus('Odosielam...');
+      const pdfBase64 = doc.output('datauristring');
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/send-invoice-email', {
         method: 'POST',
