@@ -525,18 +525,11 @@ export default function DetailZakazkyPage() {
 
       const rr = String(teraz.getFullYear()).slice(-2);
 
-      // Poradové číslo per rok: F{YY}{CCC} alebo A{YY}{CCC}
-      const { count: countOfficial } = await supabase
-        .from('invoices').select('*', { count: 'exact', head: true })
-        .like('invoice_number', `F${rr}%`);
-      const { count: countOdlozene } = await supabase
-        .from('invoices').select('*', { count: 'exact', head: true })
-        .like('invoice_number', `A${rr}%`);
-
-      const poradie = isOfficial
-        ? String((countOfficial || 0) + 1).padStart(3, '0')
-        : String((countOdlozene || 0) + 1).padStart(3, '0');
-      const konecneCislo = isOfficial ? `F${rr}${poradie}` : `A${rr}${poradie}`;
+      // Poradové číslo generované atomicky cez DB funkciu (bez race condition)
+      const { data: invoiceNumData, error: invoiceNumErr } = await supabase
+        .rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A' });
+      if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
+      const konecneCislo = invoiceNumData;
       
       const invoicePayload = {
         invoice_number: konecneCislo, 
