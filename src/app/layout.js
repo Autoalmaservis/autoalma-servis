@@ -5,6 +5,12 @@ const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 export const metadata = {
   metadataBase: new URL('https://autoalma.sk'),
+  icons: {
+    icon: '/autoalma-icon.png',
+    apple: '/autoalma-icon.png',
+    shortcut: '/autoalma-icon.png',
+  },
+  manifest: '/manifest.json',
   title: {
     default: 'AutoAlma Servis | Autoservis Bratislava – Petržalka',
     template: '%s | AutoAlma Servis',
