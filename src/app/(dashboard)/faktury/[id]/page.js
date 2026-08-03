@@ -579,26 +579,30 @@ Tím ${companyName}`;
 
             {/* PDF príloha */}
             <div className="mb-5 p-4 bg-zinc-950 border-2 border-dashed border-zinc-700 rounded-2xl">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">
-                PDF príloha
-              </p>
-              <p className="text-[10px] text-zinc-600 mb-3 italic">
-                Najprv stiahnite faktúru (tlačidlo vpravo hore), potom ju tu nahrajte.
-              </p>
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700'}`}>
-                  {pdfFile ? '✓ PDF nahraté' : '📎 Vybrať PDF'}
-                </span>
-                <span className="text-zinc-500 text-xs truncate max-w-[200px]">
-                  {pdfFile ? pdfFile.name : 'Žiadny súbor'}
-                </span>
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  onChange={e => setPdfFile(e.target.files[0] || null)}
-                  className="hidden"
-                />
-              </label>
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">PDF príloha</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Krok 1: stiahnuť */}
+                <button
+                  onClick={handlePrint}
+                  className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border-2 bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all"
+                >
+                  🖨️ Stiahnuť faktúru
+                </button>
+                <span className="text-zinc-700 text-xs">→ potom nahraj:</span>
+                {/* Krok 2: nahrať */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
+                    {pdfFile ? '✓ Nahraté' : '📎 Vybrať súbor'}
+                  </span>
+                  {pdfFile && <span className="text-zinc-500 text-xs truncate max-w-[160px]">{pdfFile.name}</span>}
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={e => setPdfFile(e.target.files[0] || null)}
+                    className="hidden"
+                  />
+                </label>
+              </div>
             </div>
 
             <div className="space-y-3 mb-6">
