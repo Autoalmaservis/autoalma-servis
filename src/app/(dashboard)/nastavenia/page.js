@@ -74,6 +74,7 @@ export default function NastaveniaPage() {
     bank_account: '',
     logo_url: '',
     accountant_email: '',
+    google_review_url: '',
   });
 
   // Stavy pre hodinové sadzby
@@ -132,6 +133,7 @@ export default function NastaveniaPage() {
         bank_account: setData.find(s => s.id === 'company_bank')?.value || '',
         logo_url: setData.find(s => s.id === 'company_logo')?.value || '',
         accountant_email: setData.find(s => s.id === 'accountant_email')?.value || '',
+        google_review_url: setData.find(s => s.id === 'google_review_url')?.value || '',
       });
 
       // Hodinové sadzby
@@ -363,6 +365,7 @@ export default function NastaveniaPage() {
       { id: 'company_web', value: billingData.web_address },
       { id: 'company_bank', value: billingData.bank_account },
       { id: 'accountant_email', value: billingData.accountant_email },
+      { id: 'google_review_url', value: billingData.google_review_url },
     ];
     // Upsert jeden po druhom — obchádza RLS problém s batch INSERT nových kľúčov
     let lastError = null;
@@ -622,10 +625,17 @@ export default function NastaveniaPage() {
                     <input type="text" value={billingData.web_address} onChange={(e) => setBillingData({...billingData, web_address: e.target.value})} className="w-full bg-black border border-zinc-800 p-4 rounded-xl text-white outline-none" placeholder="www.firma.sk" />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-[9px] font-black text-amber-600 uppercase mb-1 tracking-widest ml-1 italic">E-mail účtovníčky (kopie faktúr)</label>
-                  <input type="email" value={billingData.accountant_email} onChange={(e) => setBillingData({...billingData, accountant_email: e.target.value})} className="w-full bg-black border border-amber-900/40 focus:border-amber-600 p-4 rounded-xl text-white outline-none transition-all" placeholder="uctovnicka@firma.sk" />
-                  <p className="text-[9px] text-zinc-600 ml-1 mt-1 italic">Ak je vyplnené, pri odoslaní faktúry e-mailom sa automaticky predvyplní ako príjemca.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-amber-600 uppercase mb-1 tracking-widest ml-1 italic">E-mail účtovníčky (kopie faktúr)</label>
+                    <input type="email" value={billingData.accountant_email} onChange={(e) => setBillingData({...billingData, accountant_email: e.target.value})} className="w-full bg-black border border-amber-900/40 focus:border-amber-600 p-4 rounded-xl text-white outline-none transition-all" placeholder="uctovnicka@firma.sk" />
+                    <p className="text-[9px] text-zinc-600 ml-1 mt-1 italic">Automaticky predvyplnená pri odoslaní faktúry.</p>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black text-yellow-600 uppercase mb-1 tracking-widest ml-1 italic">Google recenzia — link</label>
+                    <input type="url" value={billingData.google_review_url} onChange={(e) => setBillingData({...billingData, google_review_url: e.target.value})} className="w-full bg-black border border-yellow-900/40 focus:border-yellow-600 p-4 rounded-xl text-white outline-none transition-all" placeholder="https://g.page/r/.../review" />
+                    <p className="text-[9px] text-zinc-600 ml-1 mt-1 italic">Zobrazí sa v e-maile zákazníkovi po odoslaní faktúry.</p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
