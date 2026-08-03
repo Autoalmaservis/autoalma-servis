@@ -36,6 +36,8 @@ export default function DetailFakturyPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
   const [pdfFile, setPdfFile] = useState(null);
+  const [emailTone, setEmailTone] = useState('friendly');
+  const [emailBody, setEmailBody] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -130,6 +132,51 @@ export default function DetailFakturyPage() {
     fetchQr();
   }, [inv, myCompany.bank]);
 
+  const buildEmailBody = (tone, invoiceData, company) => {
+    const name = invoiceData?.company_details?.company_name || invoiceData?.customer_name || 'zákazník';
+    const plate = invoiceData?.car_details?.plate || invoiceData?.car_details?.plate_number || '';
+    const brand = invoiceData?.car_details?.brand || invoiceData?.car_details?.brand_model || '';
+    const invoiceNum = invoiceData?.invoice_number || '';
+    const total = Number(invoiceData?.total_amount || 0).toFixed(2);
+    const phone = company?.phone || '';
+    const email = company?.email || '';
+    const companyName = company?.name || 'AutoAlma Servis';
+    const carStr = [plate, brand].filter(Boolean).join(' — ');
+
+    if (tone === 'formal') return `Dobrý deň, ${name},
+
+v prílohe Vám zasielame faktúru č. ${invoiceNum} za vykonaný servis vozidla ${carStr}.
+
+Celková suma: ${total} €
+
+V prípade akýchkoľvek otázok nás neváhajte kontaktovať na ${phone}${email ? ' alebo ' + email : ''}.
+
+S úctou,
+tím ${companyName}`;
+
+    if (tone === 'witty') return `Dobrý deň, ${name},
+
+vaše ${carStr} odišlo z našej dielne spokojné — a v lepšom stave, ako prišlo. Čo je presne ten výsledok, za ktorý platíte.
+
+Faktúra č. ${invoiceNum} na sumu ${total} € je priložená. Áno, je to skutočná suma. Nie, nejde o preklep.
+
+Dúfame, že ${brand ? brand : 'vaše auto'} bude odmietať kaziť sa aspoň do budúceho servisu — ale keď aj predsa, viete, kde nás nájdete.
+
+S motoristickým pozdravom,
+${companyName}`;
+
+    // friendly (default)
+    return `Ahoj ${name},
+
+posielame vám faktúru č. ${invoiceNum} za servis ${carStr}. Celková suma je ${total} €.
+
+Faktúra je priložená k tomuto e-mailu. Ak máte akékoľvek otázky, neváhajte nám zavolať alebo napísať — vždy radi pomôžeme.
+
+Ďakujeme, že ste nás navštívili, a tešíme sa na ďalšie stretnutie!
+
+Tím ${companyName}`;
+  };
+
   const handlePrint = () => {
     const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const origTitle = document.title;
@@ -141,6 +188,8 @@ export default function DetailFakturyPage() {
   const handleOpenEmailModal = () => {
     setEmailStatus('');
     setPdfFile(null);
+    setEmailTone('friendly');
+    setEmailBody(buildEmailBody('friendly', inv, myCompany));
     setEmailModal(true);
   };
 
@@ -170,7 +219,7 @@ export default function DetailFakturyPage() {
       const res = await fetch('/api/send-invoice-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ invoiceId: id, recipients, pdfBase64, pdfFilename }),
+        body: JSON.stringify({ invoiceId: id, recipients, pdfBase64, pdfFilename, emailBody }),
       });
       const result = await res.json();
       if (result.ok) {
@@ -497,6 +546,35 @@ export default function DetailFakturyPage() {
                 {inv.invoice_number}
               </h2>
               <p className="text-zinc-500 text-[10px] font-bold mt-1 uppercase">{inv.car_details?.plate} — {inv.customer_name}</p>
+            </div>
+
+            {/* TON MAILU */}
+            <div className="mb-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Štýl správy</p>
+              <div className="flex gap-2">
+                {[
+                  { key: 'formal', label: '🤝 Formálny' },
+                  { key: 'friendly', label: '😊 Priateľský' },
+                  { key: 'witty', label: '😄 Vtipný' },
+                ].map(({ key, label }) => (
+                  <button key={key}
+                    onClick={() => { setEmailTone(key); setEmailBody(buildEmailBody(key, inv, myCompany)); }}
+                    className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${emailTone === key ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-600'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* TEXT MAILU */}
+            <div className="mb-5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Text e-mailu <span className="text-zinc-600 normal-case font-bold tracking-normal">(môžeš upraviť)</span></p>
+              <textarea
+                value={emailBody}
+                onChange={e => setEmailBody(e.target.value)}
+                rows={10}
+                className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-4 rounded-2xl text-zinc-300 font-mono text-xs outline-none resize-none leading-relaxed transition-all"
+              />
             </div>
 
             {/* PDF príloha */}

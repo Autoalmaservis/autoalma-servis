@@ -15,7 +15,7 @@ export async function POST(request) {
   }
 
   try {
-    const { invoiceId, recipients, pdfBase64, pdfFilename } = await request.json();
+    const { invoiceId, recipients, pdfBase64, pdfFilename, emailBody } = await request.json();
     if (!invoiceId || !recipients?.length) {
       return Response.json({ error: 'Chýba invoiceId alebo príjemcovia' }, { status: 400 });
     }
@@ -56,6 +56,19 @@ export async function POST(request) {
     const total = Number(inv.total_amount || 0).toFixed(2);
     const greeting = customerName ? `Dobrý deň, <strong>${customerName}</strong>,` : 'Dobrý deň,';
 
+    // Ak prišiel emailBody od používateľa, skonvertujeme ho do HTML odsekov
+    const bodyHtml = emailBody
+      ? emailBody.split('\n').map(line =>
+          line.trim() === ''
+            ? ''
+            : `<p style="margin:0 0 12px;font-size:14px;color:#374151;line-height:1.7">${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
+        ).join('\n')
+      : `<p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7">${greeting}</p>
+         <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7">
+           ďakujeme, že ste nám zverili starostlivosť o Vaše vozidlo <strong>${plate}${brand ? ' — ' + brand : ''}</strong>.
+           Tešíme sa, že odišlo z našej dielne spokojné — a v lepšom stave, ako prišlo.
+         </p>`;
+
     const html = `
 <!DOCTYPE html>
 <html lang="sk">
@@ -76,12 +89,7 @@ export async function POST(request) {
   <!-- TELO -->
   <tr>
     <td style="padding:32px">
-      <p style="margin:0 0 20px;font-size:15px;color:#111827;line-height:1.6">${greeting}</p>
-
-      <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.7">
-        ďakujeme, že ste nám zverili starostlivosť o Vaše vozidlo <strong>${plate}${brand ? ' — ' + brand : ''}</strong>.
-        Tešíme sa, že odišlo z našej dielne spokojné — a v lepšom stave, ako prišlo.
-      </p>
+      ${bodyHtml}
 
       <!-- Odkaz na faktúru -->
       <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin:0 0 28px">
