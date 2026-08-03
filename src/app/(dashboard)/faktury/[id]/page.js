@@ -35,6 +35,7 @@ export default function DetailFakturyPage() {
   const [customEmailInput, setCustomEmailInput] = useState('');
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
+  const [pdfFile, setPdfFile] = useState(null);
 
   useEffect(() => {
     if (id) {
@@ -139,6 +140,7 @@ export default function DetailFakturyPage() {
 
   const handleOpenEmailModal = () => {
     setEmailStatus('');
+    setPdfFile(null);
     setEmailModal(true);
   };
 
@@ -148,107 +150,22 @@ export default function DetailFakturyPage() {
     if (sendToAccountant && accountantEmail) recipients.push(accountantEmail);
     if (customEmailInput.trim()) recipients.push(customEmailInput.trim());
     if (!recipients.length) { setEmailStatus('Zadaj aspoň jeden e-mail príjemcu.'); return; }
+    if (!pdfFile) { setEmailStatus('Nahraj PDF súbor faktúry.'); return; }
 
     setEmailSending(true);
-    setEmailStatus('Generujem PDF...');
+    setEmailStatus('Načítavam PDF...');
     try {
-      const element = document.querySelector('.printable-area');
-      if (!element) { setEmailStatus('Chyba: faktúra sa nenašla na stránke'); setEmailSending(false); return; }
-
-      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-        import('html2canvas'),
-        import('jspdf'),
-      ]);
-
-      // Canvas 2D trick: prekonvertuje oklab/oklch na bezpečné rgb()
-      // getComputedStyle v Chrome 111+ môže vrátiť oklab() — canvas ImageData vždy dá rgb
-      const colorCvs = document.createElement('canvas');
-      colorCvs.width = colorCvs.height = 1;
-      const colorCtx = colorCvs.getContext('2d', { willReadFrequently: true });
-      const toRgb = (cssColor) => {
-        if (!cssColor || cssColor === 'transparent') return 'transparent';
-        try {
-          colorCtx.clearRect(0, 0, 1, 1);
-          colorCtx.fillStyle = cssColor;
-          colorCtx.fillRect(0, 0, 1, 1);
-          const d = colorCtx.getImageData(0, 0, 1, 1).data;
-          return d[3] < 10 ? 'transparent' : `rgb(${d[0]},${d[1]},${d[2]})`;
-        } catch { return cssColor; }
-      };
-
-      // Uložíme a prepíšeme inline štýly na printové hodnoty
-      const allEls = [element, ...element.querySelectorAll('*')];
-      const savedStyles = allEls.map(el => ({
-        el, color: el.style.color, bg: el.style.backgroundColor,
-        border: el.style.borderColor, shadow: el.style.boxShadow,
-      }));
-      allEls.forEach(el => {
-        const cs = window.getComputedStyle(el);
-        const cls = typeof el.className === 'string' ? el.className : '';
-        el.style.color = /text-red/.test(cls) ? '#dc2626' : '#000000';
-        el.style.backgroundColor = /bg-zinc|bg-black|bg-neutral/.test(cls) ? '#ffffff' : toRgb(cs.backgroundColor);
-        el.style.borderColor = /border-zinc|border-black/.test(cls) ? '#cccccc' : toRgb(cs.borderColor);
-        el.style.boxShadow = 'none';
+      const pdfBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(pdfFile);
       });
-      element.style.backgroundColor = '#ffffff';
-      element.style.border = '1px solid #e5e5e5';
-      element.style.borderRadius = '8px';
-
-      // onclone: nahradíme oklch/oklab v CSS štýloch klonu → html2canvas ich neparsu
-      // (foreignObjectRendering produkuje prázdne PDF, preto ideme cez štandardný renderer)
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        onclone: (clonedDoc) => {
-          clonedDoc.querySelectorAll('style').forEach(s => {
-            s.textContent = s.textContent
-              .replace(/oklch\([^)]+\)/g, 'rgb(0,0,0)')
-              .replace(/oklab\([^)]+\)/g, 'rgb(0,0,0)')
-              .replace(/lab\([^)]+\)/g, 'rgb(0,0,0)');
-          });
-          clonedDoc.querySelectorAll('.no-print').forEach(e => e.remove());
-        },
-      });
-
-      // Obnovíme pôvodné štýly
-      savedStyles.forEach(({ el, color, bg, border, shadow }) => {
-        el.style.color = color;
-        el.style.backgroundColor = bg;
-        el.style.borderColor = border;
-        el.style.boxShadow = shadow;
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      const doc = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'portrait' });
-      const pdfW = doc.internal.pageSize.getWidth();
-      const pdfH = doc.internal.pageSize.getHeight();
-      const ratio = canvas.height / canvas.width;
-      const imgH = pdfW * ratio;
-      let posY = 0, remaining = imgH, firstPage = true;
-      while (remaining > 0) {
-        if (!firstPage) doc.addPage();
-        doc.addImage(imgData, 'JPEG', 0, -posY, pdfW, imgH);
-        posY += pdfH;
-        remaining -= pdfH;
-        firstPage = false;
-      }
 
       const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const pdfFilename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
 
-      // Automatické stiahnutie PDF na PC
-      const pdfBlob = doc.output('blob');
-      const dlUrl = URL.createObjectURL(pdfBlob);
-      const dlLink = document.createElement('a');
-      dlLink.href = dlUrl;
-      dlLink.download = pdfFilename;
-      dlLink.click();
-      URL.revokeObjectURL(dlUrl);
-
       setEmailStatus('Odosielam...');
-      const pdfBase64 = doc.output('datauristring');
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/send-invoice-email', {
         method: 'POST',
@@ -580,6 +497,30 @@ export default function DetailFakturyPage() {
                 {inv.invoice_number}
               </h2>
               <p className="text-zinc-500 text-[10px] font-bold mt-1 uppercase">{inv.car_details?.plate} — {inv.customer_name}</p>
+            </div>
+
+            {/* PDF príloha */}
+            <div className="mb-5 p-4 bg-zinc-950 border-2 border-dashed border-zinc-700 rounded-2xl">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">
+                PDF príloha
+              </p>
+              <p className="text-[10px] text-zinc-600 mb-3 italic">
+                Najprv stiahnite faktúru (tlačidlo vpravo hore), potom ju tu nahrajte.
+              </p>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700'}`}>
+                  {pdfFile ? '✓ PDF nahraté' : '📎 Vybrať PDF'}
+                </span>
+                <span className="text-zinc-500 text-xs truncate max-w-[200px]">
+                  {pdfFile ? pdfFile.name : 'Žiadny súbor'}
+                </span>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={e => setPdfFile(e.target.files[0] || null)}
+                  className="hidden"
+                />
+              </label>
             </div>
 
             <div className="space-y-3 mb-6">
