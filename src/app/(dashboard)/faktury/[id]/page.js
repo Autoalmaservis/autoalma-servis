@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
-import { buildInvoicePDF } from '@/app/lib/invoicePdf';
 
 export default function DetailFakturyPage() {
   const { id } = useParams();
@@ -151,16 +150,44 @@ export default function DetailFakturyPage() {
     if (!recipients.length) { setEmailStatus('Zadaj aspoň jeden e-mail príjemcu.'); return; }
 
     setEmailSending(true);
-    setEmailStatus('');
+    setEmailStatus('Generujem PDF...');
     try {
-      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      const element = document.querySelector('.printable-area');
+      if (!element) { setEmailStatus('Chyba: faktúra sa nenašla na stránke'); setEmailSending(false); return; }
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
         import('jspdf'),
-        import('jspdf-autotable'),
       ]);
-      const doc = buildInvoicePDF(jsPDF, autoTable, inv, myCompany);
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#18181b',
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const doc = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'portrait' });
+      const pdfW = doc.internal.pageSize.getWidth();
+      const pdfH = doc.internal.pageSize.getHeight();
+      const ratio = canvas.height / canvas.width;
+      const imgH = pdfW * ratio;
+      let posY = 0;
+      let remaining = imgH;
+      let firstPage = true;
+      while (remaining > 0) {
+        if (!firstPage) doc.addPage();
+        doc.addImage(imgData, 'JPEG', 0, -posY, pdfW, imgH);
+        posY += pdfH;
+        remaining -= pdfH;
+        firstPage = false;
+      }
+
       const pdfBase64 = doc.output('datauristring');
       const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
       const pdfFilename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
+      setEmailStatus('Odosielam...');
 
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch('/api/send-invoice-email', {
