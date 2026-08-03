@@ -278,7 +278,6 @@ export default function KlientiPage() {
             body: JSON.stringify({
               email: clientForm.customer_email,
               name: clientForm.customer_name,
-              password: clientForm.password,
               createdByAdmin: true,
             }),
           }).catch(() => {});

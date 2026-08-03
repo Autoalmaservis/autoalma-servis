@@ -16,7 +16,7 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { email, name, password, createdByAdmin } = body;
+    const { email, name, createdByAdmin } = body;
 
     if (!email) return Response.json({ error: 'Chýba e-mail' }, { status: 400 });
 
