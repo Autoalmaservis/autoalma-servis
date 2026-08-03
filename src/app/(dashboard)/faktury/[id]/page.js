@@ -101,7 +101,8 @@ export default function DetailFakturyPage() {
     try {
       setLoading(true);
       if (inv.job_id) {
-        await supabase.from('job_tickets').update({ status: 'Dokončené' }).eq('id', inv.job_id);
+        const { error: jobErr } = await supabase.from('job_tickets').update({ status: 'Dokončené' }).eq('id', inv.job_id);
+        if (jobErr) throw new Error('Nepodarilo sa otvoriť zákazku: ' + jobErr.message);
       }
       await supabase.from('invoices').delete().eq('id', id);
       alert("Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná.");
