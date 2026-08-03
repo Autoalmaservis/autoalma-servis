@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
+import { buildInvoicePDF } from '@/app/lib/invoicePdf';
 
 export default function DetailFakturyPage() {
   const { id } = useParams();
@@ -25,6 +26,16 @@ export default function DetailFakturyPage() {
     logo_url: ''
   });
   const [qrDataUrl, setQrDataUrl] = useState('');
+
+  // Email modal
+  const [emailModal, setEmailModal] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [accountantEmail, setAccountantEmail] = useState('');
+  const [sendToCustomer, setSendToCustomer] = useState(true);
+  const [sendToAccountant, setSendToAccountant] = useState(false);
+  const [customEmailInput, setCustomEmailInput] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -51,6 +62,9 @@ export default function DetailFakturyPage() {
         web: data.find(s => s.id === 'company_web')?.value || '',
         logo_url: data.find(s => s.id === 'company_logo')?.value || '',
       });
+      const accEmail = data.find(s => s.id === 'accountant_email')?.value || '';
+      setAccountantEmail(accEmail);
+      if (accEmail) setSendToAccountant(true);
     }
   };
 
@@ -61,13 +75,19 @@ export default function DetailFakturyPage() {
       .select(`
         *,
         job_tickets (
-          complaints
+          complaints,
+          customer_email
         )
       `)
       .eq('id', id)
       .single();
 
-    if (!error) setInv(data);
+    if (!error) {
+      setInv(data);
+      const email = data?.job_tickets?.customer_email || '';
+      setCustomerEmail(email);
+      setSendToCustomer(!!email);
+    }
     setLoading(false);
   };
 
@@ -110,7 +130,56 @@ export default function DetailFakturyPage() {
     fetchQr();
   }, [inv, myCompany.bank]);
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+    const origTitle = document.title;
+    document.title = `Faktura_${safeName}_${inv?.invoice_number || ''}`;
+    window.onafterprint = () => { document.title = origTitle; window.onafterprint = null; };
+    window.print();
+  };
+
+  const handleOpenEmailModal = () => {
+    setEmailStatus('');
+    setEmailModal(true);
+  };
+
+  const handleSendEmail = async () => {
+    const recipients = [];
+    if (sendToCustomer && customerEmail) recipients.push(customerEmail);
+    if (sendToAccountant && accountantEmail) recipients.push(accountantEmail);
+    if (customEmailInput.trim()) recipients.push(customEmailInput.trim());
+    if (!recipients.length) { setEmailStatus('Zadaj aspoň jeden e-mail príjemcu.'); return; }
+
+    setEmailSending(true);
+    setEmailStatus('');
+    try {
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const doc = buildInvoicePDF(jsPDF, autoTable, inv, myCompany);
+      const pdfBase64 = doc.output('datauristring');
+      const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const pdfFilename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/send-invoice-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ invoiceId: id, recipients, pdfBase64, pdfFilename }),
+      });
+      const result = await res.json();
+      if (result.ok) {
+        setEmailStatus('✓ E-mail bol odoslaný');
+        setTimeout(() => setEmailModal(false), 1500);
+      } else {
+        setEmailStatus('Chyba: ' + (result.error || 'neznáma chyba'));
+      }
+    } catch (e) {
+      setEmailStatus('Chyba: ' + e.message);
+    }
+    setEmailSending(false);
+  };
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-red-600 font-black animate-pulse uppercase tracking-[0.3em]">Spracovávam...</div>;
   if (!inv) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase">Doklad nenájdený</div>;
@@ -128,9 +197,14 @@ export default function DetailFakturyPage() {
             🔓 Zrušiť faktúru / Otvoriť zákazku
           </button>
         </div>
-        <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2 font-bold">
-          🖨️ Tlačiť dokument
-        </button>
+        <div className="flex gap-3">
+          <button onClick={handleOpenEmailModal} className="bg-zinc-800 border border-zinc-700 text-zinc-200 px-6 py-3 rounded-2xl font-black uppercase text-xs hover:bg-blue-600 hover:border-blue-500 hover:text-white transition-all shadow-xl tracking-widest flex items-center gap-2">
+            📧 Poslať mailom
+          </button>
+          <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2 font-bold">
+            🖨️ Tlačiť / Stiahnuť PDF
+          </button>
+        </div>
       </div>
 
       {/* SAMOTNÝ DOKLAD */}
@@ -405,6 +479,83 @@ export default function DetailFakturyPage() {
           .print-complaints { border: 1pt solid #000 !important; padding: 10pt !important; margin-top: 15pt !important; }
         }
       `}</style>
+
+      {/* ===== EMAIL MODAL ===== */}
+      {emailModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
+          onClick={() => setEmailModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="mb-6">
+              <p className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-500 mb-1">Odoslať faktúru</p>
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">
+                {inv.invoice_number}
+              </h2>
+              <p className="text-zinc-500 text-[10px] font-bold mt-1 uppercase">{inv.car_details?.plate} — {inv.customer_name}</p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              {/* Zákazník */}
+              <label className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${sendToCustomer && customerEmail ? 'border-blue-500/50 bg-blue-600/5' : 'border-zinc-800 bg-zinc-950'} ${!customerEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                <input type="checkbox" checked={sendToCustomer} disabled={!customerEmail}
+                  onChange={e => setSendToCustomer(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-blue-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-0.5">Zákazník</p>
+                  {customerEmail
+                    ? <p className="text-white font-bold text-sm break-all">{customerEmail}</p>
+                    : <p className="text-zinc-600 text-xs italic">E-mail zákazníka nie je zadaný v zákazke</p>
+                  }
+                </div>
+              </label>
+
+              {/* Účtovníčka */}
+              <label className={`flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all ${sendToAccountant && accountantEmail ? 'border-amber-500/50 bg-amber-600/5' : 'border-zinc-800 bg-zinc-950'} ${!accountantEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                <input type="checkbox" checked={sendToAccountant} disabled={!accountantEmail}
+                  onChange={e => setSendToAccountant(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-amber-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-0.5">Účtovníčka</p>
+                  {accountantEmail
+                    ? <p className="text-white font-bold text-sm break-all">{accountantEmail}</p>
+                    : <p className="text-zinc-600 text-xs italic">Nastaviť v Nastavenia → Firemné údaje</p>
+                  }
+                </div>
+              </label>
+
+              {/* Iný e-mail */}
+              <div className="p-4 bg-zinc-950 border-2 border-zinc-800 rounded-2xl">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2">Iná adresa (voliteľné)</p>
+                <input
+                  type="email"
+                  value={customEmailInput}
+                  onChange={e => setCustomEmailInput(e.target.value)}
+                  placeholder="iná@adresa.sk"
+                  className="w-full bg-black border border-zinc-800 focus:border-blue-500 p-3 rounded-xl text-white font-bold outline-none text-sm transition-all placeholder:text-zinc-600"
+                />
+              </div>
+            </div>
+
+            {emailStatus && (
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-4 ${emailStatus.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
+                {emailStatus}
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={handleSendEmail} disabled={emailSending || (!sendToCustomer && !sendToAccountant && !customEmailInput.trim())}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                {emailSending ? '📤 Odosielam...' : '📧 Odoslať faktúru'}
+              </button>
+              <button onClick={() => setEmailModal(false)}
+                className="px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                Zrušiť
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
