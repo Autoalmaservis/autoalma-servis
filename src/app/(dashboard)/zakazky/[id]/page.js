@@ -64,6 +64,17 @@ export default function DetailZakazkyPage() {
 
   // Modál dokončenia zákazky
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+
+  // Email modal pre zákazku
+  const [jobEmailModal, setJobEmailModal] = useState(false);
+  const [jobEmailTone, setJobEmailTone] = useState('friendly');
+  const [jobEmailBody, setJobEmailBody] = useState('');
+  const [jobEmailSending, setJobEmailSending] = useState(false);
+  const [jobEmailStatus, setJobEmailStatus] = useState('');
+  const [jobPdfFile, setJobPdfFile] = useState(null);
+  const [jobCustomEmail, setJobCustomEmail] = useState('');
+  const [jobAiGenerating, setJobAiGenerating] = useState(false);
+  const [sendToJobCustomer, setSendToJobCustomer] = useState(true);
   const [newItem, setNewItem] = useState({
     name: '',
     quantity: 1,
@@ -776,6 +787,178 @@ export default function DetailZakazkyPage() {
   const { subtotalMaterial, subtotalWork, subtotal, tax, total, discountAmount, totalBefore } = calculateTotal();
   const handlePrint = () => window.print();
 
+  const JOB_EMAIL_TEMPLATES = [
+    { key: 'formal',          emoji: '🤝', name: 'Formálny',      preview: 'V prílohe zasielame kópiu servisného protokolu k zákazke…' },
+    { key: 'friendly',        emoji: '😊', name: 'Priateľský',    preview: 'Posielame ti kópiu servisného protokolu k tvojmu autu…' },
+    { key: 'witty_exit',      emoji: '🚗', name: 'Spokojné auto', preview: 'Vaše auto odišlo z dielne v lepšom stave, ako prišlo…' },
+    { key: 'witty_tech',      emoji: '🔧', name: 'Odborný vtip',  preview: 'Absolvovalo preventívnu prevenciu pred tým, čo by sa stalo…' },
+    { key: 'witty_phil',      emoji: '🧠', name: 'Filozofický',   preview: 'Auto je predĺžením osobnosti majiteľa. Vaše nám toho prezradilo…' },
+    { key: 'witty_buddy',     emoji: '👊', name: 'Kamarátsky',    preview: 'Čau! Tvoje auto sme dali dokopy — trvalo to trochu, ale…' },
+    { key: 'witty_drama',     emoji: '🎭', name: 'Dramatický',    preview: 'Bolo to tesné, ale vaše vozidlo to zvládlo. Naši mechanici…' },
+    { key: 'witty_detective', emoji: '🕵️', name: 'Detektívsky',  preview: 'Prípad uzavretý. Páchateľ bol identifikovaný a neutralizovaný…' },
+  ];
+
+  const buildJobEmailBody = (tone, z, company) => {
+    const name = z?.customer_name || 'zákazník';
+    const plate = z?.plate_number || '';
+    const brand = z?.car_brand_model || '';
+    const jobNum = z?.job_number || '';
+    const carStr = [plate, brand].filter(Boolean).join(' — ');
+    const companyName = company?.name || 'AutoAlma Servis';
+    const phone = company?.phone || '';
+    const email = company?.email || '';
+    const totalStr = total?.toFixed ? total.toFixed(2) : '0.00';
+
+    if (tone === 'formal') return `Dobrý deň, ${name},
+
+v prílohe Vám zasielame kópiu servisného protokolu č. ${jobNum} k vozidlu ${carStr}.
+
+Celková suma za vykonané práce: ${totalStr} €
+
+V prípade akýchkoľvek otázok nás neváhajte kontaktovať na ${phone}${email ? ' alebo ' + email : ''}.
+
+S úctou,
+tím ${companyName}`;
+
+    if (tone === 'friendly') return `Ahoj ${name},
+
+posielame ti kópiu servisného protokolu č. ${jobNum} k tvojmu ${carStr}. Celková suma je ${totalStr} €.
+
+Protokol nájdeš v prílohe tohto mailu. Ak máš otázky, neváhaj sa ozvať — vždy radi pomôžeme.
+
+Ďakujeme, že si nás navštívil!
+
+Tím ${companyName}`;
+
+    if (tone === 'witty_exit') return `Dobrý deň, ${name},
+
+vaše ${carStr} odišlo z našej dielne spokojné — a v lepšom stave, ako prišlo. Čo je presne ten výsledok, za ktorý sa platí.
+
+Servisný protokol č. ${jobNum} na sumu ${totalStr} € je priložený. Áno, je to skutočná suma. Nie, nejde o preklep.
+
+Dúfame, že ${brand || 'vaše auto'} bude odmietať kaziť sa aspoň do budúceho servisu — ale keď aj predsa, viete, kde nás nájdete.
+
+S motoristickým pozdravom,
+${companyName}`;
+
+    if (tone === 'witty_tech') return `Dobrý deň, ${name},
+
+vaše ${carStr} absolvovalo u nás preventívnu prevenciu pred tým, čo by sa mohlo stať, keby ste na servis nechali ísť dlhšie. Zjednodušene: prišlo, videlo, bolo opravené.
+
+Servisný protokol č. ${jobNum} na sumu ${totalStr} € je v prílohe. Áno, každé euro bolo vynaložené zmysluplne.
+
+S odborným pozdravom,
+${companyName}`;
+
+    if (tone === 'witty_phil') return `Dobrý deň, ${name},
+
+hovorí sa, že auto je predĺžením osobnosti svojho majiteľa. Vaše ${carStr} nám teda o Vás prezradilo dosť — ale nebojte, zachovávame profesionálnu diskrétnosť.
+
+Servisný protokol č. ${jobNum} na sumu ${totalStr} € je v prílohe. Berte ho ako doklad o investícii do harmónie medzi Vami a Vašim vozidlom.
+
+S filozofickým pozdravom,
+${companyName}`;
+
+    if (tone === 'witty_buddy') return `Čau ${name}!
+
+tvoje ${carStr} sme dali dokopy — trvalo to trochu, ale výsledok stojí za to. Aspoň sa ti to nebude kaziť cestou na dovolenku (sľubujeme, robili sme, čo sme mohli).
+
+Protokol č. ${jobNum} je v prílohe, ${totalStr} €. Za tú cenu sme to naozaj poriadne skontrolovali. Naozaj.
+
+Maj sa,
+${companyName}`;
+
+    if (tone === 'witty_drama') return `Vážený ${name},
+
+bolo to tesné, ale vaše ${carStr} to zvládlo. Naši mechanici pracovali s chirurgickou presnosťou a zodpovedajúcou hudbou na pozadí. Výsledok: vozidlo žije a je pripravené na ďalšie kilometre.
+
+Servisný protokol č. ${jobNum} na sumu ${totalStr} € je priložený. Dramatický príbeh má — ako správne — šťastný koniec.
+
+S úctou a adrenalínom,
+${companyName}`;
+
+    if (tone === 'witty_detective') return `Správa z vyšetrovania — zákazka č. ${jobNum}
+
+Vážený ${name},
+
+po dôkladnom preskúmaní vozidla ${carStr} môžem s istotou vyhlásiť: prípad je uzavretý. Páchateľ bol identifikovaný, neutralizovaný a vozidlo je opäť v prevádzkyschopnom stave.
+
+Dôkazový materiál — servisný protokol na sumu ${totalStr} € — je priložený k tomuto hláseniu.
+
+Inspektor ${companyName}
+(Oddelenie automobilovej kriminalistiky)`;
+
+    return buildJobEmailBody('friendly', z, company);
+  };
+
+  const handleOpenJobEmailModal = () => {
+    setJobEmailModal(true);
+    setJobPdfFile(null);
+    setJobEmailStatus('');
+    setJobCustomEmail('');
+    setSendToJobCustomer(true);
+    setJobEmailTone('friendly');
+    setJobEmailBody(buildJobEmailBody('friendly', zakazka, myCompany));
+  };
+
+  const handleJobGenerateVariant = async () => {
+    setJobAiGenerating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/generate-job-email-variant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          tone: jobEmailTone,
+          name: zakazka?.customer_name || '',
+          carStr: [zakazka?.plate_number, zakazka?.car_brand_model].filter(Boolean).join(' — '),
+          jobNum: zakazka?.job_number || '',
+          total: total?.toFixed ? total.toFixed(2) : '0.00',
+          companyName: myCompany?.name || 'AutoAlma Servis',
+          previousText: jobEmailBody,
+        }),
+      });
+      const data = await res.json();
+      if (data.text) setJobEmailBody(data.text);
+      else setJobEmailStatus('Chyba pri generovaní: ' + (data.error || ''));
+    } catch (e) {
+      setJobEmailStatus('Chyba: ' + e.message);
+    }
+    setJobAiGenerating(false);
+  };
+
+  const handleSendJobEmail = async () => {
+    const recipients = [];
+    if (sendToJobCustomer && zakazka?.customer_email) recipients.push(zakazka.customer_email);
+    if (jobCustomEmail.trim()) recipients.push(jobCustomEmail.trim());
+    if (!recipients.length) { setJobEmailStatus('Zadaj aspoň jedného príjemcu'); return; }
+    setJobEmailSending(true);
+    setJobEmailStatus('');
+    try {
+      let pdfBase64 = null;
+      if (jobPdfFile) {
+        pdfBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(jobPdfFile);
+        });
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/send-job-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ jobId: id, recipients, pdfBase64, pdfFilename: jobPdfFile?.name, emailBody: jobEmailBody }),
+      });
+      const data = await res.json();
+      if (data.ok) setJobEmailStatus('✓ Odoslané');
+      else setJobEmailStatus('Chyba: ' + (data.error || 'neznáma'));
+    } catch (e) {
+      setJobEmailStatus('Chyba: ' + e.message);
+    }
+    setJobEmailSending(false);
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center py-20 font-sans font-bold uppercase italic tracking-widest text-red-600 animate-pulse">
       Generujem rozpis...
@@ -799,6 +982,7 @@ export default function DetailZakazkyPage() {
 
         <div className="flex gap-3">
           <button onClick={() => setIsDeleteModalOpen(true)} className="bg-zinc-900 border border-red-900/30 text-red-900 hover:bg-red-600 hover:text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase transition-all tracking-widest font-bold">🗑️ Vymazať</button>
+          <button onClick={handleOpenJobEmailModal} className="bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-red-500 hover:text-white px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all tracking-widest">📧 Odoslať mailom</button>
           <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest font-bold">🖨️ Tlačiť protokol</button>
         </div>
       </div>
@@ -1905,6 +2089,104 @@ export default function DetailZakazkyPage() {
           onComplete={fetchDetail}
           onClose={() => setShowChangeCustomer(false)}
         />
+      )}
+
+      {/* ===== JOB EMAIL MODAL ===== */}
+      {jobEmailModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
+          onClick={() => setJobEmailModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-xl w-full shadow-2xl max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-500 mb-0.5">Odoslať protokol</p>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">
+                  #{zakazka.job_number} <span className="text-zinc-500 text-sm font-bold normal-case not-italic">— {zakazka.customer_name}</span>
+                </h2>
+              </div>
+              <button onClick={() => setJobEmailModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Komu</p>
+              <div className="space-y-1.5">
+                <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToJobCustomer && zakazka?.customer_email ? 'border-red-500/60 bg-red-600/8' : 'border-zinc-800 bg-zinc-950'} ${!zakazka?.customer_email ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                  <input type="checkbox" checked={sendToJobCustomer} disabled={!zakazka?.customer_email} onChange={e => setSendToJobCustomer(e.target.checked)} className="w-4 h-4 accent-red-500 shrink-0" />
+                  <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase text-zinc-400">Zákazník</span>
+                    {zakazka?.customer_email
+                      ? <span className="text-white text-[11px] font-bold truncate">{zakazka.customer_email}</span>
+                      : <span className="text-zinc-600 text-[10px] italic">nezadaný v zákazke</span>}
+                  </div>
+                </label>
+                <input type="email" value={jobCustomEmail} onChange={e => setJobCustomEmail(e.target.value)}
+                  placeholder="+ iná adresa (voliteľné)"
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-zinc-600 p-3 rounded-xl text-white font-bold outline-none text-[11px] transition-all placeholder:text-zinc-600" />
+              </div>
+            </div>
+
+            <div className="mb-4 p-3 bg-zinc-950 border-2 border-zinc-800 rounded-xl flex items-center gap-3 flex-wrap">
+              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Príloha</span>
+              <button onClick={handlePrint}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all">
+                ⬇ Stiahnuť PDF
+              </button>
+              <span className="text-zinc-700 text-[10px]">→</span>
+              <label className="cursor-pointer">
+                <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${jobPdfFile ? 'bg-green-600/20 border-green-600 text-green-400' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
+                  {jobPdfFile ? '✓ ' + jobPdfFile.name.substring(0, 20) : '📎 Nahrať PDF'}
+                </span>
+                <input type="file" accept="application/pdf,.pdf" onChange={e => setJobPdfFile(e.target.files[0] || null)} className="hidden" />
+              </label>
+              {!jobPdfFile && <span className="text-[9px] text-zinc-600 italic">najprv stiahnuť → uložiť → nahrať</span>}
+            </div>
+
+            <div className="mb-3">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Štýl</p>
+              <div className="flex flex-wrap gap-1.5">
+                {JOB_EMAIL_TEMPLATES.map(t => (
+                  <button key={t.key}
+                    onClick={() => { setJobEmailTone(t.key); setJobEmailBody(buildJobEmailBody(t.key, zakazka, myCompany)); }}
+                    title={t.preview}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black border transition-all ${jobEmailTone === t.key ? 'border-red-500 bg-red-600/15 text-white' : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-600'}`}>
+                    {t.emoji} {t.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Text e-mailu <span className="text-zinc-600 normal-case font-bold tracking-normal">(môžeš upraviť)</span></p>
+                <button onClick={handleJobGenerateVariant} disabled={jobAiGenerating}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black border border-purple-700 bg-purple-600/10 text-purple-400 hover:bg-purple-600/20 disabled:opacity-50 transition-all flex items-center gap-1.5">
+                  {jobAiGenerating ? '⏳' : '🎲'} {jobAiGenerating ? 'Generujem...' : 'Vymyslieť nové'}
+                </button>
+              </div>
+              <textarea value={jobEmailBody} onChange={e => setJobEmailBody(e.target.value)} rows={8}
+                className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-500 p-3 rounded-2xl text-zinc-300 font-mono text-xs outline-none resize-none leading-relaxed transition-all" />
+            </div>
+
+            {jobEmailStatus && (
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-3 ${jobEmailStatus.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
+                {jobEmailStatus}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={handleSendJobEmail}
+                disabled={jobEmailSending || (!sendToJobCustomer && !jobCustomEmail.trim())}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                {jobEmailSending ? '📤 Odosielam...' : '📧 Odoslať protokol'}
+              </button>
+              <button onClick={() => setJobEmailModal(false)}
+                className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                Zrušiť
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
       <style jsx global>{`
