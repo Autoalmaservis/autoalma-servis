@@ -36,10 +36,11 @@ export default function DetailFakturyPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
   const [pdfFile, setPdfFile] = useState(null);
-  const [pdfReady, setPdfReady] = useState(null); // { base64, filename }
+  const [pdfReady, setPdfReady] = useState(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [emailTone, setEmailTone] = useState('friendly');
   const [emailBody, setEmailBody] = useState('');
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -224,6 +225,35 @@ S úctou a adrenalínom,
 ${companyName}`;
 
     return buildEmailBody('friendly', invoiceData, company);
+  };
+
+  const handleGenerateVariant = async () => {
+    setAiGenerating(true);
+    try {
+      const name = inv?.company_details?.company_name || inv?.customer_name || '';
+      const plate = inv?.car_details?.plate || inv?.car_details?.plate_number || '';
+      const brand = inv?.car_details?.brand || inv?.car_details?.brand_model || '';
+      const carStr = [plate, brand].filter(Boolean).join(' — ');
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/generate-email-variant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          tone: emailTone,
+          name, carStr,
+          invoiceNum: inv?.invoice_number,
+          total: Number(inv?.total_amount || 0).toFixed(2),
+          companyName: myCompany.name,
+          previousText: emailBody,
+        }),
+      });
+      const data = await res.json();
+      if (data.text) setEmailBody(data.text);
+      else setEmailStatus('Chyba pri generovaní: ' + (data.error || ''));
+    } catch (e) {
+      setEmailStatus('Chyba: ' + e.message);
+    }
+    setAiGenerating(false);
   };
 
   const handlePrint = () => {
@@ -590,116 +620,105 @@ ${companyName}`;
       {emailModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
           onClick={() => setEmailModal(false)}>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-5xl w-full shadow-2xl max-h-[92vh] overflow-y-auto"
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-xl w-full shadow-2xl max-h-[92vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}>
 
             {/* HLAVIČKA */}
             <div className="flex items-start justify-between mb-5">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-500 mb-1">Odoslať faktúru</p>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">{inv.invoice_number}</h2>
-                <p className="text-zinc-500 text-[10px] font-bold mt-1 uppercase">{inv.car_details?.plate} — {inv.customer_name}</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-500 mb-0.5">Odoslať faktúru</p>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">{inv.invoice_number} <span className="text-zinc-500 text-sm font-bold normal-case not-italic">— {inv.customer_name}</span></h2>
               </div>
-              <button onClick={() => setEmailModal(false)} className="text-zinc-600 hover:text-white text-xl font-black transition-colors">✕</button>
+              <button onClick={() => setEmailModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
             </div>
 
-            {/* 2-STĹPCOVÝ LAYOUT */}
-            <div className="flex gap-5">
-
-              {/* ĽAVÝ STĹPEC — šablóny + príjemcovia + PDF */}
-              <div className="w-56 shrink-0 space-y-5">
-
-                {/* Šablóny */}
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Šablóna</p>
-                  <div className="space-y-1.5">
-                    {EMAIL_TEMPLATES.map(t => (
-                      <button key={t.key}
-                        onClick={() => { setEmailTone(t.key); setEmailBody(buildEmailBody(t.key, inv, myCompany)); }}
-                        className={`w-full text-left px-3 py-2.5 rounded-xl border-2 transition-all ${emailTone === t.key ? 'border-blue-500 bg-blue-600/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
-                        <p className="text-[11px] font-black text-white">{t.emoji} {t.name}</p>
-                        <p className="text-[9px] text-zinc-500 mt-0.5 leading-snug line-clamp-2">{t.preview}</p>
-                      </button>
-                    ))}
+            {/* PRÍJEMCOVIA */}
+            <div className="mb-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Komu</p>
+              <div className="space-y-1.5">
+                <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToCustomer && customerEmail ? 'border-blue-500/60 bg-blue-600/8' : 'border-zinc-800 bg-zinc-950'} ${!customerEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                  <input type="checkbox" checked={sendToCustomer} disabled={!customerEmail} onChange={e => setSendToCustomer(e.target.checked)} className="w-4 h-4 accent-blue-500 shrink-0" />
+                  <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase text-zinc-400">Zákazník</span>
+                    {customerEmail ? <span className="text-white text-[11px] font-bold truncate">{customerEmail}</span> : <span className="text-zinc-600 text-[10px] italic">nezadaný v zákazke</span>}
                   </div>
-                </div>
-
-                {/* PDF príloha */}
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">PDF príloha</p>
-                  <div className="space-y-2">
-                    <button onClick={handleModalDownloadPdf}
-                      className="w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all">
-                      ⬇ Stiahnuť PDF
-                    </button>
-                    <label className="flex items-center gap-2 cursor-pointer w-full">
-                      <span className={`w-full text-center px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
-                        {pdfFile ? '✓ ' + pdfFile.name.substring(0, 16) + '…' : '📎 Nahrať PDF'}
-                      </span>
-                      <input type="file" accept="application/pdf,.pdf" onChange={e => { setPdfFile(e.target.files[0] || null); setPdfReady(null); }} className="hidden" />
-                    </label>
-                    {!pdfFile && <p className="text-[9px] text-zinc-600 italic leading-snug">Stiahnite faktúru, uložte ako PDF, potom nahrajte.</p>}
+                </label>
+                <label className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToAccountant && accountantEmail ? 'border-amber-500/60 bg-amber-600/8' : 'border-zinc-800 bg-zinc-950'} ${!accountantEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                  <input type="checkbox" checked={sendToAccountant} disabled={!accountantEmail} onChange={e => setSendToAccountant(e.target.checked)} className="w-4 h-4 accent-amber-500 shrink-0" />
+                  <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black uppercase text-zinc-400">Účtovníčka</span>
+                    {accountantEmail ? <span className="text-white text-[11px] font-bold truncate">{accountantEmail}</span> : <span className="text-zinc-600 text-[10px] italic">nastaviť v Nastaveniach</span>}
                   </div>
-                </div>
-
-                {/* Príjemcovia */}
-                <div>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Príjemcovia</p>
-                  <div className="space-y-2">
-                    <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToCustomer && customerEmail ? 'border-blue-500/50 bg-blue-600/5' : 'border-zinc-800'} ${!customerEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                      <input type="checkbox" checked={sendToCustomer} disabled={!customerEmail} onChange={e => setSendToCustomer(e.target.checked)} className="mt-0.5 w-3.5 h-3.5 accent-blue-500 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Zákazník</p>
-                        {customerEmail
-                          ? <p className="text-white font-bold text-[10px] break-all">{customerEmail}</p>
-                          : <p className="text-zinc-600 text-[9px] italic">Nezadaný v zákazke</p>}
-                      </div>
-                    </label>
-                    <label className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${sendToAccountant && accountantEmail ? 'border-amber-500/50 bg-amber-600/5' : 'border-zinc-800'} ${!accountantEmail ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                      <input type="checkbox" checked={sendToAccountant} disabled={!accountantEmail} onChange={e => setSendToAccountant(e.target.checked)} className="mt-0.5 w-3.5 h-3.5 accent-amber-500 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Účtovníčka</p>
-                        {accountantEmail
-                          ? <p className="text-white font-bold text-[10px] break-all">{accountantEmail}</p>
-                          : <p className="text-zinc-600 text-[9px] italic">Nastaviť v Nastaveniach</p>}
-                      </div>
-                    </label>
-                    <input type="email" value={customEmailInput} onChange={e => setCustomEmailInput(e.target.value)}
-                      placeholder="iná@adresa.sk"
-                      className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-2.5 rounded-xl text-white font-bold outline-none text-[11px] transition-all placeholder:text-zinc-600" />
-                  </div>
-                </div>
-
+                </label>
+                <input type="email" value={customEmailInput} onChange={e => setCustomEmailInput(e.target.value)}
+                  placeholder="+ iná adresa (voliteľné)"
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-zinc-600 p-3 rounded-xl text-white font-bold outline-none text-[11px] transition-all placeholder:text-zinc-600" />
               </div>
+            </div>
 
-              {/* PRAVÝ STĹPEC — text mailu */}
-              <div className="flex-1 flex flex-col min-h-0">
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">
-                  Text e-mailu <span className="text-zinc-600 normal-case font-bold tracking-normal">(môžeš upraviť)</span>
-                </p>
-                <textarea
-                  value={emailBody}
-                  onChange={e => setEmailBody(e.target.value)}
-                  className="flex-1 w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-4 rounded-2xl text-zinc-300 font-mono text-xs outline-none resize-none leading-relaxed transition-all"
-                  style={{ minHeight: '420px' }}
-                />
+            {/* PDF PRÍLOHA */}
+            <div className="mb-4 p-3 bg-zinc-950 border-2 border-zinc-800 rounded-xl flex items-center gap-3 flex-wrap">
+              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Príloha</span>
+              <button onClick={handleModalDownloadPdf}
+                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all">
+                ⬇ Stiahnuť PDF
+              </button>
+              <span className="text-zinc-700 text-[10px]">→</span>
+              <label className="cursor-pointer flex items-center gap-2">
+                <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${pdfFile ? 'bg-green-600/20 border-green-600 text-green-400' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'}`}>
+                  {pdfFile ? '✓ ' + pdfFile.name.substring(0, 20) : '📎 Nahrať PDF'}
+                </span>
+                <input type="file" accept="application/pdf,.pdf" onChange={e => { setPdfFile(e.target.files[0] || null); setPdfReady(null); }} className="hidden" />
+              </label>
+              {!pdfFile && <span className="text-[9px] text-zinc-600 italic">najprv stiahnuť → uložiť → nahrať</span>}
+            </div>
+
+            {/* ŠTÝL MAILU */}
+            <div className="mb-3">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Štýl</p>
+              <div className="flex flex-wrap gap-1.5">
+                {EMAIL_TEMPLATES.map(t => (
+                  <button key={t.key}
+                    onClick={() => { setEmailTone(t.key); setEmailBody(buildEmailBody(t.key, inv, myCompany)); }}
+                    title={t.preview}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-black border transition-all ${emailTone === t.key ? 'border-blue-500 bg-blue-600/15 text-white' : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-600'}`}>
+                    {t.emoji} {t.name}
+                  </button>
+                ))}
               </div>
+            </div>
+
+            {/* TEXT MAILU + VYMYSLI NOVE */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Text e-mailu <span className="text-zinc-600 normal-case font-bold tracking-normal">(môžeš upraviť)</span></p>
+                <button onClick={handleGenerateVariant} disabled={aiGenerating}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black border border-purple-700 bg-purple-600/10 text-purple-400 hover:bg-purple-600/20 disabled:opacity-50 transition-all flex items-center gap-1.5">
+                  {aiGenerating ? '⏳' : '🎲'} {aiGenerating ? 'Generujem...' : 'Vymyslieť nové'}
+                </button>
+              </div>
+              <textarea
+                value={emailBody}
+                onChange={e => setEmailBody(e.target.value)}
+                rows={8}
+                className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-blue-500 p-3 rounded-2xl text-zinc-300 font-mono text-xs outline-none resize-none leading-relaxed transition-all"
+              />
             </div>
 
             {/* PÄTA */}
-            <div className="mt-4 flex items-center gap-3">
+            {emailStatus && (
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-3 ${emailStatus.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
+                {emailStatus}
+              </p>
+            )}
+            <div className="flex gap-3">
               <button onClick={handleSendEmail}
                 disabled={emailSending || (!sendToCustomer && !sendToAccountant && !customEmailInput.trim())}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 {emailSending ? '📤 Odosielam...' : '📧 Odoslať faktúru'}
               </button>
-              {emailStatus && (
-                <p className={`text-[10px] font-black uppercase tracking-widest ${emailStatus.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
-                  {emailStatus}
-                </p>
-              )}
               <button onClick={() => setEmailModal(false)}
-                className="px-6 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3.5 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 Zrušiť
               </button>
             </div>
