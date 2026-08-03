@@ -36,6 +36,8 @@ export default function DetailFakturyPage() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState('');
   const [pdfFile, setPdfFile] = useState(null);
+  const [pdfReady, setPdfReady] = useState(null); // { base64, filename }
+  const [pdfGenerating, setPdfGenerating] = useState(false);
   const [emailTone, setEmailTone] = useState('friendly');
   const [emailBody, setEmailBody] = useState('');
 
@@ -188,9 +190,29 @@ Tím ${companyName}`;
   const handleOpenEmailModal = () => {
     setEmailStatus('');
     setPdfFile(null);
+    setPdfReady(null);
     setEmailTone('friendly');
     setEmailBody(buildEmailBody('friendly', inv, myCompany));
     setEmailModal(true);
+  };
+
+  const handleModalDownloadPdf = async () => {
+    setPdfGenerating(true);
+    try {
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const { buildInvoicePDF } = await import('@/app/lib/invoicePdf');
+      const doc = buildInvoicePDF(jsPDF, autoTable, inv, myCompany);
+      const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+      const filename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
+      doc.save(filename);
+      setPdfReady({ base64: doc.output('datauristring'), filename });
+    } catch (e) {
+      setEmailStatus('Chyba pri generovaní PDF: ' + e.message);
+    }
+    setPdfGenerating(false);
   };
 
   const handleSendEmail = async () => {
@@ -199,20 +221,25 @@ Tím ${companyName}`;
     if (sendToAccountant && accountantEmail) recipients.push(accountantEmail);
     if (customEmailInput.trim()) recipients.push(customEmailInput.trim());
     if (!recipients.length) { setEmailStatus('Zadaj aspoň jeden e-mail príjemcu.'); return; }
-    if (!pdfFile) { setEmailStatus('Nahraj PDF súbor faktúry.'); return; }
+    if (!pdfReady && !pdfFile) { setEmailStatus('Najprv stiahnite PDF alebo nahrajte súbor.'); return; }
 
     setEmailSending(true);
-    setEmailStatus('Načítavam PDF...');
+    setEmailStatus('Pripravujem...');
     try {
-      const pdfBase64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(pdfFile);
-      });
-
-      const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-      const pdfFilename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
+      let pdfBase64, pdfFilename;
+      if (pdfReady) {
+        pdfBase64 = pdfReady.base64;
+        pdfFilename = pdfReady.filename;
+      } else {
+        pdfBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(pdfFile);
+        });
+        const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+        pdfFilename = `Faktura_${safeName}_${inv?.invoice_number || ''}.pdf`;
+      }
 
       setEmailStatus('Odosielam...');
       const { data: { session } } = await supabase.auth.getSession();
@@ -581,26 +608,20 @@ Tím ${companyName}`;
             <div className="mb-5 p-4 bg-zinc-950 border-2 border-dashed border-zinc-700 rounded-2xl">
               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">PDF príloha</p>
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Krok 1: stiahnuť */}
                 <button
-                  onClick={handlePrint}
-                  className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border-2 bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 transition-all"
+                  onClick={handleModalDownloadPdf}
+                  disabled={pdfGenerating}
+                  className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${pdfReady ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 disabled:opacity-50'}`}
                 >
-                  🖨️ Stiahnuť faktúru
+                  {pdfGenerating ? '⏳ Generujem...' : pdfReady ? '✓ PDF stiahnuté' : '⬇ Stiahnuť PDF'}
                 </button>
-                <span className="text-zinc-700 text-xs">→ potom nahraj:</span>
-                {/* Krok 2: nahrať */}
+                <span className="text-zinc-700 text-xs">alebo nahraj vlastné:</span>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-green-600 border-green-500 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
-                    {pdfFile ? '✓ Nahraté' : '📎 Vybrať súbor'}
+                  <span className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 ${pdfFile ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}`}>
+                    {pdfFile ? '✓ Nahraté' : '📎 Iné PDF'}
                   </span>
-                  {pdfFile && <span className="text-zinc-500 text-xs truncate max-w-[160px]">{pdfFile.name}</span>}
-                  <input
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    onChange={e => setPdfFile(e.target.files[0] || null)}
-                    className="hidden"
-                  />
+                  {pdfFile && <span className="text-zinc-500 text-xs truncate max-w-[140px]">{pdfFile.name}</span>}
+                  <input type="file" accept="application/pdf,.pdf" onChange={e => { setPdfFile(e.target.files[0] || null); setPdfReady(null); }} className="hidden" />
                 </label>
               </div>
             </div>
