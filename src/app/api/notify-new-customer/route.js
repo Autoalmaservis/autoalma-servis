@@ -1,7 +1,19 @@
 import { createMailTransport } from '@/app/lib/mailer';
 import { getCompanySettings } from '@/app/lib/companySettings';
+import { createClient } from '@supabase/supabase-js';
+
+async function isAuthenticated(request) {
+  const token = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return false;
+  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const { data: { user } } = await sb.auth.getUser(token);
+  return !!user;
+}
 
 export async function POST(request) {
+  if (!await isAuthenticated(request)) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { name, email, phone, clientType, companyName } = await request.json();
 
