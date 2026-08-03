@@ -65,6 +65,8 @@ export default function DetailZakazkyPage() {
   // Modál dokončenia zákazky
   const [showCompleteModal, setShowCompleteModal] = useState(false);
 
+  const [smsModal, setSmsModal] = useState(false);
+
   // Email modal pre zákazku
   const [jobEmailModal, setJobEmailModal] = useState(false);
   const [jobEmailTone, setJobEmailTone] = useState('friendly');
@@ -988,6 +990,7 @@ Inšpektor ${companyName}
 
         <div className="flex gap-3">
           <button onClick={() => setIsDeleteModalOpen(true)} className="bg-zinc-900 border border-red-900/30 text-red-900 hover:bg-red-600 hover:text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase transition-all tracking-widest font-bold">🗑️ Vymazať</button>
+          <button onClick={() => setSmsModal(true)} className="bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-green-500 hover:text-green-400 px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all tracking-widest">📱 SMS</button>
           <button onClick={handleOpenJobEmailModal} className="bg-zinc-900 border border-zinc-700 text-zinc-300 hover:border-red-500 hover:text-white px-6 py-3 rounded-2xl font-black uppercase text-xs transition-all tracking-widest">📧 Odoslať mailom</button>
           <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest font-bold">🖨️ Tlačiť protokol</button>
         </div>
@@ -1111,15 +1114,6 @@ Inšpektor ${companyName}
             </p>
           </div>
           <div><p className="text-[9px] font-black text-zinc-500 uppercase mb-1 italic text-red-600">ŠPZ</p><p className="text-xl tracking-widest italic font-black uppercase text-red-600">{zakazka.plate_number}</p></div>
-        </div>
-
-        <div className="no-print mb-12">
-            <SmsPanel 
-                phone={zakazka.customer_phone} 
-                plate={zakazka.plate_number} 
-                customerName={zakazka.customer_name}
-                userId={zakazka.customer_id} 
-            />
         </div>
 
         {activeOffer && (
@@ -2095,6 +2089,31 @@ Inšpektor ${companyName}
           onComplete={fetchDetail}
           onClose={() => setShowChangeCustomer(false)}
         />
+      )}
+
+      {/* ===== SMS MODAL ===== */}
+      {smsModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
+          onClick={() => setSmsModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-xl w-full shadow-2xl max-h-[92vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-green-500 mb-0.5">Odoslať SMS</p>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">
+                  {zakazka.plate_number} <span className="text-zinc-500 text-sm font-bold normal-case not-italic">— {zakazka.customer_name}</span>
+                </h2>
+              </div>
+              <button onClick={() => setSmsModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
+            </div>
+            <SmsPanel
+              phone={zakazka.customer_phone}
+              plate={zakazka.plate_number}
+              customerName={zakazka.customer_name}
+              userId={zakazka.customer_id}
+            />
+          </div>
+        </div>
       )}
 
       {/* ===== JOB EMAIL MODAL ===== */}
