@@ -160,40 +160,58 @@ export default function DetailFakturyPage() {
         import('jspdf'),
       ]);
 
+      // Pred zachytením: vynútime bezpečné RGB farby na každom elemente
+      // (html2canvas nepodporuje moderné CSS farby oklch/lab z Tailwindu)
+      const allEls = element.querySelectorAll('*');
+      const savedStyles = [];
+      allEls.forEach(el => {
+        const cs = window.getComputedStyle(el);
+        savedStyles.push({
+          el,
+          color: el.style.color,
+          bg: el.style.backgroundColor,
+          border: el.style.borderColor,
+        });
+        el.style.color = cs.color;                       // prehliadač vráti rgb()
+        el.style.backgroundColor = cs.backgroundColor;
+        el.style.borderColor = cs.borderColor;
+      });
+      // Printové štýly — biele pozadie, čierny text
+      const savedElStyle = { bg: element.style.backgroundColor, color: element.style.color, shadow: element.style.boxShadow, border: element.style.border, radius: element.style.borderRadius };
+      element.style.backgroundColor = '#ffffff';
+      element.style.color = '#000000';
+      element.style.boxShadow = 'none';
+      element.style.border = '1px solid #e5e5e5';
+      element.style.borderRadius = '8px';
+      allEls.forEach(el => {
+        const cls = el.className || '';
+        if (typeof cls === 'string') {
+          if (cls.includes('bg-zinc') || cls.includes('bg-black') || cls.includes('bg-neutral')) el.style.backgroundColor = '#ffffff';
+          if (cls.includes('text-zinc-4') || cls.includes('text-zinc-5') || cls.includes('text-zinc-6') || cls.includes('text-zinc-7') || cls.includes('text-zinc-8') || cls.includes('text-zinc-9') || cls.includes('text-gray')) el.style.color = '#555555';
+          if (cls.includes('text-white')) el.style.color = '#000000';
+          if (cls.includes('text-red')) el.style.color = '#dc2626';
+          if (cls.includes('border-zinc') || cls.includes('border-black')) el.style.borderColor = '#cccccc';
+        }
+      });
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        onclone: (clonedDoc) => {
-          const style = clonedDoc.createElement('style');
-          style.textContent = `
-            .printable-area {
-              background: #ffffff !important;
-              border: 1px solid #e5e5e5 !important;
-              border-radius: 8px !important;
-              box-shadow: none !important;
-              color: #000 !important;
-            }
-            .printable-area *, .printable-area p, .printable-area span,
-            .printable-area h1, .printable-area h2, .printable-area h3,
-            .printable-area td, .printable-area th, .printable-area div {
-              color: #000 !important;
-            }
-            .printable-area .text-red-600, .printable-area .text-red-500 { color: #dc2626 !important; }
-            .printable-area .text-blue-500, .printable-area .text-blue-400 { color: #2563eb !important; }
-            .printable-area .text-zinc-400, .printable-area .text-zinc-500,
-            .printable-area .text-zinc-600 { color: #555 !important; }
-            .printable-area [class*="bg-zinc"], .printable-area [class*="bg-black"] { background: #fff !important; }
-            .printable-area [class*="bg-white"] { background: #fff !important; }
-            .printable-area [class*="border-zinc"] { border-color: #ccc !important; }
-            .printable-area [class*="border-black"] { border-color: #000 !important; }
-            .no-print, .section-header { display: none !important; }
-            .print-only-table { display: table !important; }
-          `;
-          clonedDoc.head.appendChild(style);
-        },
+      });
+
+      // Obnovíme pôvodné štýly
+      element.style.backgroundColor = savedElStyle.bg;
+      element.style.color = savedElStyle.color;
+      element.style.boxShadow = savedElStyle.shadow;
+      element.style.border = savedElStyle.border;
+      element.style.borderRadius = savedElStyle.radius;
+      savedStyles.forEach(({ el, color, bg, border }) => {
+        el.style.color = color;
+        el.style.backgroundColor = bg;
+        el.style.borderColor = border;
       });
 
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
