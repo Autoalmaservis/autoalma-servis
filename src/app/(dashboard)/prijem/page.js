@@ -209,16 +209,11 @@ function PrijemForm() {
     setTasks(newTasks);
   };
 
-  // --- GENEROVANIE ČÍSLA ZÁKAZKY Z{YY}{CCC} ---
+  // --- GENEROVANIE ČÍSLA ZÁKAZKY cez DB funkciu (bez race condition) ---
   const generateFinalJobNumber = async () => {
-    const rr = String(new Date().getFullYear()).slice(-2);
-    const yearPrefix = `Z${rr}`;
-    const { count } = await supabase
-      .from('job_tickets')
-      .select('*', { count: 'exact', head: true })
-      .like('job_number', `${yearPrefix}%`);
-    const ccc = String((count || 0) + 1).padStart(3, '0');
-    return `${yearPrefix}${ccc}`;
+    const { data, error } = await supabase.rpc('generate_job_number');
+    if (error || !data) throw new Error('Chyba pri generovaní čísla zákazky');
+    return data;
   };
 
   const handleSave = async (e) => {
