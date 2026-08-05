@@ -42,6 +42,9 @@ export default function DetailFakturyPage() {
   const [emailBody, setEmailBody] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
 
+  const [peppolDownloading, setPeppolDownloading] = useState(false);
+  const [peppolMsg, setPeppolMsg] = useState('');
+
   useEffect(() => {
     if (id) {
       fetchInvoice();
@@ -270,6 +273,39 @@ Inspektor ${companyName}
     setAiGenerating(false);
   };
 
+  const handleDownloadPeppol = async () => {
+    if (!inv.company_details?.dic) {
+      alert('Zákazník nemá zadané DIČ.\n\neFaktúra (Peppol) sa zasiela len firmám s DIČ. Pre fyzické osoby nie je povinná.');
+      return;
+    }
+    setPeppolDownloading(true);
+    setPeppolMsg('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/export-peppol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ invoiceId: id }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setPeppolMsg('Chyba: ' + (err.error || 'neznáma chyba'));
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `eFaktura_${inv.invoice_number}.xml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setPeppolMsg('✓ XML stiahnuté — nahraj ho na portál Finančnej správy');
+    } catch (e) {
+      setPeppolMsg('Chyba: ' + e.message);
+    }
+    setPeppolDownloading(false);
+  };
+
   const handlePrint = () => {
     const safeName = (inv?.customer_name || '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
     const origTitle = document.title;
@@ -347,13 +383,30 @@ Inspektor ${companyName}
             🔓 Zrušiť faktúru / Otvoriť zákazku
           </button>
         </div>
-        <div className="flex gap-3">
-          <button onClick={handleOpenEmailModal} className="bg-zinc-800 border border-zinc-700 text-zinc-200 px-6 py-3 rounded-2xl font-black uppercase text-xs hover:bg-blue-600 hover:border-blue-500 hover:text-white transition-all shadow-xl tracking-widest flex items-center gap-2">
-            📧 Poslať mailom
-          </button>
-          <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2 font-bold">
-            🖨️ Tlačiť / Stiahnuť PDF
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex gap-3">
+            <button onClick={handleOpenEmailModal} className="bg-zinc-800 border border-zinc-700 text-zinc-200 px-6 py-3 rounded-2xl font-black uppercase text-xs hover:bg-blue-600 hover:border-blue-500 hover:text-white transition-all shadow-xl tracking-widest flex items-center gap-2">
+              📧 Poslať mailom
+            </button>
+            {inv.is_official && (
+              <button onClick={handleDownloadPeppol} disabled={peppolDownloading} title={!inv.company_details?.dic ? 'Dostupné len pre firmy s DIČ' : 'Stiahnuť eFaktúru vo formáte Peppol BIS 3.0 (XML)'}
+                className={`px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl flex items-center gap-2 ${
+                  !inv.company_details?.dic
+                    ? 'bg-zinc-900 border border-zinc-800 text-zinc-600 cursor-not-allowed'
+                    : 'bg-zinc-800 border border-purple-800/60 text-purple-300 hover:bg-purple-700 hover:border-purple-500 hover:text-white'
+                }`}>
+                {peppolDownloading ? '⏳ Generujem...' : '📡 eFaktúra XML'}
+              </button>
+            )}
+            <button onClick={handlePrint} className="bg-red-600 text-white px-8 py-3 rounded-2xl font-black uppercase text-xs hover:bg-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2 font-bold">
+              🖨️ Tlačiť / Stiahnuť PDF
+            </button>
+          </div>
+          {peppolMsg && (
+            <p className={`text-[9px] font-black uppercase tracking-widest ${peppolMsg.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
+              {peppolMsg}
+            </p>
+          )}
         </div>
       </div>
 
