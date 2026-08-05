@@ -526,14 +526,7 @@ export default function DetailZakazkyPage() {
 
       const rr = String(teraz.getFullYear()).slice(-2);
 
-      // Poradové číslo generované atomicky cez DB funkciu (bez race condition)
-      const { data: invoiceNumData, error: invoiceNumErr } = await supabase
-        .rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A' });
-      if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
-      const konecneCislo = invoiceNumData;
-      
       const invoicePayload = {
-        invoice_number: konecneCislo, 
         job_id: id,
         customer_name: zakazka.customer_name,
         customer_email: zakazka.customer_email || null,
@@ -543,8 +536,6 @@ export default function DetailZakazkyPage() {
         tax_amount: effectiveTax,
         total_amount: effectiveTotal,
         is_official: isOfficial,
-        
-        // ÚDAJE O DODÁVATEĽOVI z nastavení
         supplier_details: {
             company_name: myCompany.name || 'AutoAlma Servis s.r.o.',
             address: [myCompany.address, myCompany.zip, myCompany.city].filter(Boolean).join(', ') || 'ul. Svornosti 119, 821 06 Bratislava',
@@ -554,35 +545,41 @@ export default function DetailZakazkyPage() {
             bank_account: myCompany.bank || '',
             bank_name: '',
         },
-
-        // DOPLNENÉ: KOMPLETNÉ ÚDAJE O ZÁKAZNÍKOVI (ADRESA ZAKLADANÁ)
-        company_details: { 
-          company_name: zakazka.company_name || zakazka.customer_name, 
-          ico: zakazka.ico, 
+        company_details: {
+          company_name: zakazka.company_name || zakazka.customer_name,
+          ico: zakazka.ico,
           dic: zakazka.dic,
           ic_dph: zakazka.ic_dph,
-          address: zakazka.address || zakazka.customer_address, // Adresa z tabuľky
+          address: zakazka.address || zakazka.customer_address,
           city: zakazka.city || zakazka.customer_city,
           zip: zakazka.zip || zakazka.customer_zip
         },
-
-        // DOPLNENÉ: PLATOBNÉ INFO
         payment_info: {
             issue_date: teraz.toISOString(),
             due_date: datumSplatnosti.toISOString(),
             payment_method: isOfficial ? (paymentMethod === 'cash' ? 'Hotovosť' : 'Kartou') : 'Odložená platba',
             no_vat: noVat || false,
         },
-
-        car_details: { 
-          brand: zakazka.car_brand_model, 
-          plate: zakazka.plate_number, 
+        car_details: {
+          brand: zakazka.car_brand_model,
+          plate: zakazka.plate_number,
           vin: zakazka.vin_number,
           mileage: zakazka.mileage
         }
       };
 
-      const { data: invData, error: invError } = await supabase.from('invoices').insert([invoicePayload]).select().single();
+      // Retry pri duplicate key — DB funkcia môže vrátiť rovnaké číslo pri race condition
+      let invData, invError, invAttempts = 0;
+      do {
+        const { data: invoiceNumData, error: invoiceNumErr } = await supabase
+          .rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A' });
+        if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
+        invoicePayload.invoice_number = invoiceNumData;
+        const res = await supabase.from('invoices').insert([invoicePayload]).select().single();
+        invData = res.data;
+        invError = res.error;
+        invAttempts++;
+      } while (invError?.code === '23505' && invAttempts < 3);
       if (invError) throw invError;
 
       // Ak hotovosť → zapísať do kasy (bez ohľadu na typ dokladu)
