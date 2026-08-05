@@ -618,6 +618,7 @@ export default function DetailZakazkyPage() {
   };
 
   const deleteWholeJob = async () => {
+    await supabase.from('kasa_entries').delete().eq('job_id', id);
     const { error } = await supabase.from('job_tickets').delete().eq('id', id);
     if (!error) router.push('/zakazky');
   };
