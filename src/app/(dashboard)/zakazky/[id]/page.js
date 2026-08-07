@@ -572,7 +572,7 @@ export default function DetailZakazkyPage() {
       let invData, invError, invAttempts = 0;
       do {
         const { data: invoiceNumData, error: invoiceNumErr } = await supabase
-          .rpc('generate_invoice_number', { p_prefix: isOfficial ? 'F' : 'A' });
+          .rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A' });
         if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
         invoicePayload.invoice_number = invoiceNumData;
         const res = await supabase.from('invoices').insert([invoicePayload]).select().single();
