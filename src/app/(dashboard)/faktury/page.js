@@ -58,7 +58,7 @@ export default function FakturyDashboard() {
     return isRightTab && (
       inv.invoice_number.toLowerCase().includes(s) ||
       inv.customer_name.toLowerCase().includes(s) ||
-      (inv.car_details?.plate_number || '').toLowerCase().includes(s)
+      (inv.car_details?.plate || inv.car_details?.plate_number || '').toLowerCase().includes(s)
     );
   });
 
@@ -203,9 +203,9 @@ export default function FakturyDashboard() {
                     {inv.customer_name}
                   </h3>
                   <div className="flex items-center justify-center md:justify-start gap-3">
-                    <span className="text-[10px] text-zinc-500 font-black uppercase italic">{inv.car_details?.brand_model}</span>
+                    <span className="text-[10px] text-zinc-500 font-black uppercase italic">{inv.car_details?.brand || inv.car_details?.brand_model}</span>
                     <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
-                    <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase tracking-widest">{inv.car_details?.plate_number}</span>
+                    <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase tracking-widest">{inv.car_details?.plate || inv.car_details?.plate_number}</span>
                   </div>
                 </div>
 
