@@ -515,9 +515,11 @@ export default function DetailZakazkyPage() {
   const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false) => {
     setInvoiceLoading(true);
     try {
-      const { subtotal, tax, total } = calculateTotal();
-      const effectiveTax = noVat ? 0 : Number(tax) || 0;
+      const { subtotal, tax, total, discountAmount } = calculateTotal();
       const effectiveTotal = noVat ? Number(subtotal) : Number(total) || 0;
+      // Ak je zľava, základ a DPH musia vychádzať z finálnej sumy (total už obsahuje zľavu aj DPH)
+      const effectiveSubtotal = noVat ? Number(subtotal) : (discountAmount > 0 ? effectiveTotal / 1.23 : Number(subtotal));
+      const effectiveTax = noVat ? 0 : (discountAmount > 0 ? effectiveTotal - effectiveSubtotal : Number(tax));
       const teraz = new Date();
       
       // LOGIKA SPLATNOSTI (+14 dní)
@@ -532,7 +534,7 @@ export default function DetailZakazkyPage() {
         customer_email: zakazka.customer_email || null,
         customer_phone: zakazka.customer_phone || null,
         items_json: items,
-        subtotal_amount: Number(subtotal) || 0,
+        subtotal_amount: effectiveSubtotal,
         tax_amount: effectiveTax,
         total_amount: effectiveTotal,
         is_official: isOfficial,
@@ -559,6 +561,10 @@ export default function DetailZakazkyPage() {
             due_date: datumSplatnosti.toISOString(),
             payment_method: isOfficial ? (paymentMethod === 'cash' ? 'Hotovosť' : 'Kartou') : 'Odložená platba',
             no_vat: noVat || false,
+            discount_amount: discountAmount > 0 ? discountAmount : null,
+            discount_type: discountAmount > 0 ? discountType : null,
+            discount_value: discountAmount > 0 ? (parseFloat(discountValue) || 0) : null,
+            items_subtotal: discountAmount > 0 ? Number(subtotal) : null,
         },
         car_details: {
           brand: zakazka.car_brand_model,
