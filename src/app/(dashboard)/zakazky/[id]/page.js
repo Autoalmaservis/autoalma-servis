@@ -1294,14 +1294,12 @@ Inšpektor ${companyName}
                   📝 Vytvoriť novú cenovú ponuku
                 </button>
               )}
-              {!activeOffer && (
-                <button
-                  onClick={() => { setShowAllOffersModal(true); fetchAllOffers(); }}
-                  className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-zinc-600 hover:text-white transition-all shadow-lg"
-                >
-                  🔍 Hľadať inú ponuku
-                </button>
-              )}
+              <button
+                onClick={() => { setShowAllOffersModal(true); fetchAllOffers(); }}
+                className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-zinc-600 hover:text-white transition-all shadow-lg"
+              >
+                🔍 Hľadať inú ponuku
+              </button>
             </div>
           </div>
           <div className="bg-black/30 rounded-3xl border border-zinc-800 overflow-x-auto shadow-inner font-bold">
