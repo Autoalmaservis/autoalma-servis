@@ -548,30 +548,60 @@ Inspektor ${companyName}
                   <div style={{ border: '1.5pt solid #000', padding: '8pt', background: '#f9f9f9' }}>
                     <table width="100%" style={{ borderCollapse: 'collapse' }}>
                       <tbody>
-                        {inv.payment_info?.discount_amount > 0 && (
+                        {inv.payment_info?.discount_amount > 0 ? (() => {
+                          const discTotal = Number(inv.payment_info.discount_amount);
+                          const discBase = discTotal / 1.23;
+                          const discVat  = discTotal - discBase;
+                          const origBase = Number(inv.payment_info.items_subtotal || 0);
+                          const origVat  = origBase * 0.23;
+                          const origTotal = origBase + origVat;
+                          const discLabel = inv.payment_info.discount_type === 'pct'
+                            ? `${inv.payment_info.discount_value}%`
+                            : `${discTotal.toFixed(2)} €`;
+                          return (
+                            <>
+                              <tr style={{ fontSize: '9pt', color: '#000' }}>
+                                <td style={{ paddingBottom: '2pt' }}>Medzisúčet (základ):</td>
+                                <td align="right">{origBase.toFixed(2)} €</td>
+                              </tr>
+                              <tr style={{ fontSize: '9pt', color: '#000' }}>
+                                <td style={{ paddingBottom: '2pt' }}>DPH 23%:</td>
+                                <td align="right">{origVat.toFixed(2)} €</td>
+                              </tr>
+                              <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #ccc', borderTop: '1pt solid #ccc' }}>
+                                <td style={{ padding: '3pt 0' }}>Celkom pred zľavou:</td>
+                                <td align="right" style={{ padding: '3pt 0' }}>{origTotal.toFixed(2)} €</td>
+                              </tr>
+                              <tr style={{ fontSize: '8.5pt', color: '#dc2626' }}>
+                                <td style={{ paddingTop: '3pt', paddingBottom: '1pt' }}>Zľava {discLabel} — základ:</td>
+                                <td align="right" style={{ paddingTop: '3pt' }}>-{discBase.toFixed(2)} €</td>
+                              </tr>
+                              <tr style={{ fontSize: '8.5pt', color: '#dc2626', borderBottom: '1pt solid #ccc' }}>
+                                <td style={{ paddingBottom: '3pt' }}>Zľava {discLabel} — DPH 23%:</td>
+                                <td align="right" style={{ paddingBottom: '3pt' }}>-{discVat.toFixed(2)} €</td>
+                              </tr>
+                              <tr style={{ fontSize: '9pt', color: '#000' }}>
+                                <td style={{ paddingTop: '4pt', paddingBottom: '2pt' }}>Základ dane:</td>
+                                <td align="right" style={{ paddingTop: '4pt' }}>{Number(inv.subtotal_amount || 0).toFixed(2)} €</td>
+                              </tr>
+                              <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
+                                <td style={{ paddingBottom: '2pt' }}>DPH (23%):</td>
+                                <td align="right">{Number(inv.tax_amount || 0).toFixed(2)} €</td>
+                              </tr>
+                            </>
+                          );
+                        })() : (
                           <>
                             <tr style={{ fontSize: '9pt', color: '#000' }}>
-                              <td style={{ paddingBottom: '2pt' }}>Medzisúčet:</td>
-                              <td align="right">{Number(inv.payment_info.items_subtotal || 0).toFixed(2)} €</td>
+                              <td style={{ paddingBottom: '2pt' }}>Základ dane:</td>
+                              <td align="right">{Number(inv.subtotal_amount || 0).toFixed(2)} €</td>
                             </tr>
-                            <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #ccc' }}>
-                              <td style={{ paddingBottom: '4pt', color: '#dc2626' }}>
-                                Zľava {inv.payment_info.discount_type === 'pct'
-                                  ? `(${inv.payment_info.discount_value}%)`
-                                  : `(${Number(inv.payment_info.discount_amount).toFixed(2)} €)`}:
-                              </td>
-                              <td align="right" style={{ paddingBottom: '4pt', color: '#dc2626' }}>-{Number(inv.payment_info.discount_amount).toFixed(2)} €</td>
+                            <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
+                              <td style={{ paddingBottom: '2pt' }}>DPH ({inv.payment_info?.no_vat ? '0' : '23'}%):</td>
+                              <td align="right">{Number(inv.tax_amount || 0).toFixed(2)} €</td>
                             </tr>
                           </>
                         )}
-                        <tr style={{ fontSize: '9pt', color: '#000' }}>
-                          <td style={{ paddingBottom: '2pt' }}>Základ dane:</td>
-                          <td align="right">{Number(inv.subtotal_amount || 0).toFixed(2)} €</td>
-                        </tr>
-                        <tr style={{ fontSize: '9pt', color: '#000', borderBottom: '1pt solid #000' }}>
-                          <td style={{ paddingBottom: '2pt' }}>DPH ({inv.payment_info?.no_vat ? '0' : '23'}%):</td>
-                          <td align="right">{Number(inv.tax_amount || 0).toFixed(2)} €</td>
-                        </tr>
                         <tr style={{ color: '#000' }}>
                           <td style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '11pt', color: '#dc2626' }}>CELKOM:</td>
                           <td align="right" style={{ paddingTop: '5pt', fontWeight: '900', fontSize: '18pt' }}>{Number(inv.total_amount || 0).toFixed(2)} €</td>
@@ -623,30 +653,48 @@ Inspektor ${companyName}
              </div>
           </div>
           <div className="bg-black p-10 rounded-[2.5rem] border border-zinc-800 min-w-[340px] shadow-2xl">
-            {inv.payment_info?.discount_amount > 0 && (
-              <div className="mb-4 space-y-1 text-[10px] font-black uppercase tracking-widest border-b border-zinc-800 pb-4">
-                <div className="flex justify-between text-zinc-500">
-                  <span>Medzisúčet</span>
-                  <span>{Number(inv.payment_info.items_subtotal || 0).toFixed(2)} €</span>
+            {inv.payment_info?.discount_amount > 0 ? (() => {
+              const discTotal = Number(inv.payment_info.discount_amount);
+              const discBase  = discTotal / 1.23;
+              const discVat   = discTotal - discBase;
+              const origBase  = Number(inv.payment_info.items_subtotal || 0);
+              const origVat   = origBase * 0.23;
+              const discLabel = inv.payment_info.discount_type === 'pct'
+                ? `${inv.payment_info.discount_value}%`
+                : `${discTotal.toFixed(2)} €`;
+              return (
+                <div className="mb-4 space-y-1 text-[10px] font-black uppercase tracking-widest border-b border-zinc-800 pb-4">
+                  <div className="flex justify-between text-zinc-500">
+                    <span>Medzisúčet (základ)</span>
+                    <span>{origBase.toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-500">
+                    <span>DPH 23%</span>
+                    <span>{origVat.toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400 border-t border-zinc-800 pt-1">
+                    <span>Celkom pred zľavou</span>
+                    <span>{(origBase + origVat).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between text-red-500 border-t border-zinc-800 pt-1">
+                    <span>Zľava {discLabel} — základ</span>
+                    <span>-{discBase.toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between text-red-500">
+                    <span>Zľava {discLabel} — DPH 23%</span>
+                    <span>-{discVat.toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-500 border-t border-zinc-800 pt-1">
+                    <span>Základ dane</span>
+                    <span>{Number(inv.subtotal_amount || 0).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-500">
+                    <span>DPH 23%</span>
+                    <span>{Number(inv.tax_amount || 0).toFixed(2)} €</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-red-500">
-                  <span>
-                    Zľava {inv.payment_info.discount_type === 'pct'
-                      ? `${inv.payment_info.discount_value}%`
-                      : `${Number(inv.payment_info.discount_amount).toFixed(2)} €`}
-                  </span>
-                  <span>-{Number(inv.payment_info.discount_amount).toFixed(2)} €</span>
-                </div>
-                <div className="flex justify-between text-zinc-500">
-                  <span>Základ dane</span>
-                  <span>{Number(inv.subtotal_amount || 0).toFixed(2)} €</span>
-                </div>
-                <div className="flex justify-between text-zinc-500">
-                  <span>DPH {inv.payment_info?.no_vat ? '0' : '23'}%</span>
-                  <span>{Number(inv.tax_amount || 0).toFixed(2)} €</span>
-                </div>
-              </div>
-            )}
+              );
+            })() : null}
             <div className="flex justify-between items-end pt-2">
               <span className="text-red-600 font-black uppercase text-2xl">Celkom:</span>
               <span className="text-5xl font-black text-white">{Number(inv.total_amount || 0).toFixed(2)} <span className="text-red-600 text-lg">€</span></span>
