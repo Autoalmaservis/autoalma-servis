@@ -35,6 +35,10 @@ export default function DetailZakazkyPage() {
   const [rateCategories, setRateCategories] = useState([]);
   const [activeOffer, setActiveOffer] = useState(null);
   const [pastOffers, setPastOffers] = useState([]); // HISTÓRIA PONÚK ZACHOVANÁ
+  const [showAllOffersModal, setShowAllOffersModal] = useState(false);
+  const [allOffers, setAllOffers] = useState([]);
+  const [allOffersSearch, setAllOffersSearch] = useState('');
+  const [allOffersLoading, setAllOffersLoading] = useState(false);
 
   const [myCompany, setMyCompany] = useState({ name: 'AutoAlma Servis', address: '', city: '', zip: '', ico: '', dic: '', bank: '', phone: '', email: '', web: '', logo_url: '' });
 
@@ -247,6 +251,19 @@ export default function DetailZakazkyPage() {
         const filtered = data?.filter(o => o.job_id !== id) || [];
         setPastOffers(filtered);
     } catch (err) { console.error("Chyba histórie ponúk:", err.message); }
+  };
+
+  const fetchAllOffers = async () => {
+    setAllOffersLoading(true);
+    const { data } = await supabase
+      .from('price_offers')
+      .select('id, offer_number, total_amount, created_at, status, items_json, job_tickets(customer_name, plate_number, car_brand_model)')
+      .neq('status', 'Preklopené')
+      .neq('job_id', id)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    setAllOffers(data || []);
+    setAllOffersLoading(false);
   };
 
   // --- NOVÁ FUNKCIA: IMPORT POLOŽIEK ZO STAREJ PONUKY ---
@@ -1277,6 +1294,14 @@ Inšpektor ${companyName}
                   📝 Vytvoriť novú cenovú ponuku
                 </button>
               )}
+              {!activeOffer && (
+                <button
+                  onClick={() => { setShowAllOffersModal(true); fetchAllOffers(); }}
+                  className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-zinc-600 hover:text-white transition-all shadow-lg"
+                >
+                  🔍 Hľadať inú ponuku
+                </button>
+              )}
             </div>
           </div>
           <div className="bg-black/30 rounded-3xl border border-zinc-800 overflow-x-auto shadow-inner font-bold">
@@ -2087,6 +2112,81 @@ Inšpektor ${companyName}
           onComplete={fetchDetail}
           onClose={() => setShowChangeCustomer(false)}
         />
+      )}
+
+      {/* ===== MODAL: HĽADAŤ INÚ PONUKU ===== */}
+      {showAllOffersModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
+          onClick={() => setShowAllOffersModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-2xl w-full shadow-2xl max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-start justify-between mb-4 shrink-0">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-zinc-500 mb-0.5">Import položiek</p>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">Hľadať cenovú ponuku</h2>
+              </div>
+              <button onClick={() => setShowAllOffersModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Hľadať podľa čísla ponuky, zákazníka alebo ŠPZ..."
+              value={allOffersSearch}
+              onChange={e => setAllOffersSearch(e.target.value)}
+              autoFocus
+              className="w-full bg-zinc-950 border border-zinc-700 focus:border-red-600 p-3 px-4 rounded-2xl text-white font-bold outline-none text-[11px] mb-4 shrink-0 transition-all"
+            />
+
+            <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+              {allOffersLoading ? (
+                <p className="text-zinc-500 text-[10px] font-black uppercase text-center py-8 animate-pulse">Načítavam ponuky...</p>
+              ) : (() => {
+                const nd = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+                const q = nd(allOffersSearch);
+                const filtered = allOffers.filter(o =>
+                  !q ||
+                  nd(o.offer_number || '').includes(q) ||
+                  nd(o.job_tickets?.customer_name || '').includes(q) ||
+                  nd(o.job_tickets?.plate_number || '').includes(q) ||
+                  nd(o.job_tickets?.car_brand_model || '').includes(q)
+                );
+                if (!filtered.length) return (
+                  <p className="text-zinc-600 text-[10px] font-black uppercase text-center py-8">Žiadne ponuky nenájdené</p>
+                );
+                return filtered.map(o => (
+                  <button key={o.id}
+                    onClick={() => { importOfferItems(o); setShowAllOffersModal(false); }}
+                    className="w-full text-left bg-zinc-950 border border-zinc-800 hover:border-red-600 hover:bg-red-600/5 p-4 rounded-2xl transition-all group">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="bg-white text-black px-2 py-0.5 rounded font-black text-[10px] tracking-widest shrink-0">
+                          {o.offer_number || 'CP'}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-white font-black text-[11px] uppercase italic truncate group-hover:text-red-400 transition-colors">
+                            {o.job_tickets?.customer_name || '—'}
+                          </p>
+                          <p className="text-zinc-500 font-mono text-[10px]">
+                            {o.job_tickets?.plate_number || '—'} · {o.job_tickets?.car_brand_model || ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-white font-black text-sm">{(Number(o.total_amount || 0) * 1.23).toFixed(2)} €</p>
+                        <p className="text-zinc-600 text-[9px]">{new Date(o.created_at).toLocaleDateString('sk-SK')}</p>
+                        <p className="text-[9px] mt-0.5" style={{ color: o.status === 'Odoslané' ? '#3b82f6' : o.status === 'Schválené' ? '#22c55e' : o.status === 'Zamietnuté' ? '#ef4444' : '#71717a' }}>
+                          {o.status}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-zinc-600 text-[9px] mt-1">{o.items_json?.length || 0} položiek</p>
+                  </button>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ===== SMS MODAL ===== */}
