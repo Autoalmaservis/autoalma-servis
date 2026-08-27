@@ -140,90 +140,32 @@ export default function VerejnaObjednavkaPage() {
 
       const plateFinal = customerData.plate.trim().toUpperCase();
 
-      // --- Uloženie/nájdenie zákazníka ---
-      const nameFinal = customerData.name.trim();
-      const emailFinal = customerData.email.trim().toLowerCase();
-      const phoneFinal = customerData.phone.trim();
+      // --- Odoslanie na server ---
+      // Anonymný návštevník nesmie (a nemá) zapisovať do customers a vehicles —
+      // RLS mu to zamietne. Zápis preto robí serverová route so service kľúčom,
+      // ktorá zároveň správne ošetrí väzby na auth.users.
+      const res = await fetch('/api/public-booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: customerData.name.trim(),
+          phone: customerData.phone.trim(),
+          email: customerData.email.trim(),
+          plate: plateFinal,
+          date: selectedDay,
+          start: timeForEvent,
+          end: endStr,
+          title: `ONLINE: ${plateFinal || customerData.name.trim()}`,
+          issueDescription,
+          customerNote: [
+            letTechDecideTime ? '⏰ Čas príchodu: určí prijímací technik' : null,
+            customerNote ? `Poznámka: ${customerNote}` : null,
+          ].filter(Boolean).join(' | ') || null,
+        }),
+      });
 
-      let customerId = null;
-
-      // 1. Má už účet v Garáži?
-      if (emailFinal) {
-        const { data: profiles } = await supabase.from('user_profiles').select('id').ilike('email', emailFinal).limit(1);
-        if (profiles?.length) customerId = profiles[0].id;
-      }
-      // 2. Je už v klientoch?
-      if (!customerId && emailFinal) {
-        const { data: byEmail } = await supabase.from('customers').select('id').ilike('email', emailFinal).limit(1);
-        if (byEmail?.length) customerId = byEmail[0].id;
-      }
-      if (!customerId && phoneFinal) {
-        const { data: byPhone } = await supabase.from('customers').select('id').eq('phone', phoneFinal).limit(1);
-        if (byPhone?.length) customerId = byPhone[0].id;
-      }
-      // 3. Nový klient — POZOR: stĺpec je full_name, nie name
-      if (!customerId) {
-        const { data: newCust, error: custErr } = await supabase.from('customers').insert([{
-          full_name: nameFinal,
-          phone: phoneFinal || null,
-          email: emailFinal || null,
-          client_type: 'Osoba',
-        }]).select('id').single();
-        if (custErr) console.error('objednavka → customers insert:', custErr.message);
-        customerId = newCust?.id || null;
-      }
-
-      // --- Uloženie/nájdenie vozidla ---
-      let vehicleId = null;
-      if (plateFinal) {
-        const { data: existingVehicles } = await supabase.from('vehicles').select('id, owner_id').eq('license_plate', plateFinal).limit(1);
-        const existingVehicle = existingVehicles?.[0] || null;
-        if (existingVehicle) {
-          vehicleId = existingVehicle.id;
-          // Vozidlo je v DB, ale bez majiteľa — doplníme kontakt z objednávky
-          if (!existingVehicle.owner_id && customerId) {
-            await supabase.from('vehicles').update({
-              owner_id: customerId,
-              owner_name: nameFinal || null,
-              owner_phone: phoneFinal || null,
-              owner_email: emailFinal || null,
-            }).eq('id', existingVehicle.id);
-          }
-        } else {
-          const { data: newVehicle, error: vehErr } = await supabase.from('vehicles').insert([{
-            owner_id: customerId,
-            owner_name: nameFinal || null,
-            owner_phone: phoneFinal || null,
-            owner_email: emailFinal || null,
-            license_plate: plateFinal,
-            brand_model: 'Neznáme',
-          }]).select('id').single();
-          if (vehErr) console.error('objednavka → vehicles insert:', vehErr.message);
-          vehicleId = newVehicle?.id || null;
-        }
-      }
-
-      // --- Uloženie calendar_event ---
-      const { error } = await supabase.from('calendar_events').insert([{
-        title: `ONLINE: ${plateFinal || customerData.name}`,
-        start_datetime: `${selectedDay}T${timeForEvent}:00`,
-        end_datetime: `${selectedDay}T${endStr}:00`,
-        customer_note: [
-          letTechDecideTime ? '⏰ Čas príchodu: určí prijímací technik' : null,
-          customerNote ? `Poznámka: ${customerNote}` : null,
-        ].filter(Boolean).join(' | ') || null,
-        plate_number: plateFinal || null,
-        issue_description: issueDescription,
-        customer_name: customerData.name.trim(),
-        customer_phone: customerData.phone.trim() || null,
-        customer_email: customerData.email.trim() || null,
-        is_confirmed: false,
-        status: 'Čaká na schválenie',
-        user_id: customerId,
-        vehicle_id: vehicleId,
-      }]);
-
-      if (error) throw error;
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || 'Žiadosť sa nepodarilo odoslať.');
 
       // Notifikácia servisu
       fetch('/api/notify-booking', {

@@ -69,6 +69,10 @@ export default function KalendarPage() {
   const [vehicleForm, setVehicleForm] = useState({ brand: '', model: '', vin: '', year: '', engine_volume: '', engine_power: '', fuel_type: 'Diesel', mileage: '' });
   const [clientModalLoading, setClientModalLoading] = useState(false);
   const [quickSaveLoading, setQuickSaveLoading] = useState(false);
+  // customers.id NIE je prihlasovací účet, takže ho nesmieme dať do
+  // tempCustomerContact.userId (ide do SmsPanelu a do FK stĺpcov). Držíme si
+  // preto samostatný príznak, že klient už je uložený.
+  const [clientSaved, setClientSaved] = useState(false);
   const [vehicleLookupLoading, setVehicleLookupLoading] = useState(false);
 
   // --- 1. NAČÍTANIE DÁT ---
@@ -252,6 +256,7 @@ export default function KalendarPage() {
       userId: props.userId || null
     });
     setEventCustomerNote(props.customerNote || '');
+    setClientSaved(false);
     setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
 
     setIsModalOpen(true);
@@ -428,6 +433,7 @@ export default function KalendarPage() {
     
     setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork(''); setEventCustomerNote('');
     setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
+    setClientSaved(false);
     setClientSearch(''); setClientSearchResults([]); setClientVehicles([]);
     setEndDate('');
     setSelectionMode('ask');
@@ -598,14 +604,14 @@ export default function KalendarPage() {
         const { data: existing } = await supabase.from('vehicles').select('id, owner_id').eq('license_plate', spz).limit(1);
         if (existing?.length) {
           await supabase.from('vehicles').update({
-            owner_id: existing[0].owner_id || customerId,
+            owner_id: existing[0].owner_id,   // FK na auth.users — nechať tak, ako je
             owner_name: name,
             owner_phone: phone || null,
             owner_email: email || null,
           }).eq('id', existing[0].id);
         } else {
           const { error: vErr } = await supabase.from('vehicles').insert([{
-            owner_id: customerId,
+            owner_id: null,                   // FK na auth.users; zákazník bez účtu = null
             owner_name: name,
             owner_phone: phone || null,
             owner_email: email || null,
@@ -616,11 +622,10 @@ export default function KalendarPage() {
         }
       }
 
-      if (editingEventId) {
-        await supabase.from('calendar_events').update({ user_id: customerId }).eq('id', editingEventId);
-      }
-
-      setTempCustomerContact(prev => ({ ...prev, userId: customerId, customerName: name }));
+      // calendar_events.user_id má FK na auth.users — customers.id tam nesmie.
+      // Žiadosť sa s klientom spáruje cez meno, telefón a ŠPZ.
+      setClientSaved(true);
+      setTempCustomerContact(prev => ({ ...prev, customerName: name }));
       setSelectedClientName(name);
       if (plate) await loadCarDetails(plate);
       alert('Zákazník bol uložený do Klientov.');
@@ -1174,7 +1179,7 @@ export default function KalendarPage() {
                         </div>
 
                         {/* REGISTRÁCIA ZÁKAZNÍKA Z OBJEDNÁVKY */}
-                        {(tempCustomerContact.customerName || selectedClientName) && !tempCustomerContact.userId && (
+                        {(tempCustomerContact.customerName || selectedClientName) && !tempCustomerContact.userId && !clientSaved && (
                           <div className="border-2 border-dashed border-zinc-700 rounded-2xl md:rounded-3xl p-4 md:p-5 space-y-3 bg-zinc-950/60">
                             <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
                               Zákazník zatiaľ nie je v systéme
@@ -1202,7 +1207,7 @@ export default function KalendarPage() {
                           </div>
                         )}
 
-                        {tempCustomerContact.userId && (
+                        {(tempCustomerContact.userId || clientSaved) && (
                           <div className="flex items-center gap-2 text-[10px] font-black text-green-500 uppercase tracking-widest ml-1">
                             <span>✓</span> Zákazník je v systéme
                           </div>
