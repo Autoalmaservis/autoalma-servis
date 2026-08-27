@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/app/lib/supabase';
+import { fetchWithAuth } from '@/app/lib/apiHelpers';
 import { useSearchParams, useRouter } from 'next/navigation';
 import SmsPanel from './SmsPanel';
 
@@ -38,6 +39,12 @@ function PrijemForm() {
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
+  const [savingToDb, setSavingToDb] = useState(false);
+  const [garazModal, setGarazModal] = useState(false);
+  const [garazPassword, setGarazPassword] = useState('');
+  const [garazLoading, setGarazLoading] = useState(false);
+  const [garazStep, setGarazStep] = useState(1);
+  const [dbSaveMsg, setDbSaveMsg] = useState('');
 
   const validate = () => {
     const errors = {};
@@ -200,6 +207,136 @@ function PrijemForm() {
     };
     autoDoplnenie();
   }, [formData.plate_number, searchParams]); // Ponechané obe závislosti kvôli chybe v konzole
+
+  const genPassword = () => {
+    const chars = 'ABCDEFGHJKMNPRSTUVWXYZabcdefghjkmnprstuvwxyz23456789';
+    return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
+  const handleUlozitDoKlientov = async () => {
+    if (!formData.customer_name.trim()) { alert('Zadajte meno zákazníka.'); return; }
+    setSavingToDb(true);
+    setDbSaveMsg('');
+    try {
+      // Upsert do customers
+      const { data: existing } = await supabase
+        .from('customers')
+        .select('id')
+        .or(`full_name.eq."${formData.customer_name.trim()}"${formData.customer_email ? `,email.eq."${formData.customer_email}"` : ''}`)
+        .maybeSingle();
+
+      const custPayload = {
+        full_name: formData.customer_name.trim(),
+        phone: formData.customer_phone || null,
+        email: formData.customer_email || null,
+        address: formData.address || null,
+        city: formData.city || null,
+        zip: formData.zip || null,
+        client_type: formData.client_type || 'Osoba',
+        company_name: formData.company_name || null,
+        ico: formData.ico || null,
+        dic: formData.dic || null,
+        ic_dph: formData.ic_dph || null,
+      };
+
+      let customerId;
+      if (existing?.id) {
+        await supabase.from('customers').update(custPayload).eq('id', existing.id);
+        customerId = existing.id;
+      } else {
+        const { data: newCust } = await supabase.from('customers').insert([custPayload]).select('id').single();
+        customerId = newCust?.id;
+      }
+
+      // Upsert vozidla ak je ŠPZ
+      if (formData.plate_number.trim() && customerId) {
+        const { data: existVeh } = await supabase.from('vehicles').select('id').eq('license_plate', formData.plate_number.toUpperCase()).maybeSingle();
+        const vehPayload = {
+          owner_id: customerId,
+          owner_name: formData.customer_name.trim(),
+          owner_email: formData.customer_email || null,
+          license_plate: formData.plate_number.toUpperCase(),
+          brand_model: formData.car_brand_model || null,
+          vin_number: formData.vin_number || null,
+          engine_volume: formData.engine_volume || null,
+          engine_power: formData.engine_power || null,
+          year_produced: formData.year_produced || null,
+          fuel_type: formData.fuel_type || 'Diesel',
+          mileage: formData.mileage ? parseInt(formData.mileage) : 0,
+        };
+        if (existVeh?.id) {
+          await supabase.from('vehicles').update(vehPayload).eq('id', existVeh.id);
+        } else {
+          await supabase.from('vehicles').insert([vehPayload]);
+        }
+      }
+
+      setDbSaveMsg('Klient uložený do databázy.');
+    } catch (err) {
+      setDbSaveMsg('Chyba: ' + err.message);
+    }
+    setSavingToDb(false);
+  };
+
+  const openGarazWizard = () => {
+    setGarazPassword(genPassword());
+    setGarazStep(1);
+    setGarazModal(true);
+  };
+
+  const handleVytvoritGaraz = async () => {
+    if (!formData.customer_email) { alert('E-mail zákazníka je povinný pre prístup do garáže.'); return; }
+    setGarazLoading(true);
+    try {
+      const res = await fetchWithAuth('/api/admin/create-zakaznik', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: formData.customer_name,
+          email: formData.customer_email,
+          password: garazPassword,
+          phone: formData.customer_phone,
+          clientType: formData.client_type,
+          company_name: formData.company_name,
+          ico: formData.ico,
+          dic: formData.dic,
+          ic_dph: formData.ic_dph,
+          address: formData.address,
+          city: formData.city,
+          zip: formData.zip,
+          vehicle: formData.plate_number ? {
+            license_plate: formData.plate_number,
+            brand_model: formData.car_brand_model,
+            vin: formData.vin_number,
+            year_produced: formData.year_produced || null,
+            engine_volume: formData.engine_volume || null,
+            engine_power: formData.engine_power || null,
+            fuel_type: formData.fuel_type,
+            mileage: formData.mileage ? parseInt(formData.mileage) : 0,
+          } : undefined,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Chyba pri vytváraní účtu');
+
+      await fetchWithAuth('/api/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.customer_email,
+          name: formData.customer_name,
+          password: garazPassword,
+          createdByAdmin: true,
+        }),
+      }).catch(() => {});
+
+      setGarazModal(false);
+      alert(`Prístup do garáže vytvorený. Heslo: ${garazPassword}\nUvítací e-mail bol odoslaný na ${formData.customer_email}.`);
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    }
+    setGarazLoading(false);
+  };
 
   const addTaskRow = () => setTasks([...tasks, { description: '' }]);
   const removeTaskRow = (index) => setTasks(tasks.filter((_, i) => i !== index));
@@ -408,6 +545,19 @@ function PrijemForm() {
           />
         </div>
 
+        {/* Akcie pre klienta */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button type="button" onClick={handleUlozitDoKlientov} disabled={savingToDb}
+            className="flex-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-black py-4 rounded-2xl uppercase text-xs tracking-widest transition-all disabled:opacity-50">
+            {savingToDb ? 'Ukladám...' : '💾 Uložiť do klientov'}
+          </button>
+          <button type="button" onClick={openGarazWizard}
+            className="flex-1 bg-zinc-900 hover:bg-red-600/20 border border-red-600/40 text-red-400 hover:text-red-300 font-black py-4 rounded-2xl uppercase text-xs tracking-widest transition-all">
+            🔑 Prístup do garáže
+          </button>
+          {dbSaveMsg && <p className="sm:col-span-2 text-green-400 text-xs font-bold self-center">{dbSaveMsg}</p>}
+        </div>
+
         {/* Mechanik + úkony */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-10">
           <div className="lg:col-span-1">
@@ -460,6 +610,60 @@ function PrijemForm() {
       <style jsx global>{`
         input::placeholder { color: #3f3f46; text-transform: none; font-style: normal; }
       `}</style>
+
+      {/* Modal — Prístup do garáže */}
+      {garazModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-red-600/30 rounded-3xl p-6 md:p-10 w-full max-w-lg shadow-2xl space-y-6">
+            <div className="border-l-4 border-red-600 pl-4">
+              <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Krok {garazStep} / 2</p>
+              <h2 className="text-xl font-black uppercase italic text-white">
+                {garazStep === 1 ? '🔑 Prístup do garáže' : '🚗 Vozidlo zákazníka'}
+              </h2>
+            </div>
+
+            {garazStep === 1 && (
+              <div className="space-y-4">
+                <div className="bg-black/50 rounded-2xl p-4 space-y-2 text-sm">
+                  <p className="text-zinc-400"><span className="text-zinc-600 text-xs uppercase">Meno</span><br/><strong className="text-white">{formData.customer_name || '—'}</strong></p>
+                  <p className="text-zinc-400"><span className="text-zinc-600 text-xs uppercase">E-mail</span><br/><strong className="text-white">{formData.customer_email || <span className="text-red-500">chýba!</span>}</strong></p>
+                  <p className="text-zinc-400"><span className="text-zinc-600 text-xs uppercase">Telefón</span><br/><strong className="text-white">{formData.customer_phone || '—'}</strong></p>
+                </div>
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4">
+                  <p className="text-[9px] font-black text-yellow-400 uppercase tracking-widest mb-2">Vygenerované heslo</p>
+                  <p className="text-white font-mono text-2xl font-black tracking-wider">{garazPassword}</p>
+                  <p className="text-yellow-600 text-[9px] mt-1 uppercase tracking-widest">Bude odoslané v uvítacom e-maili</p>
+                </div>
+                <button type="button" onClick={() => setGarazPassword(genPassword())} className="text-zinc-500 hover:text-white text-xs underline">Vygenerovať iné heslo</button>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setGarazModal(false)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-black py-3 rounded-xl uppercase text-xs tracking-widest">Zrušiť</button>
+                  <button type="button" onClick={() => setGarazStep(2)} disabled={!formData.customer_email}
+                    className="flex-1 bg-red-600 hover:bg-red-500 text-white font-black py-3 rounded-xl uppercase text-xs tracking-widest disabled:opacity-40">
+                    Ďalej →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {garazStep === 2 && (
+              <div className="space-y-4">
+                <div className="bg-black/50 rounded-2xl p-4 space-y-2 text-sm">
+                  <p className="text-zinc-400"><span className="text-zinc-600 text-xs uppercase">ŠPZ</span><br/><strong className="text-white text-xl font-mono">{formData.plate_number || '—'}</strong></p>
+                  <p className="text-zinc-400"><span className="text-zinc-600 text-xs uppercase">Vozidlo</span><br/><strong className="text-white">{formData.car_brand_model || '—'}</strong></p>
+                  {formData.vin_number && <p className="text-zinc-400"><span className="text-zinc-600 text-xs uppercase">VIN</span><br/><span className="text-zinc-300 font-mono text-xs">{formData.vin_number}</span></p>}
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setGarazStep(1)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-black py-3 rounded-xl uppercase text-xs tracking-widest">← Späť</button>
+                  <button type="button" onClick={handleVytvoritGaraz} disabled={garazLoading}
+                    className="flex-1 bg-red-600 hover:bg-red-500 text-white font-black py-3 rounded-xl uppercase text-xs tracking-widest disabled:opacity-50">
+                    {garazLoading ? 'Vytvárám...' : '✓ Vytvoriť prístup'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
