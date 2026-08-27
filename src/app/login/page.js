@@ -21,11 +21,32 @@ function LoginFormContent() {
     setError(null);
     setMessage(null);
 
-    // 1. Prihlásenie do Supabase Auth
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password: password,
-    });
+    // 0. Zahodiť starú/pokazenú session z prehliadača.
+    // Bez toho sa prihlásenie vie zaseknúť na "Inicializujem..." — supabase-js
+    // sa najprv pokúsi obnoviť neplatný token a čaká na odpoveď, ktorá nepríde.
+    try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* nevadí */ }
+
+    // 1. Prihlásenie do Supabase Auth (s poistkou proti nekonečnému čakaniu)
+    const withTimeout = (promise, ms, label) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} neodpovedá (${ms / 1000} s)`)), ms)),
+    ]);
+
+    let data, authError;
+    try {
+      ({ data, error: authError } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password: password,
+        }),
+        20000,
+        'Prihlasovací server'
+      ));
+    } catch (timeoutErr) {
+      setError(timeoutErr.message + '. Skúste znova, alebo vyčistite údaje stránky (F12 → Application → Clear site data).');
+      setLoading(false);
+      return;
+    }
 
     if (authError) {
       if (authError.message.includes("Email not confirmed")) {
@@ -51,7 +72,12 @@ function LoginFormContent() {
         console.log("Hľadané ID:", data.user.id);
 
         await supabase.auth.signOut();
-        setError("Váš užívateľský profil nebol nájdený v systéme.");
+        // Rozlíšiť "profil naozaj chýba" od "dopyt zlyhal" — inak sa hľadá zle
+        if (profileError && profileError.code !== 'PGRST116') {
+          setError(`Nepodarilo sa načítať profil (${profileError.code || 'chyba spojenia'}): ${profileError.message}`);
+        } else {
+          setError(`Účet ${email.trim().toLowerCase()} nemá v systéme profil. Kontaktujte správcu.`);
+        }
         setLoading(false);
         return;
       }
