@@ -11,6 +11,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SmsPanel from '../prijem/SmsPanel'; // Import SMS panela
 
+// Diakritikou-nezávislá normalizácia pre porovnávanie mien
+const nd = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
 export default function KalendarPage() {
   const router = useRouter();
   const calendarRef = useRef(null); 
@@ -49,8 +52,10 @@ export default function KalendarPage() {
 
   const [clientSearch, setClientSearch] = useState('');
   const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [clientSearchLoading, setClientSearchLoading] = useState(false);
   const [clientVehicles, setClientVehicles] = useState([]);
   const searchRef = useRef(null);
+  const searchTimer = useRef(null);
 
   const [pendingEmailConfirm, setPendingEmailConfirm] = useState(null);
 
@@ -63,6 +68,7 @@ export default function KalendarPage() {
   });
   const [vehicleForm, setVehicleForm] = useState({ brand: '', model: '', vin: '', year: '', engine_volume: '', engine_power: '', fuel_type: 'Diesel', mileage: '' });
   const [clientModalLoading, setClientModalLoading] = useState(false);
+  const [quickSaveLoading, setQuickSaveLoading] = useState(false);
   const [vehicleLookupLoading, setVehicleLookupLoading] = useState(false);
 
   // --- 1. NAČÍTANIE DÁT ---
@@ -258,32 +264,114 @@ export default function KalendarPage() {
     setIsInboxOpen(false);
   };
 
+  // Hľadá naprieč VŠETKÝMI zdrojmi: účty v Garáži, klienti, vozidlá (ŠPZ) aj história zákaziek.
   const searchClients = async (q) => {
-    if (q.length < 2) { setClientSearchResults([]); return; }
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, phone, email, company_name')
-      .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%,email.ilike.%${q}%,company_name.ilike.%${q}%`)
-      .limit(8);
-    setClientSearchResults(data || []);
+    const term = q.trim();
+    if (term.length < 2) { setClientSearchResults([]); return; }
+
+    const like = `%${term}%`;
+    const plateLike = `%${term.toUpperCase().replace(/\s+/g, '')}%`;
+    setClientSearchLoading(true);
+
+    const [profiles, customers, vehicles, tickets] = await Promise.all([
+      supabase.from('user_profiles')
+        .select('id, full_name, phone, email, company_name')
+        .or(`full_name.ilike.${like},phone.ilike.${like},email.ilike.${like},company_name.ilike.${like}`)
+        .limit(10),
+      supabase.from('customers')
+        .select('id, full_name, phone, email, company_name')
+        .or(`full_name.ilike.${like},phone.ilike.${like},email.ilike.${like},company_name.ilike.${like}`)
+        .limit(10),
+      supabase.from('vehicles')
+        .select('id, license_plate, brand_model, owner_id, owner_name, owner_phone, owner_email')
+        .or(`license_plate.ilike.${plateLike},owner_name.ilike.${like},owner_phone.ilike.${like},owner_email.ilike.${like}`)
+        .limit(12),
+      supabase.from('job_tickets')
+        .select('customer_id, customer_name, customer_phone, customer_email, plate_number, car_brand_model, created_at')
+        .or(`plate_number.ilike.${plateLike},customer_name.ilike.${like},customer_phone.ilike.${like}`)
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
+
+    // Zlúčenie — poradie určuje prednosť zdroja
+    const merged = [];
+    const add = (row) => {
+      if (!row.name && !row.plate) return;
+      const idKey = row.email ? `e:${row.email.toLowerCase()}`
+        : row.phone ? `t:${row.phone.replace(/\D/g, '').slice(-9)}`
+        : row.name ? `n:${nd(row.name)}`
+        : `p:${row.plate}`;
+      const existing = merged.find(m => m.key === idKey);
+      if (existing) {
+        existing.phone = existing.phone || row.phone;
+        existing.email = existing.email || row.email;
+        existing.ownerId = existing.ownerId || row.ownerId;
+        if (row.plate && !existing.plates.includes(row.plate)) existing.plates.push(row.plate);
+        return;
+      }
+      merged.push({ key: idKey, ...row, plates: row.plate ? [row.plate] : [] });
+    };
+
+    (profiles.data || []).forEach(c => add({
+      source: 'garáž', ownerId: c.id,
+      name: c.company_name || c.full_name, phone: c.phone, email: c.email, plate: null,
+    }));
+    (customers.data || []).forEach(c => add({
+      source: 'klient', ownerId: c.id,
+      name: c.company_name || c.full_name, phone: c.phone, email: c.email, plate: null,
+    }));
+    (vehicles.data || []).forEach(v => add({
+      source: 'vozidlo', ownerId: v.owner_id,
+      name: v.owner_name, phone: v.owner_phone, email: v.owner_email,
+      plate: v.license_plate, brandModel: v.brand_model,
+    }));
+    (tickets.data || []).forEach(t => add({
+      source: 'história', ownerId: t.customer_id,
+      name: t.customer_name, phone: t.customer_phone, email: t.customer_email,
+      plate: t.plate_number, brandModel: t.car_brand_model,
+    }));
+
+    setClientSearchResults(merged.slice(0, 10));
+    setClientSearchLoading(false);
   };
 
   const handleClientSearchChange = (e) => {
     const q = e.target.value;
     setClientSearch(q);
     setClientVehicles([]);
-    searchClients(q);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => searchClients(q), 250);
   };
 
   const selectClientFromSearch = async (client) => {
-    const displayName = client.company_name || client.full_name;
+    const displayName = client.name || '';
     setClientSearch(displayName);
     setClientSearchResults([]);
     setSelectedClientName(displayName);
-    setTempCustomerContact({ phone: client.phone || '', email: client.email || '', customerName: displayName, userId: client.id });
+    setTempCustomerContact({
+      phone: client.phone || '',
+      email: client.email || '',
+      customerName: displayName,
+      userId: client.ownerId || null,
+    });
 
-    const { data } = await supabase.from('vehicles').select('*').eq('owner_id', client.id);
-    const vehicles = data || [];
+    // Vozidlá klienta — podľa majiteľa, e-mailu, mena aj známych ŠPZ
+    const orParts = [];
+    if (client.ownerId) orParts.push(`owner_id.eq.${client.ownerId}`);
+    if (client.email) orParts.push(`owner_email.eq."${client.email}"`);
+    if (displayName) orParts.push(`owner_name.eq."${displayName}"`);
+    if (client.plates?.length) client.plates.forEach(pl => orParts.push(`license_plate.eq."${pl}"`));
+
+    let vehicles = [];
+    if (orParts.length) {
+      const { data } = await supabase.from('vehicles').select('*').or(orParts.join(','));
+      const seen = new Set();
+      vehicles = (data || []).filter(v => {
+        if (seen.has(v.license_plate)) return false;
+        seen.add(v.license_plate);
+        return true;
+      });
+    }
 
     if (vehicles.length === 1) {
       const v = vehicles[0];
@@ -295,6 +383,16 @@ export default function KalendarPage() {
       setClientVehicles(vehicles);
       setPlate('');
       setCarData(null);
+    } else if (client.plates?.length === 1) {
+      // Vozidlo nie je v tabuľke vozidiel, ale ŠPZ poznáme z histórie
+      setPlate(client.plates[0]);
+      setCarData(client.brandModel ? {
+        license_plate: client.plates[0],
+        brand_model: client.brandModel,
+        owner_name: displayName,
+      } : null);
+      setIsKnown(!!client.brandModel);
+      setClientVehicles([]);
     } else {
       setClientVehicles([]);
       setPlate('');
@@ -466,6 +564,99 @@ export default function KalendarPage() {
     setVehicleLookupLoading(false);
   };
 
+  // Uloží zákazníka z objednávky rovno do Klientov (bez prístupu do Garáže)
+  const saveClientQuick = async () => {
+    const name = (tempCustomerContact.customerName || selectedClientName || '').trim();
+    if (!name) { alert('Chýba meno zákazníka.'); return; }
+    setQuickSaveLoading(true);
+    try {
+      const email = (tempCustomerContact.email || '').trim().toLowerCase();
+      const phone = (tempCustomerContact.phone || '').trim();
+
+      let customerId = null;
+      if (email) {
+        const { data } = await supabase.from('customers').select('id').ilike('email', email).limit(1);
+        if (data?.length) customerId = data[0].id;
+      }
+      if (!customerId && phone) {
+        const { data } = await supabase.from('customers').select('id').eq('phone', phone).limit(1);
+        if (data?.length) customerId = data[0].id;
+      }
+      if (!customerId) {
+        const { data, error } = await supabase.from('customers').insert([{
+          full_name: name,
+          phone: phone || null,
+          email: email || null,
+          client_type: 'Osoba',
+        }]).select('id').single();
+        if (error) throw error;
+        customerId = data.id;
+      }
+
+      if (plate) {
+        const spz = plate.toUpperCase();
+        const { data: existing } = await supabase.from('vehicles').select('id, owner_id').eq('license_plate', spz).limit(1);
+        if (existing?.length) {
+          await supabase.from('vehicles').update({
+            owner_id: existing[0].owner_id || customerId,
+            owner_name: name,
+            owner_phone: phone || null,
+            owner_email: email || null,
+          }).eq('id', existing[0].id);
+        } else {
+          const { error: vErr } = await supabase.from('vehicles').insert([{
+            owner_id: customerId,
+            owner_name: name,
+            owner_phone: phone || null,
+            owner_email: email || null,
+            license_plate: spz,
+            brand_model: carData?.brand_model || 'Neznáme',
+          }]);
+          if (vErr) throw vErr;
+        }
+      }
+
+      if (editingEventId) {
+        await supabase.from('calendar_events').update({ user_id: customerId }).eq('id', editingEventId);
+      }
+
+      setTempCustomerContact(prev => ({ ...prev, userId: customerId, customerName: name }));
+      setSelectedClientName(name);
+      if (plate) await loadCarDetails(plate);
+      alert('Zákazník bol uložený do Klientov.');
+    } catch (err) {
+      alert('Chyba pri ukladaní klienta: ' + (err.message || err));
+    } finally {
+      setQuickSaveLoading(false);
+    }
+  };
+
+  // Otvorí 2-krokový wizard predvyplnený údajmi z objednávky
+  const openClientWizardPrefilled = () => {
+    const name = (tempCustomerContact.customerName || selectedClientName || '').trim();
+    const brandParts = (carData?.brand_model || '').trim().split(/\s+/).filter(Boolean);
+    setVehicleForm({
+      brand: brandParts[0] || '',
+      model: brandParts.slice(1).join(' '),
+      vin: carData?.vin_number || '',
+      year: carData?.year_produced || '',
+      engine_volume: carData?.engine_volume || '',
+      engine_power: carData?.engine_power || '',
+      fuel_type: carData?.fuel_type || 'Diesel',
+      mileage: carData?.mileage || '',
+    });
+    setClientForm(prev => ({
+      ...prev,
+      clientType: 'Osoba',
+      full_name: name,
+      phone: tempCustomerContact.phone || '',
+      email: (tempCustomerContact.email || '').trim().toLowerCase(),
+      password: prev.password || `AA${Math.random().toString(36).slice(-6)}`,
+    }));
+    setClientModalStep(1);
+    setShowClientModal(true);
+  };
+
   const handleCreateClientFull = async (e) => {
     e.preventDefault();
     setClientModalLoading(true);
@@ -515,6 +706,11 @@ export default function KalendarPage() {
       setSelectedClientName(displayName);
       setIsKnown(true);
       setShowClientModal(false);
+
+      // Prepojiť čakajúcu žiadosť s novým účtom
+      if (editingEventId && json.userId) {
+        await supabase.from('calendar_events').update({ user_id: json.userId }).eq('id', editingEventId);
+      }
     } catch (err) {
       alert('Chyba: ' + err.message);
     } finally {
@@ -862,28 +1058,46 @@ export default function KalendarPage() {
                           className="relative"
                           onBlur={(e) => { if (!searchRef.current?.contains(e.relatedTarget)) setClientSearchResults([]); }}
                         >
-                          <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Vyhľadať zákazníka</label>
+                          <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">
+                            Vyhľadať zákazníka {clientSearchLoading && <span className="text-red-500 normal-case tracking-normal ml-2">hľadám…</span>}
+                          </label>
                           <input
                             type="text"
                             value={clientSearch}
                             onChange={handleClientSearchChange}
-                            placeholder="Meno, telefón, email, firma..."
+                            placeholder="ŠPZ, meno, telefón, email, firma..."
                             className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 transition-all text-sm"
                           />
                           {clientSearchResults.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 z-20 bg-zinc-900 border border-zinc-700 rounded-2xl mt-1 shadow-2xl overflow-hidden">
+                            <div className="absolute top-full left-0 right-0 z-20 bg-zinc-900 border border-zinc-700 rounded-2xl mt-1 shadow-2xl overflow-hidden max-h-80 overflow-y-auto">
                               {clientSearchResults.map(c => (
                                 <button
-                                  key={c.id}
+                                  key={c.key}
                                   type="button"
                                   onClick={() => selectClientFromSearch(c)}
-                                  className="w-full text-left px-5 py-4 hover:bg-zinc-800 flex justify-between items-center border-b border-zinc-800 last:border-0 transition-all"
+                                  className="w-full text-left px-5 py-4 hover:bg-zinc-800 border-b border-zinc-800 last:border-0 transition-all"
                                 >
-                                  <span className="font-black uppercase text-sm text-white">{c.company_name || c.full_name}</span>
-                                  <span className="text-zinc-500 text-xs">{c.phone}</span>
+                                  <div className="flex justify-between items-center gap-3">
+                                    <span className="font-black uppercase text-sm text-white truncate">{c.name || '(bez mena)'}</span>
+                                    <span className={`shrink-0 text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${
+                                      c.source === 'garáž' ? 'bg-green-600/20 text-green-400'
+                                      : c.source === 'klient' ? 'bg-blue-600/20 text-blue-400'
+                                      : c.source === 'vozidlo' ? 'bg-amber-600/20 text-amber-400'
+                                      : 'bg-zinc-700/40 text-zinc-400'}`}>{c.source}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    {c.plates.map(pl => (
+                                      <span key={pl} className="bg-white text-black text-[10px] font-black tracking-widest px-2 py-0.5 rounded uppercase">{pl}</span>
+                                    ))}
+                                    {c.brandModel && <span className="text-zinc-500 text-[11px] font-bold">{c.brandModel}</span>}
+                                    {c.phone && <span className="text-zinc-500 text-[11px] ml-auto">{c.phone}</span>}
+                                  </div>
                                 </button>
                               ))}
                             </div>
+                          )}
+                          {!clientSearchLoading && clientSearch.trim().length >= 2 && clientSearchResults.length === 0 && (
+                            <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mt-2 ml-1">Nič sa nenašlo — zadaj ŠPZ nižšie a založ nového zákazníka</p>
                           )}
                         </div>
 
@@ -946,6 +1160,53 @@ export default function KalendarPage() {
                             />
                           </div>
                         </div>
+
+                        {/* E-MAIL */}
+                        <div>
+                          <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">E-mail</label>
+                          <input
+                            type="email"
+                            value={tempCustomerContact.email}
+                            onChange={e => setTempCustomerContact(p => ({ ...p, email: e.target.value }))}
+                            placeholder="jan.novak@email.sk"
+                            className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-4 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 text-sm"
+                          />
+                        </div>
+
+                        {/* REGISTRÁCIA ZÁKAZNÍKA Z OBJEDNÁVKY */}
+                        {(tempCustomerContact.customerName || selectedClientName) && !tempCustomerContact.userId && (
+                          <div className="border-2 border-dashed border-zinc-700 rounded-2xl md:rounded-3xl p-4 md:p-5 space-y-3 bg-zinc-950/60">
+                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">
+                              Zákazník zatiaľ nie je v systéme
+                            </p>
+                            <p className="text-[11px] text-zinc-500 font-bold leading-relaxed">
+                              Použijú sa údaje z tejto objednávky — meno, telefón, e-mail a ŠPZ. Nič neprepisuj ručne.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <button
+                                type="button"
+                                disabled={quickSaveLoading}
+                                onClick={saveClientQuick}
+                                className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all"
+                              >
+                                {quickSaveLoading ? 'Ukladám…' : '💾 Uložiť do klientov'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={openClientWizardPrefilled}
+                                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all"
+                              >
+                                🔑 Prístup do garáže
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {tempCustomerContact.userId && (
+                          <div className="flex items-center gap-2 text-[10px] font-black text-green-500 uppercase tracking-widest ml-1">
+                            <span>✓</span> Zákazník je v systéme
+                          </div>
+                        )}
                       </div>
                     )}
 
