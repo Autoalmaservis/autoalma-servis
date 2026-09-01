@@ -115,6 +115,9 @@ export default function DetailFakturyPage() {
         await supabase.from('kasa_entries').delete().eq('job_id', inv.job_id);
       }
       await supabase.from('invoices').delete().eq('id', id);
+      // Vrátiť poradové číslo späť do počítadla, ak išlo o posledné vydané číslo
+      // (inak v číslovaní faktúr vznikne diera)
+      try { await supabase.rpc('release_invoice_number', { inv_number: inv.invoice_number }); } catch (_) {}
       alert("Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná.");
       router.push('/zakazky');
     } catch (err) {

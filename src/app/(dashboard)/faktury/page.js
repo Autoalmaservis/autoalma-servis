@@ -40,7 +40,7 @@ export default function FakturyDashboard() {
     const { data, error } = await supabase
       .from('invoices')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('invoice_number', { ascending: false });
 
     if (!error) setInvoices(data || []);
     setLoading(false);
