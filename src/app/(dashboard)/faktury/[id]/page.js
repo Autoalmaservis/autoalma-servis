@@ -45,6 +45,12 @@ export default function DetailFakturyPage() {
   const [peppolDownloading, setPeppolDownloading] = useState(false);
   const [peppolMsg, setPeppolMsg] = useState('');
 
+  // Zmena dátumu vystavenia / splatnosti
+  const [dateModal, setDateModal] = useState(false);
+  const [newIssueDate, setNewIssueDate] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
+  const [dateSaving, setDateSaving] = useState(false);
+
   useEffect(() => {
     if (id) {
       fetchInvoice();
@@ -367,6 +373,53 @@ Inspektor ${companyName}
     setEmailSending(false);
   };
 
+  // --- ZMENA DÁTUMU VYSTAVENIA / SPLATNOSTI ---
+  const toDateInput = (v) => {
+    if (!v) return '';
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const handleOpenDateModal = () => {
+    setNewIssueDate(toDateInput(inv.payment_info?.issue_date || inv.created_at));
+    setNewDueDate(toDateInput(inv.payment_info?.due_date));
+    setDateModal(true);
+  };
+
+  const handleSaveDates = async () => {
+    if (!newIssueDate) { alert('Zadajte dátum vystavenia.'); return; }
+    setDateSaving(true);
+    try {
+      // zachovať pôvodný čas dňa, meniť len dátum
+      const mkIso = (dateStr, ref) => {
+        const base = ref ? new Date(ref) : null;
+        const valid = base && !isNaN(base.getTime());
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d, valid ? base.getHours() : 12, valid ? base.getMinutes() : 0, 0, 0).toISOString();
+      };
+      const issueIso = mkIso(newIssueDate, inv.payment_info?.issue_date || inv.created_at);
+      const dueIso = newDueDate ? mkIso(newDueDate, inv.payment_info?.due_date) : null;
+
+      const payload = {
+        created_at: issueIso,
+        payment_info: {
+          ...(inv.payment_info || {}),
+          issue_date: issueIso,
+          due_date: dueIso,
+        },
+      };
+
+      const { data, error } = await supabase.from('invoices').update(payload).eq('id', id).select().single();
+      if (error) throw error;
+      setInv(prev => ({ ...prev, ...data }));
+      setDateModal(false);
+    } catch (e) {
+      alert('Nepodarilo sa uložiť dátum: ' + e.message);
+    }
+    setDateSaving(false);
+  };
+
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-red-600 font-black animate-pulse uppercase tracking-[0.3em]">Spracovávam...</div>;
   if (!inv) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase">Doklad nenájdený</div>;
 
@@ -381,6 +434,9 @@ Inspektor ${companyName}
           </button>
           <button onClick={handleReopenJob} className="bg-zinc-900 border border-red-900/30 text-red-500 hover:bg-red-600 hover:text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
             🔓 Zrušiť faktúru / Otvoriť zákazku
+          </button>
+          <button onClick={handleOpenDateModal} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
+            📅 Zmeniť dátum
           </button>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -436,7 +492,7 @@ Inspektor ${companyName}
               <td width="50%" valign="top" align="right">
                 <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
                 <p style={{ fontSize: '24pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{inv.invoice_number}</p>
-                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum: <strong>{new Date(inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum vystavenia: <strong>{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
               </td>
             </tr>
           </tbody>
@@ -488,6 +544,12 @@ Inspektor ${companyName}
               {inv.is_official ? 'Faktúra' : 'Servisný záznam'}
             </h2>
             <p className="text-3xl font-black tracking-tighter mb-4 doc-number">{inv.invoice_number}</p>
+            <div className="text-[10px] text-zinc-400 uppercase text-right space-y-0.5">
+              <p>Vystavené: <span className="text-white font-black">{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</span></p>
+              {inv.payment_info?.due_date && (
+                <p>Splatnosť: <span className="text-white font-black">{new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK')}</span></p>
+              )}
+            </div>
             <div className="mt-4 text-[10px] text-zinc-400 uppercase text-right">
                 <p className="text-blue-500 font-black italic">Odberateľ:</p>
                 <p className="text-white font-black">{inv.company_details?.company_name || inv.customer_name}</p>
@@ -540,7 +602,7 @@ Inspektor ${companyName}
                       <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
                       <p style={{ margin: '0' }}>VS: <strong>{String(inv.invoice_number).replace(/\D/g, '')}</strong></p>
-                      <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
+                      <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(new Date(inv.payment_info?.issue_date || inv.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
                     </div>
                   </div>
                 </td>
@@ -873,6 +935,67 @@ Inspektor ${companyName}
                 {emailSending ? '📤 Odosielam...' : '📧 Odoslať faktúru'}
               </button>
               <button onClick={() => setEmailModal(false)}
+                className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                Zrušiť
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: ZMENA DÁTUMU VYSTAVENIA ===== */}
+      {dateModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
+          onClick={() => setDateModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-md w-full shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-0.5">Zmeniť dátum</p>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">{inv.invoice_number}</h2>
+              </div>
+              <button onClick={() => setDateModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
+            </div>
+
+            <div className="space-y-4 mb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum vystavenia</p>
+                <input type="date" value={newIssueDate} onChange={e => setNewIssueDate(e.target.value)}
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black outline-none transition-all" />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum splatnosti</p>
+                <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black outline-none transition-all" />
+                <div className="flex gap-2 mt-2">
+                  {[14, 30].map(dni => (
+                    <button key={dni} type="button"
+                      onClick={() => {
+                        if (!newIssueDate) return;
+                        const [y, m, d] = newIssueDate.split('-').map(Number);
+                        const dt = new Date(y, m - 1, d + dni);
+                        setNewDueDate(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`);
+                      }}
+                      className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">
+                      +{dni} dní
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest mb-4 leading-relaxed">
+              Dátum sa prejaví na doklade, v zozname faktúr, v štatistikách aj v eFaktúre (XML).
+            </p>
+
+            <div className="flex gap-3">
+              <button onClick={handleSaveDates} disabled={dateSaving || !newIssueDate}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                {dateSaving ? '⏳ Ukladám...' : '✓ Uložiť dátum'}
+              </button>
+              <button onClick={() => setDateModal(false)}
                 className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 Zrušiť
               </button>

@@ -123,7 +123,7 @@ export default function DetailFakturyPage() {
               <td width="50%" valign="top" align="right">
                 <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
                 <p style={{ fontSize: '24pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{inv.invoice_number}</p>
-                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum: <strong>{new Date(inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum vystavenia: <strong>{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
               </td>
             </tr>
           </tbody>
@@ -226,7 +226,7 @@ export default function DetailFakturyPage() {
                       <p style={{ color: '#dc2626', fontWeight: '900', margin: '0' }}>PLATOBNÉ ÚDAJE:</p>
                       <p style={{ margin: '0' }}>IBAN: <strong>{myCompany.bank}</strong></p>
                       <p style={{ margin: '0' }}>VS: <strong>{String(inv.invoice_number).replace(/\D/g, '')}</strong></p>
-                      <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
+                      <p style={{ marginTop: '3pt', margin: '0' }}>Splatnosť: <strong>{inv.payment_info?.due_date ? new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK') : new Date(new Date(inv.payment_info?.issue_date || inv.created_at).getTime() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('sk-SK')}</strong></p>
                     </div>
                   </div>
                 </td>
