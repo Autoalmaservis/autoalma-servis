@@ -17,6 +17,15 @@ import JobFormManager from './components/JobFormManager';
 export default function DetailZakazkyPage() {
   const { id } = useParams();
   const router = useRouter();
+
+  // Odkiaľ sme sem prišli (napr. z karty vozidla) — ?back=/historia/BL123AB
+  const [backUrl] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    const b = new URLSearchParams(window.location.search).get('back');
+    // len interné cesty, nikdy nie externá adresa
+    return (b && b.startsWith('/') && !b.startsWith('//')) ? b : null;
+  });
+  const backLabel = backUrl?.startsWith('/historia/') ? '← Späť na vozidlo' : '← Späť';
   const [zakazka, setZakazka] = useState(null);
   const [items, setItems] = useState([]);
   const [tasks, setTasks] = useState([]); 
@@ -994,7 +1003,7 @@ Inšpektor ${companyName}
     <div className="min-h-screen bg-black text-white p-4 md:p-12 relative font-sans font-bold">
       
       <div className="flex flex-col lg:flex-row justify-between items-center mb-8 no-print max-w-5xl mx-auto gap-4">
-        <button onClick={() => router.back()} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs font-black uppercase tracking-widest font-bold">← Späť</button>
+        <button onClick={() => (backUrl ? router.push(backUrl) : router.back())} className="bg-zinc-900 border border-zinc-800 px-6 py-3 rounded-2xl text-zinc-400 hover:text-white transition-all text-xs font-black uppercase tracking-widest font-bold">{backLabel}</button>
         
         <div className="flex bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800 gap-2">
             <button onClick={() => updateJobStatus('Prebieha')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${zakazka.status === 'Prebieha' ? 'bg-amber-600 text-white shadow-lg' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}>Prebieha</button>

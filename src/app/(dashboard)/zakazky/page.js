@@ -2,12 +2,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { useStickyFilter } from '@/app/lib/useStickyFilter';
 
 export default function ZakazkyZoznamPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useStickyFilter('zakazky');
   const [filterStatus, setFilterStatus] = useState(() => {
     if (typeof window !== 'undefined') {
       const param = new URLSearchParams(window.location.search).get('filter');
@@ -118,6 +119,13 @@ export default function ZakazkyZoznamPage() {
 
   const handleFilterChange = (status) => {
     setFilterStatus(status);
+
+    // zapíš do URL, aby sa filter obnovil pri návrate zo zákazky
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('filter', status);
+      window.history.replaceState(null, '', url.toString());
+    }
     
     if (notifState[status]?.isNew) {
       localStorage.setItem(`lastCount_${status}`, notifState[status].count.toString());
@@ -227,12 +235,26 @@ export default function ZakazkyZoznamPage() {
       </div>
 
       <div className="mb-8">
-        <input 
-          type="text" 
-          placeholder="Hľadať (Meno, ŠPZ, Mechanik)..." 
+        <input
+          type="text"
+          placeholder="Hľadať (Meno, ŠPZ, Mechanik)..."
+          value={searchTerm}
           className="bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white outline-none focus:border-red-600 transition-all w-full max-w-md font-bold italic shadow-inner"
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+        {searchTerm && (
+          <div className="flex items-center gap-3 mt-3 flex-wrap">
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-600">Aktívny filter</span>
+            <button
+              onClick={() => setSearchTerm('')}
+              title="Zrušiť filter"
+              className="flex items-center gap-2 bg-red-600/15 border border-red-600/40 text-red-400 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              {searchTerm} <span className="text-xs leading-none">✕</span>
+            </button>
+            <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">{filteredJobs.length} z {jobs.length}</span>
+          </div>
+        )}
       </div>
 
       {/* ZOZNAM ZÁKAZIEK */}
@@ -240,7 +262,7 @@ export default function ZakazkyZoznamPage() {
         {filteredJobs.map(job => (
           <div
             key={job.id}
-            onClick={() => router.push(`/zakazky/${job.id}`)}
+            onClick={() => router.push(`/zakazky/${job.id}?back=${encodeURIComponent(window.location.pathname + window.location.search)}`)}
             className={`
               cursor-pointer p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between group transition-all relative overflow-hidden gap-6 shadow-lg border hover:border-red-600
               ${job.offerStatus === 'Schválené' ? 'bg-blue-900/10 border-blue-600/30' : 'bg-zinc-900/40 border-zinc-800'}
@@ -252,7 +274,14 @@ export default function ZakazkyZoznamPage() {
               <div className={`w-1.5 h-16 rounded-full ${getStatusColor(job.status || 'Prebieha')}`} />
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <span className="text-red-500 font-black italic text-sm uppercase tracking-wider">{job.plate_number}</span>
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    title="Otvoriť kartu vozidla"
+                    onClick={(e) => { e.stopPropagation(); router.push(`/historia/${encodeURIComponent(job.plate_number || '')}`); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); router.push(`/historia/${encodeURIComponent(job.plate_number || '')}`); } }}
+                    className="text-red-500 hover:text-white hover:bg-red-600 font-black italic text-sm uppercase tracking-wider px-2 py-0.5 -mx-2 rounded-lg transition-all cursor-pointer"
+                  >{job.plate_number}</span>
                   
                   {job.offerStatus && (
                     <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase border ${

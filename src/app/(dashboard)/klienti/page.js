@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { fetchWithAuth } from '@/app/lib/apiHelpers';
 import Link from 'next/link';
+import { useStickyFilter } from '@/app/lib/useStickyFilter';
 
 export default function KlientiPage() {
   const [klienti, setKlienti] = useState([]);
@@ -10,7 +11,7 @@ export default function KlientiPage() {
   const [vozidla, setVozidla] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiLoading, setApiLoading] = useState(false); 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useStickyFilter('klienti');
   const [originalName, setOriginalName] = useState('');
 
   const [confirmDeleteName, setConfirmDeleteName] = useState(null);
@@ -381,6 +382,18 @@ export default function KlientiPage() {
         {/* ZOZNAM KLIENTOV */}
         <div className="lg:col-span-1">
           <input type="text" placeholder="Hľadať partnera / ŠPZ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-3 shadow-inner" />
+          {searchTerm && (
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              <button
+                onClick={() => setSearchTerm('')}
+                title="Zrušiť filter"
+                className="flex items-center gap-2 bg-red-600/15 border border-red-600/40 text-red-400 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+              >
+                {searchTerm} <span className="text-xs leading-none">✕</span>
+              </button>
+              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">{filteredKlienti.length} z {klienti.length}</span>
+            </div>
+          )}
           <div className="flex gap-2 mb-5">
             <button onClick={() => setSortMode('abc')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'abc' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>A – Z</button>
             <button onClick={() => setSortMode('date')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'date' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>Najnovší</button>
@@ -419,7 +432,11 @@ export default function KlientiPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                        <div>
                           <div className="flex items-center gap-3 mb-6 flex-wrap">
-                            <span className="bg-white text-black px-5 py-2 rounded-xl font-black text-2xl tracking-widest shadow-2xl uppercase">{v.plate_number}</span>
+                            <Link
+                              href={`/historia/${encodeURIComponent(v.plate_number || '')}`}
+                              title="Otvoriť kartu vozidla"
+                              className="bg-white text-black hover:bg-red-600 hover:text-white px-5 py-2 rounded-xl font-black text-2xl tracking-widest shadow-2xl uppercase transition-all"
+                            >{v.plate_number}</Link>
                             <button onClick={() => openEditCarModal(v)} className="bg-zinc-800 hover:bg-white border border-zinc-700 text-white hover:text-black p-2.5 rounded-xl transition-all text-xs font-bold">✏️</button>
                             <button onClick={() => handleDeleteCar(v)} className="bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-2.5 rounded-xl transition-all text-xs font-bold">🗑️</button>
                             {v.full_history?.length > 0 && (
@@ -439,7 +456,7 @@ export default function KlientiPage() {
                           <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-red-600 mb-4 flex items-center gap-2 italic"><span className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></span> História návštev</h4>
                           <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar italic">
                              {v.full_history?.length > 0 ? v.full_history.map((h) => (
-                                <Link href={`/zakazky/${h.id}`} key={h.id} className="block group">
+                                <Link href={`/zakazky/${h.id}?back=${encodeURIComponent(`/historia/${v.plate_number || ''}`)}`} key={h.id} className="block group">
                                    <div className="bg-black/50 border border-zinc-800 p-4 rounded-2xl hover:border-red-600 transition-all flex justify-between items-center">
                                       <div>
                                           <p className="text-[10px] font-black text-zinc-500 uppercase">{new Date(h.created_at).toLocaleDateString('sk-SK')}</p>
@@ -518,7 +535,13 @@ export default function KlientiPage() {
                   {historyModal.plate_number} · {historyModal.car_brand_model}
                 </p>
               </div>
-              <button onClick={() => setHistoryModal(null)} className="text-zinc-600 hover:text-white font-black text-xl leading-none ml-4 mt-1">✕</button>
+              <div className="flex items-center gap-3 shrink-0">
+                <Link
+                  href={`/historia/${encodeURIComponent(historyModal.plate_number || '')}`}
+                  className="bg-zinc-800 hover:bg-red-600 border border-zinc-700 text-zinc-300 hover:text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                >🚗 Celá karta vozidla</Link>
+                <button onClick={() => setHistoryModal(null)} className="text-zinc-600 hover:text-white font-black text-xl leading-none">✕</button>
+              </div>
             </div>
             <div className="overflow-y-auto flex-1 space-y-4 pr-1">
               {historyModal.full_history?.length > 0 ? historyModal.full_history.map((h) => (
@@ -533,7 +556,7 @@ export default function KlientiPage() {
                     </div>
                     <div className="text-right shrink-0 ml-4">
                       <p className="text-lg font-black text-white">{h.total_price?.toFixed(2)} €</p>
-                      <Link href={`/zakazky/${h.id}`} className="text-[9px] font-black uppercase text-red-600 hover:text-red-400 transition-colors tracking-widest">→ Otvoriť zákazku</Link>
+                      <Link href={`/zakazky/${h.id}?back=${encodeURIComponent(`/historia/${historyModal.plate_number || ''}`)}`} className="text-[9px] font-black uppercase text-red-600 hover:text-red-400 transition-colors tracking-widest">→ Otvoriť zákazku</Link>
                     </div>
                   </div>
                   {h.job_items?.length > 0 && (
