@@ -1,7 +1,10 @@
 import './globals.css';
 import Script from 'next/script';
 
-const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+// Hodnota NEXT_PUBLIC_GA_ID ma na zaciatku neviditelny BOM znak (ulozena ako UTF-8 with BOM),
+// takze sa gtag nacitaval ako ?id=%EF%BB%BFG-250VH3NKCB — taky identifikator Google odmietne
+// a GA4 nezbiera vobec ziadne udaje. Preto BOM a biele znaky odstranujeme.
+const GA_ID = (process.env.NEXT_PUBLIC_GA_ID || '').replace(/[\uFEFF\u200B\s]/g, '');
 
 export const metadata = {
   metadataBase: new URL('https://autoalma.sk'),
