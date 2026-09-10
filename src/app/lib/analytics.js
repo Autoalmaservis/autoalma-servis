@@ -109,7 +109,10 @@ export const trackGuideStepOpen = (stepNum, stepTitle) =>
 // ─── SÚHLAS S COOKIES ─────────────────────────────────────────
 // Google Consent Mode v2 — bez udeleného súhlasu sa neukladajú cookies,
 // GA4 posiela len anonymné signály bez identifikátorov.
-export const setConsent = (granted) => {
+// isNewChoice = false pri obnove skôr udeleného súhlasu — vtedy sa
+// stav nastaví, ale udalosť sa neposiela, aby sa neduplikovala pri
+// každom načítaní stránky.
+export const setConsent = (granted, isNewChoice = true) => {
   const value = granted ? 'granted' : 'denied';
   gtag('consent', 'update', {
     ad_storage: value,
@@ -117,5 +120,7 @@ export const setConsent = (granted) => {
     ad_personalization: value,
     analytics_storage: value,
   });
-  trackEvent(granted ? 'cookie_consent_accept' : 'cookie_consent_reject');
+  if (isNewChoice) {
+    trackEvent(granted ? 'cookie_consent_accept' : 'cookie_consent_reject');
+  }
 };

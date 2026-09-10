@@ -15,7 +15,9 @@ export default function CookieConsent() {
     let saved = null;
     try { saved = localStorage.getItem(KEY); } catch { }
     if (saved === 'granted') {
-      setConsent(true);
+      // Obnova skôr udeleného súhlasu — nie je to nová voľba, takže
+      // sa neposiela udalosť. Inak by pribúdala pri každom načítaní stránky.
+      setConsent(true, false);
     } else if (saved !== 'denied') {
       // Ešte sa nerozhodol — ukážeme lištu (s malým odkladom, nech neprekryje úvod hneď)
       const t = setTimeout(() => setVisible(true), 1200);

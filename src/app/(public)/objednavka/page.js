@@ -58,7 +58,14 @@ export default function VerejnaObjednavkaPage() {
   };
 
   useEffect(() => {
-    trackBookingStep(1, STEP_NAMES[1]);
+    // Prvý krok hlásime s malým odkladom, nie hneď pri zobrazení.
+    // Udalosť poslaná v tej istej chvíli ako načítanie stránky sa do GA4
+    // nedostávala; s odkladom je knižnica Googlu spoľahlivo načítaná.
+    // Zároveň to lepšie vystihuje realitu — kto zmizne do pol sekundy,
+    // objednávku reálne nezačal.
+    const startTimer = setTimeout(() => {
+      trackBookingStep(1, STEP_NAMES[1]);
+    }, 800);
 
     // Odchod bez odoslania — pošleme, na ktorom kroku a po akom čase odišiel
     const reportAbandon = () => {
@@ -75,6 +82,7 @@ export default function VerejnaObjednavkaPage() {
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', reportAbandon);
     return () => {
+      clearTimeout(startTimer);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', reportAbandon);
     };
