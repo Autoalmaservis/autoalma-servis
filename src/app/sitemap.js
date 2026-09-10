@@ -41,7 +41,11 @@ export default async function sitemap() {
 
   return [
     { url: BASE, lastModified: new Date(), changeFrequency: 'weekly', priority: 1 },
-    { url: `${BASE}/objednavka`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
+    // Cieľové stránky pre reklamu — vyššia priorita ako bežné podstránky
+    { url: `${BASE}/cistenie-dpf`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.9 },
+    { url: `${BASE}/diagnostika-vozidiel`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.9 },
+    { url: `${BASE}/objednavka`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.8 },
+    { url: `${BASE}/diagnostika`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
     ...sectionUrls,
     ...itemUrls,
   ];

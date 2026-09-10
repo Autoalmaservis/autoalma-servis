@@ -284,7 +284,7 @@ export default function VerejnaObjednavkaPage() {
             <div className="mt-8 pt-6 border-t border-zinc-800 flex flex-wrap justify-center gap-4 text-[9px] text-zinc-600 font-black uppercase tracking-widest">
               <span>📞 0940 449 449</span>
               <span>📍 Svornosti 119, Bratislava</span>
-              <span>⏰ Po–Pi 7:00–17:00</span>
+              <span>⏰ Po–Pi 8:00–16:00</span>
             </div>
           </div>
         </div>

@@ -57,6 +57,10 @@ export const trackBookingSubmit = (plate, worksCount) =>
   trackEvent('booking_submit', { license_plate: plate, works_count: worksCount });
 
 // ─── VEREJNÁ OBJEDNÁVKA ───────────────────────────────────────
+// Klik na "Objednať termín" — meria záujem ešte pred vyplnením formulára
+export const trackBookingCta = (source = 'hero') =>
+  trackEvent('booking_cta_click', { source });
+
 export const trackObjednavkaSubmit = () =>
   trackEvent('public_booking_submit');
 

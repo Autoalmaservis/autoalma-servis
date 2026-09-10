@@ -98,28 +98,35 @@ export default function HomePage() {
     '@context': 'https://schema.org',
     '@type': 'AutoRepair',
     name: 'AutoAlma Servis',
-    description: 'Autoservis v Bratislave, Petržalka. Mechanické práce, elektrodiagnostika, klimatizácia, pneuservis.',
+    description: 'Autoservis v Bratislave – Podunajských Biskupiciach. Mechanické práce, elektrodiagnostika, klimatizácia, pneuservis, čistenie DPF a STK.',
     url: 'https://autoalma.sk',
     telephone: '+421940449449',
     email: 'autoalma@autoalma.sk',
+    image: 'https://autoalma.sk/autoalma-icon.png',
     address: {
       '@type': 'PostalAddress',
-      streetAddress: 'Svornosti 119',
+      streetAddress: 'Ulica Svornosti 119',
       addressLocality: 'Bratislava',
+      addressRegion: 'Podunajské Biskupice',
       postalCode: '821 06',
       addressCountry: 'SK',
     },
     geo: {
       '@type': 'GeoCoordinates',
-      latitude: 48.1221,
-      longitude: 17.1077,
+      latitude: 48.1257437,
+      longitude: 17.1973119,
     },
+    areaServed: [
+      'Bratislava', 'Podunajské Biskupice', 'Vrakuňa', 'Ružinov',
+      'Rovinka', 'Most pri Bratislave', 'Dunajská Lužná',
+    ],
     openingHoursSpecification: [
-      { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday'], opens: '08:00', closes: '17:00' },
+      { '@type': 'OpeningHoursSpecification', dayOfWeek: ['Monday','Tuesday','Wednesday','Thursday','Friday'], opens: '08:00', closes: '16:00' },
     ],
     priceRange: '€€',
-    servesCuisine: undefined,
-    hasMap: 'https://maps.google.com/?q=Svornosti+119+Bratislava',
+    currenciesAccepted: 'EUR',
+    hasMap: 'https://maps.google.com/?q=Ulica+Svornosti+119,+821+06+Bratislava',
+    sameAs: ['https://www.google.com/maps/place/Autoalma'],
   };
 
   return (
@@ -628,7 +635,7 @@ export default function HomePage() {
       {/* FOOTER */}
       <footer className="py-8 px-6 border-t border-zinc-900 flex flex-col md:flex-row items-center justify-between gap-4">
         <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest">
-          © 2025 Autoalma s.r.o. · IČO: 46044876
+          © {new Date().getFullYear()} Autoalma s.r.o. · IČO: 46044876
         </p>
         <Link
           href="/system"
