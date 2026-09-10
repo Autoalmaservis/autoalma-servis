@@ -26,10 +26,12 @@ function najdiFotku(nazov) {
 
 export default function FotoMiesto({
   nazov,
-  popis,          // čo má byť na fotke — zobrazí sa v prázdnom rámiku
-  alt,            // alternatívny text pre hotovú fotku
+  popis,            // čo má byť na fotke — zobrazí sa v prázdnom rámiku
+  alt,              // alternatívny text pre hotovú fotku
   pomer = 'aspect-[4/3]',
   className = '',
+  bezRamika = false, // keď fotka chýba, nevykreslí sa nič (pre stránky, kde by
+                     // prázdne rámiky pôsobili nedokončene — napr. 21 služieb)
 }) {
   const cesta = najdiFotku(nazov);
 
@@ -45,6 +47,8 @@ export default function FotoMiesto({
       </figure>
     );
   }
+
+  if (bezRamika) return null;
 
   return (
     <div

@@ -24,6 +24,30 @@ diagnostika-displej    Displej pristroja s nacitanymi hodnotami
 diagnostika-praca      Technik pri merani v motorovom priestore
 
 
+JEDNOTLIVE SLUZBY  (/sluzby/<kategoria>/<sluzba>)
+-------------------------------------------------
+Meno suboru:  sluzba-<slug sluzby>       a volitelne  sluzba-<slug>-2
+Slug je posledna cast adresy stranky. Priklady:
+
+  sluzba-cistenie-dpf-cat        /sluzby/mechanicke-prace/cistenie-dpf-cat
+  sluzba-vymena-brzd             /sluzby/mechanicke-prace/vymena-brzd
+  sluzba-oprava-podvozku         /sluzby/mechanicke-prace/oprava-podvozku
+  sluzba-pravidelny-servis       /sluzby/mechanicke-prace/pravidelny-servis
+  sluzba-dekarbonizacia          /sluzby/mechanicke-prace/dekarbonizacia
+  sluzba-diagnostika             /sluzby/elektro-diagnostika/diagnostika
+  sluzba-chiptuning              /sluzby/elektro-diagnostika/chiptuning
+  sluzba-oprava-abs              /sluzby/elektro-diagnostika/oprava-abs
+  sluzba-oprava-adblue           /sluzby/elektro-diagnostika/oprava-adblue
+  sluzba-plnenie-klimatizacie    /sluzby/klimatizacia/plnenie-klimatizacie
+  sluzba-cistenie-ozonom         /sluzby/klimatizacia/cistenie-ozonom
+  sluzba-prezuvanie-pneumatiky   /sluzby/pneuservis/prezuvanie-pneumatiky
+  sluzba-vyvazovanie             /sluzby/pneuservis/vyvazovanie
+
+Na tychto strankach sa prazdny ramik NEZOBRAZUJE - kym fotka chyba, nie je
+tam nic. Az ked subor pridas, objavi sa. (Fotky nahrate v administracii ku
+konkretnej sluzbe maju prednost pred tymto priecinkom.)
+
+
 ODPORUCANIA K FOTKAM
 --------------------
 - Fotky z mobilu su v poriadku. Dolezitejsi je poriadok v zabere a svetlo.
