@@ -66,9 +66,16 @@ export default function RootLayout({ children }) {
         {children}
         {GA_ID && (
           <>
-            {/* Predvolený stav súhlasu MUSÍ byť nastavený skôr, než sa načíta gtag.
-                Preto beforeInteractive — inak by sa stihli uložiť cookies bez súhlasu. */}
-            <Script id="consent-default" strategy="beforeInteractive">
+            {/* Celé nastavenie merania beží v jednom skripte a MUSÍ byť
+                beforeInteractive. Dôvody sú dva:
+
+                1. Predvolený stav súhlasu musí byť zapísaný skôr, než sa načíta
+                   gtag — inak by sa stihli uložiť cookies bez súhlasu.
+                2. Príkaz `config` musí byť vo fronte skôr než akákoľvek udalosť.
+                   gtag spracúva frontu v poradí; udalosť zapísaná pred `config`
+                   nemá kam patriť a zahodí sa. Presne preto sa strácala udalosť
+                   prvého kroku objednávky, ktorá vzniká hneď pri zobrazení. */}
+            <Script id="gtag-init" strategy="beforeInteractive">
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
@@ -81,24 +88,17 @@ export default function RootLayout({ children }) {
                 });
                 gtag('set', 'ads_data_redaction', true);
                 gtag('set', 'url_passthrough', true);
+                gtag('js', new Date());
+                gtag('config', '${GA_ID}', {
+                  anonymize_ip: true,
+                  cookie_flags: 'SameSite=None;Secure'
+                });
               `}
             </Script>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
               strategy="afterInteractive"
             />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${GA_ID}', {
-                  page_path: window.location.pathname,
-                  anonymize_ip: true,
-                  cookie_flags: 'SameSite=None;Secure'
-                });
-              `}
-            </Script>
           </>
         )}
         {CLARITY_ID && (
