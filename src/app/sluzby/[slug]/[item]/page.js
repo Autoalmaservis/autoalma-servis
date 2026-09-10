@@ -134,6 +134,21 @@ export default async function ItemDetailPage({ params }) {
             <div className="h-[2px] w-12 bg-red-600" />
             <div className="h-[1px] flex-grow bg-gradient-to-r from-zinc-800 to-transparent" />
           </div>
+
+          {/* DÔKAZY */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-10">
+            {[
+              { v: '4,6 ★', l: '148 hodnotení na Google' },
+              { v: '12 mes.', l: 'záruka na vykonanú prácu' },
+              { v: 'od 35 €', l: 'normohodina, skutočný čas' },
+              { v: 'Cenu vopred', l: 'schvaľujete v mobile' },
+            ].map((p, i) => (
+              <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl px-5 py-5">
+                <p className="text-white text-lg md:text-xl font-black italic tracking-tight leading-none mb-1.5">{p.v}</p>
+                <p className="text-zinc-400 text-[11px] font-bold leading-snug">{p.l}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -155,7 +170,7 @@ export default async function ItemDetailPage({ params }) {
                   </div>
                 );
                 return (
-                  <p key={i} className="text-zinc-300 text-base font-bold leading-relaxed pl-8">
+                  <p key={i} className="text-zinc-300 text-[15px] md:text-base font-bold leading-[1.8] pl-8 mb-4 max-w-[65ch]">
                     {text}
                   </p>
                 );
@@ -164,16 +179,43 @@ export default async function ItemDetailPage({ params }) {
           )}
 
           {!paragraphs.length && images.length === 0 && (
-            <div className="py-16 border-2 border-dashed border-zinc-900 rounded-[2rem] text-center text-zinc-600 font-black uppercase text-xs tracking-widest italic">
-              Popis tejto služby čoskoro doplníme
+            <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-8 md:p-10">
+              <p className="text-white font-black uppercase italic tracking-tight text-lg mb-4">
+                {itemData.title} v AutoAlma
+              </p>
+              <p className="text-zinc-300 text-[15px] font-bold leading-[1.8] max-w-[65ch]">
+                Túto službu robíme bežne. Presný rozsah a cenu vieme povedať až po obhliadke
+                a diagnostike vozidla — a dozviete sa ich skôr, než začneme pracovať. Cenová
+                ponuka vám príde do mobilu a bez vášho súhlasu na aute nič nerobíme.
+                Na vykonanú prácu dávame záruku 12 mesiacov.
+              </p>
             </div>
           )}
 
           <ImageGallery images={images} />
         </div>
 
+        {/* AKO TO PREBIEHA */}
+        <div className="mt-16">
+          <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500 mb-6">Ako to u nás prebieha</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { n: '1', t: 'Objednáte sa', d: 'Online za dve minúty alebo telefonicky.' },
+              { n: '2', t: 'Pozrieme auto', d: 'Diagnostika a presný rozsah práce.' },
+              { n: '3', t: 'Schválite cenu', d: 'Ponuka príde do mobilu. Bez súhlasu nezačíname.' },
+              { n: '4', t: 'Opravíme', d: 'Test jazdou a záruka 12 mesiacov.' },
+            ].map((k, i) => (
+              <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6">
+                <span className="inline-flex w-8 h-8 rounded-full bg-red-600 text-white font-black italic text-sm items-center justify-center mb-4">{k.n}</span>
+                <p className="text-white font-black uppercase italic tracking-tight text-sm mb-1.5">{k.t}</p>
+                <p className="text-zinc-400 text-xs font-bold leading-relaxed">{k.d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* CTA */}
-        <div className="mt-16 bg-zinc-950 border border-zinc-900 rounded-[2rem] p-8 md:p-10 relative overflow-hidden">
+        <div className="mt-12 bg-zinc-950 border border-zinc-900 rounded-[2rem] p-8 md:p-10 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-red-600/60 to-transparent" />
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>

@@ -16,21 +16,111 @@ export const metadata = {
   },
 };
 
+/* ─────────────────────────────────────────────────────────────
+   SCHÉMA FILTRA — rez stenovým DPF filtrom.
+   Výfukové plyny vchádzajú do kanálikov, ktoré sú na konci zaslepené,
+   takže musia prejsť cez poréznu stenu. Sadze a popol zostanú vnútri.
+   Ľavý obrázok ukazuje zanesený filter, pravý vyčistený.
+   ───────────────────────────────────────────────────────────── */
+function SchemaFiltra({ zaneseny }) {
+  const kanaliky = [0, 1, 2, 3, 4, 5, 6];
+  const hrubkaSadzi = zaneseny ? 5 : 1.2;
+  const farbaSadzi = zaneseny ? '#3f3f46' : '#52525b';
+
+  return (
+    <svg viewBox="0 0 280 170" className="w-full h-auto" role="img"
+      aria-label={zaneseny ? 'Rez zaneseným DPF filtrom' : 'Rez vyčisteným DPF filtrom'}>
+      {/* teleso filtra */}
+      <rect x="34" y="18" width="212" height="134" rx="14"
+        fill="#0a0a0a" stroke={zaneseny ? '#7f1d1d' : '#166534'} strokeWidth="2" />
+
+      {/* kanáliky */}
+      {kanaliky.map((i) => {
+        const y = 30 + i * 17;
+        const zaslepenyVzadu = i % 2 === 0;
+        return (
+          <g key={i}>
+            <rect x="42" y={y} width="196" height="12" fill="#18181b" />
+            {/* vrstva sadzí na stenách kanálika */}
+            <rect x="42" y={y} width="196" height={hrubkaSadzi} fill={farbaSadzi} />
+            <rect x="42" y={y + 12 - hrubkaSadzi} width="196" height={hrubkaSadzi} fill={farbaSadzi} />
+            {/* zátka na jednom konci — to núti plyn prejsť cez stenu */}
+            {zaslepenyVzadu
+              ? <rect x="228" y={y} width="10" height="12" fill="#dc2626" />
+              : <rect x="42" y={y} width="10" height="12" fill="#dc2626" />}
+          </g>
+        );
+      })}
+
+      {/* vstup a výstup */}
+      <path d="M8 78 L34 78 M8 92 L34 92" stroke="#a1a1aa" strokeWidth="2" />
+      <path d="M246 78 L272 78 M246 92 L272 92" stroke="#a1a1aa" strokeWidth="2" />
+      <polygon points="26,85 18,80 18,90" fill="#a1a1aa" />
+      <polygon points="272,85 264,80 264,90" fill="#a1a1aa" transform="rotate(180 268 85)" />
+
+      <text x="8" y="164" fill="#71717a" fontSize="9" fontWeight="700">VÝFUKOVÉ PLYNY</text>
+      <text x="188" y="164" fill="#71717a" fontSize="9" fontWeight="700">ČISTÝ VÝFUK</text>
+      <text x="8" y="12" fill="#71717a" fontSize="9" fontWeight="700">
+        {zaneseny ? 'ZANESENÝ FILTER' : 'PO VYČISTENÍ'}
+      </text>
+    </svg>
+  );
+}
+
+/* Ikony príznakov — jednoduché, aby fungovali aj v malej veľkosti */
+const Ikona = ({ d, viacCiar }) => (
+  <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={d} />
+    {viacCiar && viacCiar.map((c, i) => <path key={i} d={c} />)}
+  </svg>
+);
+
 const priznaky = [
-  { icon: '🟠', title: 'Svieti kontrolka DPF', desc: 'Alebo kontrolka motora, ktorá sa po chvíli jazdy vráti.' },
-  { icon: '🐌', title: 'Auto stratilo výkon', desc: 'Nezrýchľuje ako predtým, prípadne spadne do núdzového režimu.' },
-  { icon: '⛽', title: 'Vyššia spotreba', desc: 'Motor sa neustále pokúša o regeneráciu a spaľuje palivo navyše.' },
-  { icon: '🔁', title: 'Časté regenerácie', desc: 'Ventilátor beží aj po vypnutí, cítiť horúci zápach.' },
-  { icon: '🛢️', title: 'Stúpa hladina oleja', desc: 'Nedokončené regenerácie riedia olej naftou — to už je vážne.' },
-  { icon: '💨', title: 'Dymí z výfuku', desc: 'Čierny alebo modrastý dym pri akcelerácii.' },
+  {
+    title: 'Svieti kontrolka DPF',
+    desc: 'Alebo kontrolka motora, ktorá sa po chvíli jazdy vráti.',
+    d: 'M12 3 L21 19 H3 Z',
+    viacCiar: ['M12 10 v4', 'M12 16.5 v.01'],
+  },
+  {
+    title: 'Auto stratilo výkon',
+    desc: 'Nezrýchľuje ako predtým, prípadne spadne do núdzového režimu.',
+    d: 'M3 18 h18',
+    viacCiar: ['M5 18 V13', 'M10 18 V10', 'M15 18 V14', 'M20 18 V16'],
+  },
+  {
+    title: 'Vyššia spotreba',
+    desc: 'Motor sa neustále pokúša o regeneráciu a spaľuje palivo navyše.',
+    d: 'M6 21 V6 a2 2 0 0 1 2-2 h4 a2 2 0 0 1 2 2 v15',
+    viacCiar: ['M4 21 h12', 'M16 10 h2 a2 2 0 0 1 2 2 v5 a1.5 1.5 0 0 0 3 0 V9 l-3-3'],
+  },
+  {
+    title: 'Časté regenerácie',
+    desc: 'Ventilátor beží aj po vypnutí motora a cítiť horúci zápach.',
+    d: 'M12 4 a8 8 0 1 1-8 8',
+    viacCiar: ['M4 5 v7 h7'],
+  },
+  {
+    title: 'Stúpa hladina oleja',
+    desc: 'Nedokončené regenerácie riedia olej naftou — to už je vážne.',
+    d: 'M12 3 c4 5 6 7.5 6 10.5 a6 6 0 0 1-12 0 C6 10.5 8 8 12 3 Z',
+    viacCiar: ['M9 14 h6'],
+  },
+  {
+    title: 'Dymí z výfuku',
+    desc: 'Čierny alebo modrastý dym pri akcelerácii.',
+    d: 'M4 18 h13 a3 3 0 0 0 0-6 h-1',
+    viacCiar: ['M4 13 h6 a2.5 2.5 0 0 0 0-5', 'M4 8 h3'],
+  },
 ];
 
 const kroky = [
   { n: '1', t: 'Diagnostika', d: 'Načítame chybové kódy a hodnoty zo snímačov tlaku — či je problém naozaj vo filtri, alebo len v snímači.' },
-  { n: '2', t: 'Demontáž', d: 'Filter vyberieme z auta. Čistenie chemikáliou naliatou do výfuku za jazdy zanesený filter nezachráni.' },
+  { n: '2', t: 'Demontáž', d: 'Filter vyberieme z auta. Chemikália naliata do výfuku za jazdy zanesený filter nezachráni.' },
   { n: '3', t: 'Vyčistenie', d: 'Vymontovaný filter prečistíme a prepláchneme, kým z neho neodíde usadený popol a sadze.' },
-  { n: '4', t: 'Kontrola priepustnosti', d: 'Zmeriame, či filter naozaj pustí vzduch tak, ako má. Ak nie, poviem vám to rovno.' },
-  { n: '5', t: 'Montáž a vymazanie', d: 'Vrátime filter, vymažeme chyby a vynulujeme adaptácie regenerácie.' },
+  { n: '4', t: 'Kontrola', d: 'Zmeriame, či filter naozaj pustí vzduch tak, ako má. Ak nie, poviem vám to rovno.' },
+  { n: '5', t: 'Montáž', d: 'Vrátime filter, vymažeme chyby a vynulujeme adaptácie regenerácie.' },
   { n: '6', t: 'Testovacia jazda', d: 'Overíme, že tlaky sedia a auto ide tak, ako má.' },
 ];
 
@@ -52,7 +142,7 @@ const faqs = [
     a: 'Bežne to zvládneme v priebehu jedného dňa. Presnejšie to vieme povedať po diagnostike a demontáži — záleží na tom, ako je filter v aute umiestnený a v akom je stave.',
   },
   {
-    q: 'Prečo nestačí prípravok z autoservisu alebo z benzínky?',
+    q: 'Prečo nestačí prípravok z benzínky?',
     a: 'Prípravky liate do nádrže alebo do výfuku pomôžu nanajvýš pri filtri, ktorý je mierne zanesený sadzami. Popol z prísad v oleji sa nimi neodstráni — a práve ten filter po čase upchá. Preto filter vyberáme a čistíme mimo auta.',
   },
   {
@@ -77,12 +167,7 @@ export default function CistenieDpfPage() {
     serviceType: 'Čistenie DPF filtra, katalyzátora a EGR',
     description: 'Čistenie zaneseného DPF filtra, katalyzátora a EGR chladiča bez výmeny za nový diel. Bratislava – Podunajské Biskupice.',
     areaServed: { '@type': 'City', name: 'Bratislava' },
-    offers: {
-      '@type': 'Offer',
-      priceCurrency: 'EUR',
-      price: '130',
-      description: 'Čistenie DPF filtra od 130 €',
-    },
+    offers: { '@type': 'Offer', priceCurrency: 'EUR', price: '130', description: 'Čistenie DPF filtra od 130 €' },
     provider: {
       '@type': 'AutoRepair',
       name: 'AutoAlma Servis',
@@ -116,41 +201,66 @@ export default function CistenieDpfPage() {
       <SiteHeader />
 
       {/* HERO */}
-      <section className="pt-32 pb-16 px-6 text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-red-600/10 via-transparent to-transparent pointer-events-none" />
-        <p className="text-[10px] font-black uppercase tracking-[0.35em] text-red-600 mb-4 italic">
-          Bratislava – Podunajské Biskupice
-        </p>
-        <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-[0.95] mb-6 max-w-4xl mx-auto">
-          Čistenie DPF filtra <span className="text-red-600">bez výmeny za nový</span>
-        </h1>
-        <p className="text-zinc-200 text-base md:text-xl font-bold max-w-2xl mx-auto leading-relaxed mb-3">
-          Filter vyberieme z auta, vyčistíme a zmeriame, či naozaj pustí vzduch tak, ako má.
-          Od 130 € — namiesto ceny nového dielu.
-        </p>
-        <p className="text-zinc-400 text-sm md:text-base font-bold max-w-2xl mx-auto leading-relaxed mb-9">
-          Ak sa filter zachrániť nedá, poviem vám to hneď po demontáži — nie až po zaplatení.
-        </p>
+      <section className="pt-28 md:pt-32 pb-16 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(220,38,38,0.14),transparent_60%)] pointer-events-none" />
+        <div className="max-w-6xl mx-auto relative grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-16 items-center">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.35em] text-red-600 mb-4 italic">
+              Bratislava – Podunajské Biskupice
+            </p>
+            <h1 className="text-4xl md:text-5xl xl:text-6xl font-black uppercase italic tracking-tighter leading-[0.95] mb-6">
+              Čistenie DPF filtra <span className="text-red-600">bez výmeny za nový</span>
+            </h1>
+            <p className="text-zinc-200 text-base md:text-lg font-bold leading-relaxed mb-4">
+              Filter vyberieme z auta, prečistíme a zmeriame, či naozaj pustí vzduch tak, ako má.
+              Od 130 € — namiesto ceny nového dielu.
+            </p>
+            <p className="text-zinc-400 text-sm md:text-base font-bold leading-relaxed mb-8">
+              Ak sa filter zachrániť nedá, poviem vám to hneď po demontáži — nie až po zaplatení.
+            </p>
 
-        <div className="flex flex-col sm:flex-row items-stretch gap-3 w-full max-w-lg mx-auto">
-          <Link href="/objednavka"
-            className="flex-1 bg-red-600 hover:bg-red-500 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-2xl shadow-red-600/25 hover:scale-[1.03] text-center">
-            📅 Objednať termín
-          </Link>
-          <a href="tel:0940449449"
-            className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all text-center">
-            📞 0940 449 449
-          </a>
+            <div className="flex flex-col sm:flex-row items-stretch gap-3 max-w-lg">
+              <Link href="/objednavka"
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-2xl shadow-red-600/25 hover:scale-[1.03] text-center">
+                📅 Objednať termín
+              </Link>
+              <a href="tel:0940449449"
+                className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all text-center">
+                📞 0940 449 449
+              </a>
+            </div>
+          </div>
+
+          {/* SCHÉMA — pred a po */}
+          <div className="bg-zinc-950/80 border border-zinc-900 rounded-[2rem] p-6 md:p-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-5 text-center">
+              Čo sa vo filtri deje
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-2xl bg-black border border-red-900/40 p-3">
+                <SchemaFiltra zaneseny />
+              </div>
+              <div className="rounded-2xl bg-black border border-green-900/40 p-3">
+                <SchemaFiltra />
+              </div>
+            </div>
+            <p className="text-zinc-400 text-xs font-bold leading-relaxed mt-5">
+              Kanáliky filtra sú striedavo zaslepené <span className="text-red-500">(červené zátky)</span>, takže
+              výfukové plyny musia prejsť cez poréznu stenu. Sadze a popol zostanú vnútri a postupne
+              zúžia priechod. Čistením sa tá vrstva odstráni.
+            </p>
+          </div>
         </div>
 
-        <div className="w-full max-w-4xl mx-auto mt-14 grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* DÔKAZY */}
+        <div className="max-w-6xl mx-auto mt-14 grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { v: 'od 130 €', l: 'čistenie DPF filtra' },
             { v: '4,6 ★', l: '148 hodnotení na Google' },
             { v: '12 mes.', l: 'záruka na vykonanú prácu' },
             { v: 'Meranie', l: 'priepustnosti po čistení' },
           ].map((p, i) => (
-            <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl px-5 py-6 text-left">
+            <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl px-5 py-6">
               <p className="text-white text-xl md:text-2xl font-black italic tracking-tight leading-none mb-2">{p.v}</p>
               <p className="text-zinc-400 text-[11px] md:text-xs font-bold leading-snug">{p.l}</p>
             </div>
@@ -170,8 +280,8 @@ export default function CistenieDpfPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {priznaky.map((p, i) => (
-              <div key={i} className="bg-black border border-zinc-900 rounded-2xl p-7">
-                <span className="text-3xl block mb-4">{p.icon}</span>
+              <div key={i} className="bg-black border border-zinc-900 hover:border-red-600/40 rounded-2xl p-7 transition-colors">
+                <div className="text-red-500 mb-4"><Ikona d={p.d} viacCiar={p.viacCiar} /></div>
                 <p className="text-white font-black uppercase italic tracking-tight text-base mb-2">{p.title}</p>
                 <p className="text-zinc-400 text-sm font-bold leading-relaxed">{p.desc}</p>
               </div>
@@ -187,35 +297,84 @@ export default function CistenieDpfPage() {
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Krok po kroku</p>
             <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter">Ako u nás čistíme DPF</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+          <ol className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {kroky.map((s, i) => (
-              <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-7 flex gap-5">
-                <span className="text-red-600 font-black italic text-3xl leading-none shrink-0">{s.n}</span>
-                <div>
-                  <p className="text-white font-black uppercase italic tracking-tight text-base mb-2">{s.t}</p>
-                  <p className="text-zinc-400 text-sm font-bold leading-relaxed">{s.d}</p>
-                </div>
-              </div>
+              <li key={i} className="relative bg-zinc-950 border border-zinc-900 rounded-2xl p-7 pl-20">
+                <span className="absolute left-6 top-7 w-9 h-9 rounded-full bg-red-600 text-white font-black italic text-base flex items-center justify-center shadow-lg shadow-red-600/30">
+                  {s.n}
+                </span>
+                <p className="text-white font-black uppercase italic tracking-tight text-base mb-2">{s.t}</p>
+                <p className="text-zinc-400 text-sm font-bold leading-relaxed">{s.d}</p>
+              </li>
             ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ČISTIŤ ALEBO VYMENIŤ */}
+      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Rozhodnutie</p>
+            <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter">Vyčistiť, alebo vymeniť?</h2>
           </div>
+          <div className="grid md:grid-cols-2 gap-5">
+            <div className="bg-black border border-green-900/40 rounded-[2rem] p-8">
+              <p className="text-green-500 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Vyčistenie</p>
+              <p className="text-white font-black italic text-2xl tracking-tight mb-5">Vo väčšine prípadov</p>
+              <ul className="space-y-3">
+                {[
+                  'Filter je zanesený sadzami a popolom, ale celý',
+                  'Keramická vložka nie je popraskaná ani roztavená',
+                  'Teleso je bez trhlín a netesností',
+                  'Priepustnosť sa po čistení vráti na použiteľnú hodnotu',
+                ].map((t, i) => (
+                  <li key={i} className="flex gap-3 text-zinc-300 text-sm font-bold leading-relaxed">
+                    <span className="text-green-500 shrink-0">✓</span>{t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="bg-black border border-red-900/40 rounded-[2rem] p-8">
+              <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] mb-4">Výmena</p>
+              <p className="text-white font-black italic text-2xl tracking-tight mb-5">Keď už niet čo zachraňovať</p>
+              <ul className="space-y-3">
+                {[
+                  'Keramická vložka je roztavená alebo rozpadnutá',
+                  'Teleso filtra je prasknuté',
+                  'Filter ani po vyčistení nepustí dostatok vzduchu',
+                  'Poškodenie vzniklo prehriatím pri opakovaných regeneráciách',
+                ].map((t, i) => (
+                  <li key={i} className="flex gap-3 text-zinc-300 text-sm font-bold leading-relaxed">
+                    <span className="text-red-500 shrink-0">✕</span>{t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <p className="text-center text-zinc-400 text-sm font-bold mt-8 max-w-2xl mx-auto leading-relaxed">
+            Do ktorej skupiny váš filter patrí, zistíme až po demontáži. Poviem vám to skôr,
+            než začneme čistiť — aby ste neplatili za prácu, ktorá nemá zmysel.
+          </p>
         </div>
       </section>
 
       {/* CENNÍK */}
-      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
+      <section className="py-20 px-6 border-t border-zinc-900">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-12">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Koľko to stojí</p>
             <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter">Cenník</h2>
           </div>
-          <div className="bg-black border border-zinc-900 rounded-[2rem] overflow-hidden divide-y divide-zinc-900">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] overflow-hidden divide-y divide-zinc-900">
             {cennik.map((c, i) => (
-              <div key={i} className="px-7 py-5 flex items-center justify-between gap-4">
+              <div key={i} className="px-7 py-5 flex items-center justify-between gap-4 hover:bg-black/40 transition-colors">
                 <div>
                   <p className="text-white text-sm font-bold">{c.name}</p>
                   <p className="text-zinc-400 text-[11px] font-bold mt-0.5">{c.note}</p>
                 </div>
-                <span className="text-red-500 font-black text-sm shrink-0">{c.price}</span>
+                <span className="text-red-500 font-black text-sm shrink-0 tabular-nums">{c.price}</span>
               </div>
             ))}
           </div>
@@ -226,7 +385,7 @@ export default function CistenieDpfPage() {
       </section>
 
       {/* FAQ */}
-      <section className="py-20 px-6 border-t border-zinc-900">
+      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-12">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Než zavoláte</p>
@@ -247,7 +406,7 @@ export default function CistenieDpfPage() {
       </section>
 
       {/* FORMULÁR */}
-      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
+      <section className="py-20 px-6 border-t border-zinc-900">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-10">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Nechajte to na nás</p>
@@ -264,7 +423,7 @@ export default function CistenieDpfPage() {
       </section>
 
       {/* PÄTIČKA */}
-      <footer className="px-6 py-12 border-t border-zinc-900 text-center">
+      <footer className="px-6 py-12 border-t border-zinc-900 text-center bg-zinc-950">
         <p className="font-black uppercase italic tracking-tighter text-lg mb-3">
           Auto<span className="text-red-600">Alma</span>
         </p>

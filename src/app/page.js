@@ -373,7 +373,7 @@ export default function HomePage() {
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Čo robíme</p>
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Naše Služby</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {services.map((s, i) => (
               <div
                 key={i}
@@ -443,8 +443,8 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {steps.map((s, i) => (
-              <div key={i} className="bg-black border border-zinc-900 rounded-2xl p-7 flex gap-5">
-                <span className="text-red-600 font-black italic text-3xl leading-none shrink-0">{s.n}</span>
+              <div key={i} className="bg-black border border-zinc-900 hover:border-red-600/40 rounded-2xl p-7 flex gap-5 transition-colors">
+                <span className="shrink-0 w-10 h-10 rounded-full bg-red-600 text-white font-black italic text-base flex items-center justify-center shadow-lg shadow-red-600/25">{s.n}</span>
                 <div>
                   <p className="text-white font-black uppercase italic tracking-tight text-base mb-2">{s.title}</p>
                   <p className="text-zinc-400 text-sm font-bold leading-relaxed">{s.desc}</p>

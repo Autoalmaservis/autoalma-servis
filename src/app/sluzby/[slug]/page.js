@@ -107,6 +107,21 @@ export default async function SluzbaPage({ params }) {
             {section.description}
           </p>
         )}
+
+        {/* DÔKAZY */}
+        <div className="max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 mt-12">
+          {[
+            { v: '4,6 ★', l: '148 hodnotení na Google' },
+            { v: '12 mes.', l: 'záruka na vykonanú prácu' },
+            { v: 'od 35 €', l: 'normohodina, skutočný čas' },
+            { v: 'Cenu vopred', l: 'schvaľujete v mobile' },
+          ].map((p, i) => (
+            <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl px-5 py-5 text-left">
+              <p className="text-white text-lg md:text-xl font-black italic tracking-tight leading-none mb-1.5">{p.v}</p>
+              <p className="text-zinc-400 text-[11px] font-bold leading-snug">{p.l}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* OBRÁZKY */}
@@ -137,14 +152,18 @@ export default async function SluzbaPage({ params }) {
                     href={`/sluzby/${slug}/${toSlug(title)}`}
                     className="bg-zinc-950 border border-zinc-900 hover:border-red-600/40 p-7 rounded-[2rem] transition-all group block"
                   >
-                    <div className="flex items-start gap-3 mb-3">
-                      <span className="w-2 h-2 bg-red-600 rounded-full shrink-0 mt-2" />
-                      <h2 className="text-base font-black uppercase italic tracking-tight text-white group-hover:text-red-500 transition-colors">
+                    <div className="flex items-start gap-4 mb-3">
+                      <span className="shrink-0 w-9 h-9 rounded-xl bg-red-600/10 border border-red-600/30 group-hover:bg-red-600 group-hover:border-red-600 flex items-center justify-center transition-all">
+                        <span className="text-red-500 group-hover:text-white font-black italic text-xs transition-colors">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                      </span>
+                      <h2 className="text-base font-black uppercase italic tracking-tight text-white group-hover:text-red-500 transition-colors pt-1.5">
                         {title}
                       </h2>
-                      <span className="ml-auto text-zinc-700 group-hover:text-red-500 text-sm transition-colors">→</span>
+                      <span className="ml-auto text-zinc-700 group-hover:text-red-500 text-sm transition-colors pt-1.5">→</span>
                     </div>
-                    {desc && <p className="text-zinc-400 text-sm font-bold leading-relaxed pl-5 line-clamp-3">{desc}</p>}
+                    {desc && <p className="text-zinc-400 text-sm font-bold leading-relaxed pl-13 line-clamp-3">{desc}</p>}
                   </Link>
                 );
               })}
