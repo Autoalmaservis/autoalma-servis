@@ -93,6 +93,14 @@ export default function RootLayout({ children }) {
                   anonymize_ip: true,
                   cookie_flags: 'SameSite=None;Secure'
                 });
+
+                // Služobný prehliadač (prihlásil sa v ňom zamestnanec) sa nemeria.
+                // Značku nastavuje MarkInternalTraffic v rozloženiach dashboardu a dielne.
+                try {
+                  if (localStorage.getItem('autoalma_internal') === '1') {
+                    window['ga-disable-${GA_ID}'] = true;
+                  }
+                } catch (e) {}
               `}
             </Script>
             <Script
@@ -104,11 +112,17 @@ export default function RootLayout({ children }) {
         {CLARITY_ID && (
           <Script id="clarity-init" strategy="afterInteractive">
             {`
-              (function(c,l,a,r,i,t,y){
-                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-              })(window, document, "clarity", "script", "${CLARITY_ID}");
+              // V služobnom prehliadači sa Clarity vôbec nespustí — inak by boli
+              // v nahrávkach z väčšej časti vaši vlastní ľudia.
+              var jeInterny = false;
+              try { jeInterny = localStorage.getItem('autoalma_internal') === '1'; } catch (e) {}
+              if (!jeInterny) {
+                (function(c,l,a,r,i,t,y){
+                  c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+                })(window, document, "clarity", "script", "${CLARITY_ID}");
+              }
             `}
           </Script>
         )}

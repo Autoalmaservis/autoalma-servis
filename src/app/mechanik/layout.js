@@ -1,6 +1,7 @@
 'use client';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
+import MarkInternalTraffic from '@/app/components/MarkInternalTraffic';
 
 export default function MechanikLayout({ children }) {
   const router = useRouter();
@@ -12,6 +13,7 @@ export default function MechanikLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans font-bold">
+      <MarkInternalTraffic />
       <nav className="border-b border-zinc-800 p-4 flex justify-between items-center bg-zinc-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></span>

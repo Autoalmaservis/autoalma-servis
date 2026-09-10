@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { usePathname, useRouter } from 'next/navigation';
+import MarkInternalTraffic from '@/app/components/MarkInternalTraffic';
 
 
 export default function DashboardLayout({ children }) {
@@ -87,6 +88,7 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className="flex min-h-screen bg-black font-sans">
+      <MarkInternalTraffic />
 
       {/* MOBILNÁ LIŠTA */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950 border-b border-zinc-800 px-4 flex items-center justify-between z-[100] no-print">

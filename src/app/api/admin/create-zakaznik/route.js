@@ -24,19 +24,24 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { full_name, email, password, phone, clientType, company_name, ico, dic, ic_dph, address, city, zip, vehicle } = await request.json();
+  const { full_name, email, phone, clientType, company_name, ico, dic, ic_dph, address, city, zip, vehicle } = await request.json();
 
-  if (!email || !password) {
-    return NextResponse.json({ error: 'Email a heslo sú povinné' }, { status: 400 });
+  if (!email) {
+    return NextResponse.json({ error: 'E-mail je povinný' }, { status: 400 });
   }
 
   const sb = adminClient();
   const emailNorm = email.toLowerCase().trim();
 
+  // Účet vzniká s náhodným heslom, ktoré sa nikde nezobrazí ani neodošle.
+  // Zákazník si svoje heslo nastaví sám cez odkaz v uvítacom e-maile —
+  // servis ho tak nikdy nepozná a nemôže dôjsť k nedorozumeniu.
+  const docasneHeslo = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+
   // Vytvor auth usera BEZ odoslania emailu — obchádza rate limit
   const { data: authData, error: authError } = await sb.auth.admin.createUser({
     email: emailNorm,
-    password,
+    password: docasneHeslo,
     email_confirm: true,
     user_metadata: { full_name: full_name || emailNorm },
   });
@@ -82,5 +87,21 @@ export async function POST(request) {
     }]).catch(() => {});
   }
 
-  return NextResponse.json({ ok: true, userId, email: emailNorm });
+  // Odkaz na nastavenie hesla — platí obmedzený čas, posiela sa v uvítacom e-maile.
+  // Ak sa vygenerovať nepodarí, klient je aj tak vytvorený; zákazník použije
+  // "Zabudnuté heslo" na prihlasovacej stránke.
+  let setPasswordUrl = null;
+  try {
+    const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma.sk';
+    const { data: linkData } = await sb.auth.admin.generateLink({
+      type: 'recovery',
+      email: emailNorm,
+      options: { redirectTo: `${base}/login/update-password` },
+    });
+    setPasswordUrl = linkData?.properties?.action_link || null;
+  } catch {
+    setPasswordUrl = null;
+  }
+
+  return NextResponse.json({ ok: true, userId, email: emailNorm, setPasswordUrl });
 }

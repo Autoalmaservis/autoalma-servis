@@ -255,7 +255,6 @@ export default function KlientiPage() {
           body: JSON.stringify({
             full_name: clientForm.customer_name,
             email: clientForm.customer_email,
-            password: clientForm.password,
             phone: clientForm.customer_phone,
             clientType: clientForm.client_type,
             company_name: clientForm.company_name,
@@ -267,9 +266,9 @@ export default function KlientiPage() {
             zip: clientForm.zip,
           }),
         });
+        const created = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || 'Nepodarilo sa vytvoriť klienta');
+          throw new Error(created.error || 'Nepodarilo sa vytvoriť klienta');
         }
 
         if (clientForm.customer_email) {
@@ -280,6 +279,8 @@ export default function KlientiPage() {
               email: clientForm.customer_email,
               name: clientForm.customer_name,
               createdByAdmin: true,
+              // odkaz, cez ktorý si zákazník nastaví vlastné heslo
+              setPasswordUrl: created.setPasswordUrl || null,
             }),
           }).catch(() => {});
         }
@@ -618,9 +619,11 @@ export default function KlientiPage() {
                 <input type="text" value={clientForm.customer_phone} onChange={(e) => setClientForm({...clientForm, customer_phone: e.target.value})} placeholder="Telefón" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 shadow-inner"/>
                 <input required type="email" value={clientForm.customer_email} onChange={(e) => setClientForm({...clientForm, customer_email: e.target.value})} placeholder="E-mail" className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 shadow-inner"/>
                 {!editMode && (
-                  <div className="bg-red-600/5 p-4 rounded-2xl border border-red-600/20">
-                    <label className="text-[10px] font-black text-red-600 uppercase mb-2 ml-2 block tracking-widest italic font-bold">Heslo do Garáže</label>
-                    <input required type="text" value={clientForm.password} onChange={(e) => setClientForm({...clientForm, password: e.target.value})} placeholder="Zadajte heslo" className="w-full bg-black border border-red-600/30 p-5 rounded-2xl text-white font-black outline-none focus:border-red-600 shadow-xl"/>
+                  <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase mb-1 tracking-widest italic">Heslo do Garáže</p>
+                    <p className="text-xs text-zinc-500 font-bold leading-relaxed">
+                      Heslo nezadávaj — zákazníkovi príde e-mail s odkazom a nastaví si ho sám.
+                    </p>
                   </div>
                 )}
               </div>

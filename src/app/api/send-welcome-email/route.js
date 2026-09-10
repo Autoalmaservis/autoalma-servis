@@ -16,7 +16,7 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { email, name, createdByAdmin, password } = body;
+    const { email, name, createdByAdmin, setPasswordUrl } = body;
 
     if (!email) return Response.json({ error: 'Chýba e-mail' }, { status: 400 });
 
@@ -29,17 +29,26 @@ export async function POST(request) {
     const garageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/garaz`;
     const loginUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/login`;
 
+    // Heslo sa e-mailom neposiela nikdy a servis ho ani nepozná.
+    // Zákazník si ho nastaví sám cez odkaz nižšie.
     const credentialsBlock = createdByAdmin
       ? `<div style="margin-top:20px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px">
-          <p style="color:#856404;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px;font-weight:bold">Vaše prihlasovacie údaje</p>
+          <p style="color:#856404;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px;font-weight:bold">Vaše prihlasovacie meno</p>
           <p style="margin:4px 0;font-size:13px;color:#333"><strong>E-mail:</strong> ${email}</p>
-          ${password
-            ? `<p style="margin:4px 0;font-size:13px;color:#333"><strong>Heslo:</strong> <span style="font-family:monospace;background:#fff;padding:2px 8px;border-radius:4px;border:1px solid #ffc107;font-size:15px;letter-spacing:.05em">${password}</span></p>`
-            : `<p style="margin:8px 0 0;font-size:12px;color:#856404;">Heslo vám bolo odovzdané osobne alebo telefonicky recepciou servisu.</p>`
-          }
-          <p style="margin:8px 0 0;font-size:11px;color:#856404;font-weight:bold">⚠️ Odporúčame zmeniť heslo po prvom prihlásení.</p>
+          <p style="margin:10px 0 0;font-size:12px;color:#856404;">Heslo si nastavíte sami — nikto zo servisu ho nepozná a nikdy vám ho nebudeme posielať.</p>
         </div>`
       : '';
+
+    const setPasswordBlock = setPasswordUrl
+      ? `<div style="margin-top:24px;text-align:center">
+          <a href="${setPasswordUrl}" style="background:#111;color:#fff;padding:13px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;text-transform:uppercase;letter-spacing:.1em;display:inline-block">
+            🔐 Nastaviť si heslo
+          </a>
+          <p style="color:#999;font-size:11px;margin-top:10px">Odkaz je platný obmedzený čas. Ak vyprší, použite na prihlasovacej stránke možnosť „Zabudnuté heslo".</p>
+        </div>`
+      : `<div style="margin-top:24px;background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:16px;text-align:center">
+          <p style="color:#333;font-size:13px;margin:0">Heslo si nastavíte na prihlasovacej stránke cez možnosť <strong>„Zabudnuté heslo"</strong> — zadajte tento e-mail a príde vám odkaz.</p>
+        </div>`;
 
     const introText = createdByAdmin
       ? `Prijímací technik ${company.name} vám vytvoril prístup do zákazníckej zóny — <strong>Vašej Garáže</strong>.`
@@ -56,6 +65,7 @@ export async function POST(request) {
         <p style="color:#333;font-size:14px;margin:0 0 20px">${introText}</p>
 
         ${credentialsBlock}
+        ${createdByAdmin ? setPasswordBlock : ''}
 
         <div style="margin-top:24px;background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:16px">
           <p style="color:#999;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px">Čo nájdete vo Vašej Garáži</p>
