@@ -2,6 +2,7 @@ import Link from 'next/link';
 import SiteHeader from '@/app/components/SiteHeader';
 import StickyCta from '@/app/components/StickyCta';
 import LeadForm from '@/app/components/LeadForm';
+import FotoMiesto from '@/app/components/FotoMiesto';
 
 export const metadata = {
   title: 'Diagnostika vozidla Bratislava — od 30 €',
@@ -298,6 +299,38 @@ export default function DiagnostikaVozidielPage() {
               </li>
             ))}
           </ol>
+        </div>
+      </section>
+
+      {/* FOTKY Z DIELNE */}
+      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Naša práca</p>
+            <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter">Ako to u nás vyzerá</h2>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5">
+            <FotoMiesto
+              nazov="diagnostika-pristroj"
+              popis="Diagnostický prístroj pripojený k autu, kapota otvorená"
+              alt="Diagnostika vozidla v AutoAlma Bratislava"
+              pomer="aspect-[16/10]"
+            />
+            <div className="grid grid-rows-2 gap-5">
+              <FotoMiesto
+                nazov="diagnostika-displej"
+                popis="Displej prístroja s načítanými hodnotami"
+                alt="Načítané hodnoty z riadiacej jednotky — AutoAlma"
+                pomer="aspect-[16/9]"
+              />
+              <FotoMiesto
+                nazov="diagnostika-praca"
+                popis="Technik pri meraní v motorovom priestore"
+                alt="Technik pri diagnostike vozidla — AutoAlma Bratislava"
+                pomer="aspect-[16/9]"
+              />
+            </div>
+          </div>
         </div>
       </section>
 

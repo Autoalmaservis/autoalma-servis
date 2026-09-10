@@ -2,6 +2,7 @@ import Link from 'next/link';
 import SiteHeader from '@/app/components/SiteHeader';
 import StickyCta from '@/app/components/StickyCta';
 import LeadForm from '@/app/components/LeadForm';
+import FotoMiesto from '@/app/components/FotoMiesto';
 
 export const metadata = {
   title: 'Čistenie DPF filtra Bratislava — od 130 €',
@@ -23,47 +24,67 @@ export const metadata = {
    Ľavý obrázok ukazuje zanesený filter, pravý vyčistený.
    ───────────────────────────────────────────────────────────── */
 function SchemaFiltra({ zaneseny }) {
-  const kanaliky = [0, 1, 2, 3, 4, 5, 6];
-  const hrubkaSadzi = zaneseny ? 5 : 1.2;
-  const farbaSadzi = zaneseny ? '#3f3f46' : '#52525b';
+  const kanaliky = [0, 1, 2, 3, 4, 5];
+  const vyskaKanalika = 15;
+  // Hrúbka usadenín na stene kanálika. Rozdiel musí byť viditeľný na prvý pohľad.
+  const sadze = zaneseny ? 5.4 : 1;
+  const akcent = zaneseny ? '#b91c1c' : '#15803d';
 
   return (
-    <svg viewBox="0 0 280 170" className="w-full h-auto" role="img"
-      aria-label={zaneseny ? 'Rez zaneseným DPF filtrom' : 'Rez vyčisteným DPF filtrom'}>
-      {/* teleso filtra */}
-      <rect x="34" y="18" width="212" height="134" rx="14"
-        fill="#0a0a0a" stroke={zaneseny ? '#7f1d1d' : '#166534'} strokeWidth="2" />
+    <svg viewBox="0 0 340 132" className="w-full h-auto" role="img"
+      aria-label={zaneseny ? 'Rez zaneseným DPF filtrom — kanáliky zúžené vrstvou sadzí' : 'Rez vyčisteným DPF filtrom — kanáliky voľne priechodné'}>
+      {/* keramické teleso */}
+      <rect x="52" y="14" width="236" height="104" rx="10" fill="#18181b" stroke={akcent} strokeWidth="2" />
 
-      {/* kanáliky */}
       {kanaliky.map((i) => {
-        const y = 30 + i * 17;
-        const zaslepenyVzadu = i % 2 === 0;
+        const y = 20 + i * (vyskaKanalika + 2);
+        const zatkaVzadu = i % 2 === 0;
         return (
           <g key={i}>
-            <rect x="42" y={y} width="196" height="12" fill="#18181b" />
-            {/* vrstva sadzí na stenách kanálika */}
-            <rect x="42" y={y} width="196" height={hrubkaSadzi} fill={farbaSadzi} />
-            <rect x="42" y={y + 12 - hrubkaSadzi} width="196" height={hrubkaSadzi} fill={farbaSadzi} />
-            {/* zátka na jednom konci — to núti plyn prejsť cez stenu */}
-            {zaslepenyVzadu
-              ? <rect x="228" y={y} width="10" height="12" fill="#dc2626" />
-              : <rect x="42" y={y} width="10" height="12" fill="#dc2626" />}
+            {/* voľný priechod pre plyn */}
+            <rect x="58" y={y + sadze} width="224" height={vyskaKanalika - sadze * 2} fill="#d4d4d8" />
+            {/* usadené sadze a popol na stenách */}
+            <rect x="58" y={y} width="224" height={sadze} fill="#57534e" />
+            <rect x="58" y={y + vyskaKanalika - sadze} width="224" height={sadze} fill="#57534e" />
+            {/* zátka — núti plyn prejsť cez poréznu stenu */}
+            {zatkaVzadu
+              ? <rect x="272" y={y} width="10" height={vyskaKanalika} fill="#dc2626" />
+              : <rect x="58" y={y} width="10" height={vyskaKanalika} fill="#dc2626" />}
           </g>
         );
       })}
 
       {/* vstup a výstup */}
-      <path d="M8 78 L34 78 M8 92 L34 92" stroke="#a1a1aa" strokeWidth="2" />
-      <path d="M246 78 L272 78 M246 92 L272 92" stroke="#a1a1aa" strokeWidth="2" />
-      <polygon points="26,85 18,80 18,90" fill="#a1a1aa" />
-      <polygon points="272,85 264,80 264,90" fill="#a1a1aa" transform="rotate(180 268 85)" />
+      <path d="M14 60 h32 M14 72 h32" stroke="#71717a" strokeWidth="2.5" />
+      <polygon points="52,66 40,58 40,74" fill="#71717a" />
+      <path d="M294 60 h32 M294 72 h32" stroke="#71717a" strokeWidth="2.5" />
+      <polygon points="340,66 328,58 328,74" fill="#71717a" />
 
-      <text x="8" y="164" fill="#71717a" fontSize="9" fontWeight="700">VÝFUKOVÉ PLYNY</text>
-      <text x="188" y="164" fill="#71717a" fontSize="9" fontWeight="700">ČISTÝ VÝFUK</text>
-      <text x="8" y="12" fill="#71717a" fontSize="9" fontWeight="700">
+      <text x="14" y="10" fill={akcent} fontSize="10" fontWeight="700" letterSpacing="1">
         {zaneseny ? 'ZANESENÝ FILTER' : 'PO VYČISTENÍ'}
       </text>
+      <text x="14" y="128" fill="#71717a" fontSize="9" fontWeight="700">VÝFUKOVÉ PLYNY</text>
+      <text x="252" y="128" fill="#71717a" fontSize="9" fontWeight="700">VÝSTUP</text>
     </svg>
+  );
+}
+
+/* Malá legenda k schéme */
+function LegendaSchemy() {
+  const polozky = [
+    { farba: '#d4d4d8', text: 'voľný priechod' },
+    { farba: '#57534e', text: 'sadze a popol' },
+    { farba: '#dc2626', text: 'zátka kanálika' },
+  ];
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-2 justify-center mt-4">
+      {polozky.map((p, i) => (
+        <span key={i} className="flex items-center gap-2 text-[11px] font-bold text-zinc-400">
+          <span className="w-3 h-3 rounded-sm" style={{ background: p.farba }} />
+          {p.text}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -236,14 +257,15 @@ export default function CistenieDpfPage() {
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-5 text-center">
               Čo sa vo filtri deje
             </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-2xl bg-black border border-red-900/40 p-3">
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-black border border-red-900/40 p-4">
                 <SchemaFiltra zaneseny />
               </div>
-              <div className="rounded-2xl bg-black border border-green-900/40 p-3">
+              <div className="rounded-2xl bg-black border border-green-900/40 p-4">
                 <SchemaFiltra />
               </div>
             </div>
+            <LegendaSchemy />
             <p className="text-zinc-400 text-xs font-bold leading-relaxed mt-5">
               Kanáliky filtra sú striedavo zaslepené <span className="text-red-500">(červené zátky)</span>, takže
               výfukové plyny musia prejsť cez poréznu stenu. Sadze a popol zostanú vnútri a postupne
@@ -309,6 +331,41 @@ export default function CistenieDpfPage() {
               </li>
             ))}
           </ol>
+        </div>
+      </section>
+
+      {/* FOTKY Z DIELNE */}
+      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Naša práca</p>
+            <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter">Ako to u nás vyzerá</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <FotoMiesto
+              nazov="dpf-vymontovany"
+              popis="Vymontovaný zanesený filter položený na pracovnom stole"
+              alt="Vymontovaný zanesený DPF filter — AutoAlma Bratislava"
+            />
+            <FotoMiesto
+              nazov="dpf-cistenie"
+              popis="Filter v čistiacom zariadení počas prania"
+              alt="Čistenie DPF filtra v zariadení — AutoAlma Bratislava"
+            />
+            <FotoMiesto
+              nazov="dpf-po-cisteni"
+              popis="Ten istý filter po vyčistení a vysušení"
+              alt="DPF filter po vyčistení — AutoAlma Bratislava"
+            />
+          </div>
+          <div className="mt-5">
+            <FotoMiesto
+              nazov="dpf-meranie"
+              popis="Meranie priepustnosti filtra — displej prístroja s nameranou hodnotou"
+              alt="Meranie priepustnosti DPF filtra — AutoAlma Bratislava"
+              pomer="aspect-[21/9]"
+            />
+          </div>
         </div>
       </section>
 

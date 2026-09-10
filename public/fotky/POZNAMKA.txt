@@ -1,0 +1,37 @@
+FOTKY NA CIELOVE STRANKY
+========================
+
+Fotku sem stacilo ulozit pod presnym menom zo zoznamu nizsie. Stranka si ju
+sama najde a zobrazi - v kode netreba menit nic. Kym tu fotka nie je, na jej
+mieste zostane ramik s popisom, aky zaber tam patri.
+
+Podporovane pripony: .webp, .jpg, .jpeg, .png
+
+
+/cistenie-dpf
+-------------
+dpf-vymontovany   Vymontovany zaneseny filter polozeny na pracovnom stole
+dpf-cistenie      Filter v cistiacom zariadeni pocas prania
+dpf-po-cisteni    Ten isty filter po vycisteni a vysuseni
+dpf-meranie       Meranie priepustnosti - displej pristroja s hodnotou
+                  (siroky zaber, pomer 21:9 - foť na sirku)
+
+
+/diagnostika-vozidiel
+---------------------
+diagnostika-pristroj   Diagnosticky pristroj pripojeny k autu, kapota otvorena
+diagnostika-displej    Displej pristroja s nacitanymi hodnotami
+diagnostika-praca      Technik pri merani v motorovom priestore
+
+
+ODPORUCANIA K FOTKAM
+--------------------
+- Fotky z mobilu su v poriadku. Dolezitejsi je poriadok v zabere a svetlo.
+- Foť cez den, radsej s otvorenou branou.
+- Hlavny predmet daj do stredu a nechaj okolo neho miesto - obrazok sa oreze.
+- Sirku aspon 1600 px. Vacsie fotky pokojne, len ich pred nahratim zmensi,
+  aby jedna nemala viac ako cca 500 kB - stranka sa potom nacita rychlejsie.
+- Ziadny text ani logo v obrazku.
+
+GALERIA NA DOMOVSKEJ STRANKE je nieco ine - tá sa plni cez administraciu
+(Spravovat web), nie cez tento priecinok.
