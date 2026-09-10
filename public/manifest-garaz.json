@@ -1,0 +1,33 @@
+{
+  "id": "/garaz",
+  "name": "AutoAlma — Moja Garáž",
+  "short_name": "Moja Garáž",
+  "description": "Stav opravy, história vozidla, faktúry a objednanie servisu.",
+  "start_url": "/garaz",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "sk",
+  "icons": [
+    {
+      "src": "/icon-garaz-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-garaz-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-garaz-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
