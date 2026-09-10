@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { vlastnaStranka } from '@/app/lib/specialneStranky';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -27,15 +28,20 @@ export default async function sitemap() {
     priority: 0.8,
   }));
 
+  // Služby, ktoré majú vlastnú stránku (napr. čistenie DPF), sem nedávame.
+  // Ich pôvodná adresa už len presmerováva a Google nemá rád, keď mu
+  // v mape stránok posielame adresy, ktoré vedú inam.
   const itemUrls = (sections || []).flatMap(s =>
-    (s.items || []).map(item => {
+    (s.items || []).flatMap(item => {
       const title = typeof item === 'string' ? item : item.title;
-      return {
-        url: `${BASE}/sluzby/${s.slug}/${toSlug(title)}`,
+      const itemSlug = toSlug(title);
+      if (vlastnaStranka(s.slug, itemSlug)) return [];
+      return [{
+        url: `${BASE}/sluzby/${s.slug}/${itemSlug}`,
         lastModified: new Date(),
         changeFrequency: 'monthly',
         priority: 0.6,
-      };
+      }];
     })
   );
 
