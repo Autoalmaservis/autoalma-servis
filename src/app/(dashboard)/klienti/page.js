@@ -429,22 +429,31 @@ export default function KlientiPage() {
               <div className="space-y-16">
                 {vozidla.map((v) => (
                   <div key={v.id} className="bg-zinc-900/30 border border-zinc-800 p-8 rounded-[3.5rem] relative shadow-xl">
+                    {/* HLAVIČKA VOZIDLA — ŠPZ vľavo, HISTÓRIA vpravo hore */}
+                    <div className="flex flex-wrap justify-between items-center gap-4 mb-8">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Link
+                          href={`/historia/${encodeURIComponent(v.plate_number || '')}`}
+                          title="Otvoriť kartu vozidla"
+                          className="bg-white text-black hover:bg-red-600 hover:text-white px-5 py-2 rounded-xl font-black text-2xl tracking-widest shadow-2xl uppercase transition-all"
+                        >{v.plate_number}</Link>
+                        <button onClick={() => openEditCarModal(v)} className="bg-zinc-800 hover:bg-white border border-zinc-700 text-white hover:text-black p-2.5 rounded-xl transition-all text-xs font-bold">✏️</button>
+                        <button onClick={() => handleDeleteCar(v)} className="bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-2.5 rounded-xl transition-all text-xs font-bold">🗑️</button>
+                      </div>
+
+                      <button
+                        onClick={() => setHistoryModal(v)}
+                        disabled={!v.full_history?.length}
+                        title={v.full_history?.length ? 'Prezerať históriu zákaziek' : 'Vozidlo zatiaľ nemá žiadnu zákazku'}
+                        className="flex items-center gap-2.5 bg-zinc-800 hover:bg-red-600 border border-zinc-700 hover:border-red-600 text-white px-6 py-3 rounded-2xl transition-all text-[10px] font-black uppercase tracking-[0.2em] shadow-lg disabled:opacity-30 disabled:hover:bg-zinc-800 disabled:hover:border-zinc-700 disabled:cursor-not-allowed"
+                      >
+                        📋 História
+                        <span className="bg-black/40 px-2.5 py-0.5 rounded-lg text-[10px]">{v.full_history?.length || 0}</span>
+                      </button>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                        <div>
-                          <div className="flex items-center gap-3 mb-6 flex-wrap">
-                            <Link
-                              href={`/historia/${encodeURIComponent(v.plate_number || '')}`}
-                              title="Otvoriť kartu vozidla"
-                              className="bg-white text-black hover:bg-red-600 hover:text-white px-5 py-2 rounded-xl font-black text-2xl tracking-widest shadow-2xl uppercase transition-all"
-                            >{v.plate_number}</Link>
-                            <button onClick={() => openEditCarModal(v)} className="bg-zinc-800 hover:bg-white border border-zinc-700 text-white hover:text-black p-2.5 rounded-xl transition-all text-xs font-bold">✏️</button>
-                            <button onClick={() => handleDeleteCar(v)} className="bg-red-600/10 hover:bg-red-600 border border-red-600/30 text-red-500 hover:text-white p-2.5 rounded-xl transition-all text-xs font-bold">🗑️</button>
-                            {v.full_history?.length > 0 && (
-                              <button onClick={() => setHistoryModal(v)} className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white px-3 py-2 rounded-xl transition-all text-[9px] font-black uppercase tracking-widest">
-                                📋 História ({v.full_history.length})
-                              </button>
-                            )}
-                          </div>
                           <h3 className="text-3xl font-black uppercase italic mb-4">{v.car_brand_model}</h3>
                           <div className="space-y-2 bg-black/40 p-5 rounded-2xl border border-zinc-800 text-[11px] font-black uppercase tracking-widest text-zinc-400 italic">
                              <p className="flex justify-between border-b border-zinc-800 pb-2"><span>VIN:</span> <span className="text-white font-mono">{v.vin_number || '---'}</span></p>
