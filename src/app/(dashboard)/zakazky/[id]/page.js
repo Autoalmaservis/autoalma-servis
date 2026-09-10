@@ -538,7 +538,7 @@ export default function DetailZakazkyPage() {
   };
 
   // --- UPRAVENÁ FUNKCIA FINALIZÁCIE S ADRESAMI A SPLATNOSŤOU ---
-  const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false) => {
+  const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false, manualNumber = '') => {
     setInvoiceLoading(true);
     try {
       const { subtotal, tax, total, discountAmount } = calculateTotal();
@@ -600,19 +600,42 @@ export default function DetailZakazkyPage() {
         }
       };
 
-      // Retry pri duplicate key — DB funkcia môže vrátiť rovnaké číslo pri race condition
-      let invData, invError, invAttempts = 0;
-      do {
-        const { data: invoiceNumData, error: invoiceNumErr } = await supabase
-          .rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A' });
-        if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
-        invoicePayload.invoice_number = invoiceNumData;
+      let invData, invError;
+      const manualNum = (manualNumber || '').trim().toUpperCase();
+
+      if (manualNum) {
+        // Ručne zadané číslo — použiť presne tak, ako ho zadal používateľ
+        invoicePayload.invoice_number = manualNum;
         const res = await supabase.from('invoices').insert([invoicePayload]).select().single();
         invData = res.data;
         invError = res.error;
-        invAttempts++;
-      } while (invError?.code === '23505' && invAttempts < 3);
-      if (invError) throw invError;
+        if (invError?.code === '23505') throw new Error(`Číslo ${manualNum} už používa iná faktúra. Zvoľte iné.`);
+        if (invError) throw invError;
+        // vyradiť zo zásobníka voľných čísel a posunúť počítadlo, ak treba
+        try { await supabase.rpc('claim_invoice_number', { p_number: manualNum, p_job_id: id }); } catch (_) {}
+      } else {
+        // Automatické číslo. Ak bola faktúra tejto zákazky zrušená, DB funkcia
+        // vráti jej pôvodné (rezervované) číslo, inak ďalšie v poradí.
+        // Retry pri duplicate key — pri race condition môže prísť rovnaké číslo.
+        let invAttempts = 0;
+        do {
+          let { data: invoiceNumData, error: invoiceNumErr } = await supabase
+            .rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A', p_job_id: id });
+          // Fallback na staršiu jednoargumentovú DB funkciu (kým nie je spustené sql/invoice_number_pool.sql)
+          if (invoiceNumErr) {
+            const retry = await supabase.rpc('generate_invoice_number', { prefix: isOfficial ? 'F' : 'A' });
+            invoiceNumData = retry.data;
+            invoiceNumErr = retry.error;
+          }
+          if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
+          invoicePayload.invoice_number = invoiceNumData;
+          const res = await supabase.from('invoices').insert([invoicePayload]).select().single();
+          invData = res.data;
+          invError = res.error;
+          invAttempts++;
+        } while (invError?.code === '23505' && invAttempts < 3);
+        if (invError) throw invError;
+      }
 
       // Ak hotovosť → zapísať do kasy (bez ohľadu na typ dokladu)
       if (paymentMethod === 'cash') {
@@ -2080,7 +2103,7 @@ Inšpektor ${companyName}
           zakazka={zakazka}
           total={total}
           invoiceLoading={invoiceLoading}
-          onFinalize={(isOfficial, paymentMethod, noVat) => handleFinalizeJob(isOfficial, paymentMethod, noVat)}
+          onFinalize={(isOfficial, paymentMethod, noVat, manualNumber) => handleFinalizeJob(isOfficial, paymentMethod, noVat, manualNumber)}
           onClose={() => setIsInvoiceModalOpen(false)}
         />
       )}

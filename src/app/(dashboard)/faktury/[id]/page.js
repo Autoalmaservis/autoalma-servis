@@ -51,6 +51,12 @@ export default function DetailFakturyPage() {
   const [newDueDate, setNewDueDate] = useState('');
   const [dateSaving, setDateSaving] = useState(false);
 
+  // Zmena čísla faktúry
+  const [numberModal, setNumberModal] = useState(false);
+  const [newNumber, setNewNumber] = useState('');
+  const [numberSaving, setNumberSaving] = useState(false);
+  const [freeNumbers, setFreeNumbers] = useState([]);
+
   useEffect(() => {
     if (id) {
       fetchInvoice();
@@ -106,7 +112,7 @@ export default function DetailFakturyPage() {
   };
 
   const handleReopenJob = async () => {
-    if (!confirm("Pozor! Vymazaním faktúry sa pôvodná zákazka opäť otvorí v stave 'Dokončené'. Chcete pokračovať?")) return;
+    if (!confirm(`Pozor! Vymazaním faktúry sa pôvodná zákazka opäť otvorí v stave 'Dokončené'.\n\nČíslo ${inv.invoice_number} zostane rezervované pre túto zákazku — po oprave údajov dostane nová faktúra to isté číslo.\n\nChcete pokračovať?`)) return;
     try {
       setLoading(true);
       if (inv.job_id) {
@@ -115,10 +121,14 @@ export default function DetailFakturyPage() {
         await supabase.from('kasa_entries').delete().eq('job_id', inv.job_id);
       }
       await supabase.from('invoices').delete().eq('id', id);
-      // Vrátiť poradové číslo späť do počítadla, ak išlo o posledné vydané číslo
-      // (inak v číslovaní faktúr vznikne diera)
-      try { await supabase.rpc('release_invoice_number', { inv_number: inv.invoice_number }); } catch (_) {}
-      alert("Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná.");
+      // Číslo ide späť do zásobníka a zostáva rezervované pre tú istú zákazku,
+      // takže po oprave údajov sa faktúra vystaví pod rovnakým číslom (bez diery v číslovaní)
+      try {
+        const { error: relErr } = await supabase.rpc('release_invoice_number', { inv_number: inv.invoice_number, p_job_id: inv.job_id || null });
+        // Fallback na staršiu jednoargumentovú DB funkciu (kým nie je spustené sql/invoice_number_pool.sql)
+        if (relErr) await supabase.rpc('release_invoice_number', { inv_number: inv.invoice_number });
+      } catch (_) {}
+      alert(`Faktúra bola odstránená. Pôvodná zákazka je opäť dostupná.\nČíslo ${inv.invoice_number} je rezervované pre jej opätovné vystavenie.`);
       router.push('/zakazky');
     } catch (err) {
       alert("Chyba pri znovuotváraní: " + err.message);
@@ -390,6 +400,36 @@ Inspektor ${companyName}
     setDateModal(true);
   };
 
+  const handleOpenNumberModal = async () => {
+    setNewNumber(inv.invoice_number || '');
+    setNumberModal(true);
+    // voľné (uvoľnené) čísla — dajú sa jedným klikom priradiť
+    const { data } = await supabase
+      .from('invoice_number_pool')
+      .select('invoice_number, job_id')
+      .is('used_at', null)
+      .order('released_at', { ascending: false })
+      .limit(12);
+    setFreeNumbers(data || []);
+  };
+
+  const handleSaveNumber = async () => {
+    const num = (newNumber || '').trim().toUpperCase();
+    if (!num) { alert('Zadajte číslo faktúry.'); return; }
+    if (num === inv.invoice_number) { setNumberModal(false); return; }
+    if (!confirm(`Zmeniť číslo faktúry z ${inv.invoice_number} na ${num}?\n\nPôvodné číslo sa uvoľní a bude sa dať znova použiť.`)) return;
+    setNumberSaving(true);
+    try {
+      const { error } = await supabase.rpc('set_invoice_number', { p_invoice_id: id, p_number: num });
+      if (error) throw error;
+      setInv(prev => ({ ...prev, invoice_number: num }));
+      setNumberModal(false);
+    } catch (e) {
+      alert('Nepodarilo sa zmeniť číslo: ' + (e.message || e));
+    }
+    setNumberSaving(false);
+  };
+
   const handleSaveDates = async () => {
     if (!newIssueDate) { alert('Zadajte dátum vystavenia.'); return; }
     setDateSaving(true);
@@ -440,6 +480,9 @@ Inspektor ${companyName}
           </button>
           <button onClick={handleOpenDateModal} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
             📅 Zmeniť dátum
+          </button>
+          <button onClick={handleOpenNumberModal} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
+            🔢 Zmeniť číslo
           </button>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -938,6 +981,64 @@ Inspektor ${companyName}
                 {emailSending ? '📤 Odosielam...' : '📧 Odoslať faktúru'}
               </button>
               <button onClick={() => setEmailModal(false)}
+                className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                Zrušiť
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: ZMENA ČÍSLA FAKTÚRY ===== */}
+      {numberModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4 no-print"
+          onClick={() => setNumberModal(false)}>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-6 max-w-md w-full shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-0.5">Zmeniť číslo</p>
+                <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">{inv.invoice_number}</h2>
+              </div>
+              <button onClick={() => setNumberModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Nové číslo faktúry</p>
+              <input type="text" value={newNumber} autoFocus
+                onChange={e => setNewNumber(e.target.value.toUpperCase())}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveNumber(); }}
+                placeholder="napr. F26012"
+                className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black text-lg tracking-widest outline-none transition-all uppercase" />
+            </div>
+
+            {freeNumbers.length > 0 && (
+              <div className="mb-4">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Voľné čísla (zo zrušených faktúr)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {freeNumbers.map(f => (
+                    <button key={f.invoice_number} type="button" onClick={() => setNewNumber(f.invoice_number)}
+                      className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:border-red-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">
+                      {f.invoice_number}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest mb-4 leading-relaxed">
+              Pôvodné číslo sa uvoľní na ďalšie použitie. Číslo musí byť jedinečné — mení sa aj na doklade,
+              vo variabilnom symbole a v eFaktúre (XML).
+            </p>
+
+            <div className="flex gap-3">
+              <button onClick={handleSaveNumber} disabled={numberSaving || !newNumber.trim()}
+                className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
+                {numberSaving ? '⏳ Ukladám...' : '✓ Uložiť číslo'}
+              </button>
+              <button onClick={() => setNumberModal(false)}
                 className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
                 Zrušiť
               </button>

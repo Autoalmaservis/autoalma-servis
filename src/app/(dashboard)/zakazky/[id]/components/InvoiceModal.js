@@ -1,9 +1,30 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/app/lib/supabase';
 
 export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinalize, onClose }) {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [noVat, setNoVat] = useState(false);
+
+  // Číslo faktúry — automaticky, alebo ručne zadané
+  const [manualOn, setManualOn] = useState(false);
+  const [manualNumber, setManualNumber] = useState('');
+  const [reserved, setReserved] = useState([]);
+
+  // Čísla, ktoré sa uvoľnili zrušením faktúry tejto zákazky — použijú sa znova
+  useEffect(() => {
+    if (!zakazka?.id) return;
+    supabase
+      .from('invoice_number_pool')
+      .select('invoice_number, prefix')
+      .eq('job_id', zakazka.id)
+      .is('used_at', null)
+      .order('released_at', { ascending: false })
+      .then(({ data }) => setReserved(data || []));
+  }, [zakazka?.id]);
+
+  const reservedFor = (isOfficial) => reserved.find(r => r.prefix?.startsWith(isOfficial ? 'F' : 'A'))?.invoice_number || null;
+  const submit = (isOfficial) => onFinalize(isOfficial, paymentMethod, noVat, manualOn ? manualNumber : '');
 
   return (
     <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print font-black">
@@ -39,10 +60,54 @@ export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinaliz
           )}
         </div>
 
+        {/* ČÍSLO DOKLADU */}
+        <div className="mb-8">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Číslo dokladu</p>
+
+          {reserved.length > 0 && !manualOn && (
+            <div className="bg-blue-600/10 border border-blue-600/30 rounded-2xl px-4 py-3 mb-3 text-[10px] font-black text-blue-300 uppercase tracking-widest">
+              Rezervované zo zrušenej faktúry: {reserved.map(r => r.invoice_number).join(', ')} — použije sa znova
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setManualOn(v => !v)}
+            className={`w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${manualOn ? 'bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/40' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'}`}
+          >
+            {manualOn ? '✓ Zadať číslo ručne' : 'Zadať číslo ručne'}
+          </button>
+
+          {manualOn && (
+            <div className="mt-3">
+              <input
+                type="text"
+                value={manualNumber}
+                onChange={e => setManualNumber(e.target.value.toUpperCase())}
+                placeholder="napr. F26012"
+                className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black text-lg tracking-widest outline-none transition-all text-center uppercase"
+              />
+              <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest text-center mt-2">
+                Musí byť jedinečné. Ak necháš prázdne, použije sa automatické číslo.
+              </p>
+            </div>
+          )}
+        </div>
+
         <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Typ dokladu</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <button disabled={invoiceLoading} onClick={() => onFinalize(true, paymentMethod, noVat)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-xl font-bold font-sans">📄 VYSTAVIŤ FAKTÚRU</button>
-          <button disabled={invoiceLoading} onClick={() => onFinalize(false, paymentMethod, noVat)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all font-bold font-sans">📂 IBA ODLOŽIŤ</button>
+          <button disabled={invoiceLoading} onClick={() => submit(true)} className="bg-white text-black font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-green-500 hover:text-white transition-all shadow-xl font-bold font-sans">
+            📄 VYSTAVIŤ FAKTÚRU
+            <span className="block text-[9px] tracking-widest opacity-60 mt-1 normal-case">
+              {manualOn ? (manualNumber || 'zadaj číslo vyššie') : (reservedFor(true) || 'ďalšie v poradí')}
+            </span>
+          </button>
+          <button disabled={invoiceLoading} onClick={() => submit(false)} className="bg-zinc-800 text-white font-black py-6 rounded-[2rem] uppercase text-[10px] tracking-widest hover:bg-zinc-700 transition-all font-bold font-sans">
+            📂 IBA ODLOŽIŤ
+            <span className="block text-[9px] tracking-widest opacity-60 mt-1 normal-case">
+              {manualOn ? (manualNumber || 'zadaj číslo vyššie') : (reservedFor(false) || 'ďalšie v poradí')}
+            </span>
+          </button>
         </div>
         <button onClick={onClose} className="text-zinc-600 hover:text-white font-black uppercase text-[10px] tracking-widest transition-all italic font-black">Späť k úpravám</button>
       </div>
