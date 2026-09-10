@@ -1,11 +1,18 @@
-const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
-
-// Bezpečné volanie gtag — funguje len v browseri, keď je GA načítaná
-const gtag = (...args) => {
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag(...args);
-  }
-};
+// Zapisujeme priamo do dataLayer, nie cez window.gtag.
+//
+// Prečo: gtag.js sa načítava až po tom, čo je stránka interaktívna. Udalosti,
+// ktoré komponent pošle hneď pri zobrazení (napr. prvý krok objednávky), by pri
+// kontrole `typeof window.gtag === 'function'` zmizli bez stopy — knižnica vtedy
+// ešte neexistuje. Zápis do dataLayer funguje aj predtým: gtag.js si frontu
+// po načítaní prevezme a spracuje.
+//
+// Musí to byť klasická funkcia, nie šípková — potrebujeme objekt `arguments`,
+// lebo presne v tomto tvare ho gtag.js očakáva.
+function gtag() {
+  if (typeof window === 'undefined') return;
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push(arguments);
+}
 
 export const trackEvent = (eventName, params = {}) => {
   gtag('event', eventName, params);
