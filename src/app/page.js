@@ -101,8 +101,18 @@ const slogans = [
   { main: 'Transparentná diagnostika', sub: 'bez technického žargónu' },
 ];
 
+// Odkazy v hlavičke — rovnaké pre desktop aj pre mobilné menu
+const navLinks = [
+  { href: '#sluzby', label: 'Naše služby' },
+  { href: '#cennik', label: 'Cenník' },
+  { href: '#recenzie', label: 'Recenzie' },
+  { href: '#faq', label: 'Časté otázky' },
+  { href: '#kontakt', label: 'Kontakt' },
+];
+
 export default function HomePage() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [lightbox, setLightbox] = useState(null);
   const [cennik, setCennik] = useState([]);
@@ -243,13 +253,7 @@ export default function HomePage() {
             </a>
 
             <div className="hidden md:flex items-center gap-1">
-              {[
-                { href: '#sluzby', label: 'Naše služby' },
-                { href: '#cennik', label: 'Cenník' },
-                { href: '#recenzie', label: 'Recenzie' },
-                { href: '#faq', label: 'Časté otázky' },
-                { href: '#kontakt', label: 'Kontakt' },
-              ].map(link => (
+              {navLinks.map(link => (
                 <a
                   key={link.href}
                   href={link.href}
@@ -271,10 +275,11 @@ export default function HomePage() {
 
           {/* PRAVÁ STRANA */}
           <div className="flex items-center gap-3 md:gap-5">
+            {/* Telefón je na mobile v lepiacej lište dole, tu by len bral miesto */}
             <a
               href="tel:0940449449"
               onClick={() => trackPhoneClick('nav')}
-              className="flex items-center gap-2 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:text-white transition-all"
+              className="hidden sm:flex items-center gap-2 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:text-white transition-all"
             >
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               0940 449 449
@@ -285,9 +290,10 @@ export default function HomePage() {
             <Link
               href="/login"
               onClick={() => trackMojaGarazClick('nav')}
-              className={`hidden sm:block bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest transition-all rounded-xl shadow-lg shadow-red-600/20 hover:shadow-red-600/30 ${scrolled ? 'text-[9px] px-4 py-2' : 'text-[10px] px-5 py-2.5'}`}
+              className={`bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest transition-all rounded-xl shadow-lg shadow-red-600/20 hover:shadow-red-600/30 ${scrolled ? 'text-[9px] px-4 py-2' : 'text-[10px] px-5 py-2.5'}`}
             >
-              🏎️ Moja Garáž
+              <span className="sm:hidden">🏎️ Garáž</span>
+              <span className="hidden sm:inline">🏎️ Moja Garáž</span>
             </Link>
 
             <Link
@@ -297,8 +303,58 @@ export default function HomePage() {
             >
               ⚙
             </Link>
+
+            {/* HAMBURGER — na mobile jediná cesta k sekciám stránky */}
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label={menuOpen ? 'Zavrieť menu' : 'Otvoriť menu'}
+              aria-expanded={menuOpen}
+              className="md:hidden flex flex-col justify-center items-center gap-[5px] w-9 h-9 -mr-2 text-white"
+            >
+              <span className={`block h-[2px] w-5 bg-current transition-all duration-300 ${menuOpen ? 'translate-y-[7px] rotate-45' : ''}`} />
+              <span className={`block h-[2px] w-5 bg-current transition-all duration-300 ${menuOpen ? 'opacity-0' : ''}`} />
+              <span className={`block h-[2px] w-5 bg-current transition-all duration-300 ${menuOpen ? '-translate-y-[7px] -rotate-45' : ''}`} />
+            </button>
           </div>
         </div>
+
+        {/* ROZBALENÉ MENU NA MOBILE */}
+        {menuOpen && (
+          <div className="md:hidden border-t border-zinc-800 bg-black/95 px-6 py-4 flex flex-col max-h-[70vh] overflow-y-auto">
+            {navLinks.map(link => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={() => setMenuOpen(false)}
+                className="py-3 text-[12px] font-black uppercase tracking-widest text-zinc-300 hover:text-white border-b border-zinc-900"
+              >
+                {link.label}
+              </a>
+            ))}
+            <Link
+              href="/diagnostika"
+              onClick={() => setMenuOpen(false)}
+              className="py-3 text-[12px] font-black uppercase tracking-widest text-red-500 border-b border-zinc-900"
+            >
+              Diagnostika
+            </Link>
+            <Link
+              href="/login"
+              onClick={() => { setMenuOpen(false); trackMojaGarazClick('mobilne-menu'); }}
+              className="mt-4 bg-red-600 text-white text-center py-3.5 rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-600/25"
+            >
+              🏎️ Moja Garáž — prihlásenie
+            </Link>
+            <Link
+              href="/system"
+              onClick={() => setMenuOpen(false)}
+              className="mt-3 text-center py-2 text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:text-zinc-400"
+            >
+              ⚙ Pre zamestnancov
+            </Link>
+          </div>
+        )}
+
         {/* MODRÁ LINKA DOLE */}
         <div className="nav-stripe" />
       </nav>
