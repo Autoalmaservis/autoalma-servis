@@ -78,6 +78,23 @@ BEGIN
 END;
 $fn$;
 
+-- ── posun počítadla pre daný prefix ───────────────────────────────────
+-- Zámerne vo vlastnej funkcii: generate_invoice_number má parameter "prefix"
+-- a ON CONFLICT (prefix) by tam bolo nejednoznačné voči rovnomennému stĺpcu.
+CREATE OR REPLACE FUNCTION public.bump_invoice_counter(p_prefix text)
+RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $fn$
+DECLARE n int;
+BEGIN
+  INSERT INTO invoice_counters AS ic (prefix, last_number) VALUES (p_prefix, 1)
+  ON CONFLICT (prefix) DO UPDATE SET last_number = ic.last_number + 1
+  RETURNING ic.last_number INTO n;
+  RETURN n;
+END;
+$fn$;
+
 -- ── generovanie: najprv rezervované pre zákazku, inak počítadlo ────────
 CREATE OR REPLACE FUNCTION public.generate_invoice_number(prefix text, p_job_id uuid DEFAULT NULL)
 RETURNS text
@@ -102,9 +119,7 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO invoice_counters AS ic (prefix, last_number) VALUES (pfx, 1)
-  ON CONFLICT (prefix) DO UPDATE SET last_number = ic.last_number + 1
-  RETURNING ic.last_number INTO n;
+  n := public.bump_invoice_counter(pfx);
 
   RETURN pfx || lpad(n::text, 3, '0');
 END;
