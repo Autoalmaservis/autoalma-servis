@@ -373,7 +373,8 @@ export default function KlientiPage() {
           <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Garáž <span className="text-red-600 text-4xl">Dielne</span></h1>
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2 italic uppercase">Správa Partnerov</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 flex-wrap">
+          <Link href="/historia" className="bg-zinc-900 border border-zinc-800 text-white font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:border-red-600 hover:text-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2">🚗 História Vozidiel</Link>
           <button onClick={() => { setEditMode(false); setClientForm({customer_name:'', customer_phone:'', customer_email:'', client_type:'Osoba', address:'', city:'', zip:'', ico:'', dic:'', ic_dph:'', company_name: '', password: ''}); setIsClientModalOpen(true); }} className="bg-white text-black font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold">+ Nový Partner</button>
         </div>
       </header>

@@ -51,6 +51,8 @@ export default function HistoriaVyhladavanie() {
 
   return (
     <div className="p-6 md:p-10 min-h-screen bg-black text-white font-bold">
+      <Link href="/klienti" className="inline-block mb-6 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-red-600 transition-colors">← Späť na Klienti a Vozidlá</Link>
+
       <header className="mb-10 border-l-4 border-red-600 pl-6">
         <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">História <span className="text-red-600 text-4xl">Vozidiel</span></h1>
         <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2 italic">Vyhľadaj ŠPZ, zákazníka alebo model</p>

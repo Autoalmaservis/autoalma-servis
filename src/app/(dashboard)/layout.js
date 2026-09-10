@@ -126,8 +126,7 @@ export default function DashboardLayout({ children }) {
             {!isCollapsed && <p className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.2em] mb-4 ml-2 font-bold">Hlavné Menu</p>}
 
             <MenuLink href="/dashboard" icon="🏠" label="Prehľad" collapsed={isCollapsed} active={pathname === '/dashboard'} />
-            <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti'} />
-            <MenuLink href="/historia" icon="🚗" label="História Vozidiel" collapsed={isCollapsed} active={pathname.startsWith('/historia')} />
+            <MenuLink href="/klienti" icon="👥" label="Klienti a Vozidlá" collapsed={isCollapsed} active={pathname === '/klienti' || pathname.startsWith('/historia')} />
             <MenuLink href="/kalendar" icon="📅" label="Kalendár / Plán" collapsed={isCollapsed} active={pathname === '/kalendar'} badge={pendingCount} />
             <MenuLink href="/zakazky" icon="🛠️" label="Zoznam Zákaziek" collapsed={isCollapsed} active={pathname.startsWith('/zakazky')} badge={jobUpdateCount} findingAlert={findingJobs.length > 0} />
 
