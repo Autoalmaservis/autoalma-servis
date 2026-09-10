@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import BannerPopup from '@/app/components/BannerPopup';
-import { trackMojaGarazClick, trackPhoneClick, trackContactSubmit } from '@/app/lib/analytics';
+import { trackMojaGarazClick, trackPhoneClick, trackContactSubmit, trackBookingCta } from '@/app/lib/analytics';
 
 const services = [
   {
@@ -33,6 +33,64 @@ const services = [
   },
 ];
 
+// Dôkazy v hlavičke — jediné čísla, ktoré musí zákazník vidieť hneď
+const proofs = [
+  { value: '4,6 ★', label: '148 hodnotení na Google' },
+  { value: '12 mes.', label: 'záruka na vykonanú prácu' },
+  { value: 'od 35 €', label: 'normohodina, účtujeme skutočný čas' },
+  { value: 'STK', label: 'odvezieme a vybavíme za vás' },
+];
+
+const steps = [
+  { n: '1', title: 'Objednáte sa', desc: 'Online za dve minúty bez registrácie, alebo telefonicky.' },
+  { n: '2', title: 'Prevezmeme auto', desc: 'Spíšeme, čo vás trápi, a spravíme diagnostiku.' },
+  { n: '3', title: 'Pošleme cenu', desc: 'Cenová ponuka vám príde do mobilu ešte pred prácou.' },
+  { n: '4', title: 'Vy ju schválite', desc: 'Bez vášho súhlasu nezačneme. Žiadne prekvapenie na faktúre.' },
+  { n: '5', title: 'Opravíme a otestujeme', desc: 'Každú opravu overíme testovacou jazdou.' },
+  { n: '6', title: 'Odovzdáme s faktúrou', desc: 'Doklad aj história vozidla vám zostanú v Mojej Garáži.' },
+];
+
+// Recenzie z profilu na Google. Ďalšie pridávaj sem.
+const reviews = [
+  {
+    name: 'Dušan D.',
+    text: 'Veľmi spokojný so službami — spoľahlivé, kvalitné a všetko vybavené rýchlo a bez zbytočných komplikácií. Určite odporúčam každému, kto hľadá profesionálny prístup.',
+    when: 'pred 4 mesiacmi',
+  },
+  {
+    name: 'Juraj K.',
+    text: 'Už niekoľkokrát som využil tento autoservis. Zatiaľ som bol vždy spokojný.',
+    when: 'pred 4 mesiacmi',
+  },
+];
+
+const faqs = [
+  {
+    q: 'Koľko ma oprava bude stáť?',
+    a: 'Normohodina je od 35 € pri osobnom vozidle a od 45 € pri dodávke, účtujeme skutočne odpracovaný čas. Presnú cenu poznáme až po diagnostike — a dozviete sa ju vopred: cenovú ponuku vám pošleme do mobilu a začneme pracovať až vtedy, keď ju schválite.',
+  },
+  {
+    q: 'Vybavíte mi STK a emisnú kontrolu?',
+    a: 'Áno, celé to vybavíme za vás — auto pripravíme, odvezieme na stanicu a vrátime vám ho s platnou kontrolou. Cena 140 € zahŕňa aj kontrolu vozidla pred STK, aby ste sa nevrátili s chybou.',
+  },
+  {
+    q: 'Ako dlho budem bez auta?',
+    a: 'Výmenu oleja, bŕzd, prezutie či diagnostiku zvládneme na počkanie — môžete počkať priamo v servise. Pri väčších opravách vás v rámci Bratislavy odvezieme, kam potrebujete.',
+  },
+  {
+    q: 'Akú dávate záruku?',
+    a: 'Na vykonanú prácu dávame záruku 12 mesiacov. Na diely platí záruka výrobcu, ktorú vám uvedieme na faktúre.',
+  },
+  {
+    q: 'Musím sa registrovať, aby som sa objednal?',
+    a: 'Nie. Online objednávka funguje bez registrácie. Moja Garáž je dobrovoľná — dáva vám prístup k stavu opravy, cenovým ponukám, faktúram a histórii vozidla.',
+  },
+  {
+    q: 'Svieti mi kontrolka motora. Viete zistiť prečo?',
+    a: 'Áno, to je naša parketa. Univerzálna diagnostika stojí 30 €, originálna (výrobcom autorizovaná) 50 €. Riešime aj ABS, AdBlue, DPF, elektrické závady či nahratie nových kľúčov.',
+  },
+];
+
 const slogans = [
   { main: 'Férovosť, ktorú cítite', sub: 'nie len čítate' },
   { main: 'Servis, ktorý komunikuje', sub: 'nie iba účtuje' },
@@ -44,6 +102,7 @@ export default function HomePage() {
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [lightbox, setLightbox] = useState(null);
   const [cennik, setCennik] = useState([]);
+  const [openFaq, setOpenFaq] = useState(0);
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', plate: '', vehicle: '', year: '', message: '' });
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
@@ -69,6 +128,10 @@ export default function HomePage() {
       .then(({ data }) => { if (data?.value) setCennik(JSON.parse(data.value)); });
   }, []);
 
+  const goToBooking = (source) => {
+    trackBookingCta(source);
+    router.push('/objednavka');
+  };
 
   const handleContactSubmit = async (e) => {
     e.preventDefault();
@@ -129,10 +192,21 @@ export default function HomePage() {
     sameAs: ['https://www.google.com/maps/place/Autoalma'],
   };
 
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(f => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+  };
+
   return (
-    <div className="min-h-screen bg-black text-white font-sans">
+    <div className="min-h-screen bg-black text-white font-sans pb-20 md:pb-0">
       <BannerPopup />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
 
       {/* NAVIGÁCIA */}
       <nav className={`fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-xl border-b border-blue-500/25 transition-all duration-300 ${scrolled ? 'shadow-lg shadow-blue-500/5' : ''}`}>
@@ -148,8 +222,9 @@ export default function HomePage() {
               {[
                 { href: '#sluzby', label: 'Naše služby' },
                 { href: '#cennik', label: 'Cenník' },
-                { href: '#galeria', label: 'Galéria' },
-                { href: '#napiste-nam', label: 'Napíšte nám' },
+                { href: '#recenzie', label: 'Recenzie' },
+                { href: '#faq', label: 'Časté otázky' },
+                { href: '#kontakt', label: 'Kontakt' },
               ].map(link => (
                 <a
                   key={link.href}
@@ -175,7 +250,7 @@ export default function HomePage() {
             <a
               href="tel:0940449449"
               onClick={() => trackPhoneClick('nav')}
-              className="hidden md:flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
+              className="flex items-center gap-2 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:text-white transition-all"
             >
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
               0940 449 449
@@ -186,14 +261,14 @@ export default function HomePage() {
             <Link
               href="/login"
               onClick={() => trackMojaGarazClick('nav')}
-              className={`bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest transition-all rounded-xl shadow-lg shadow-red-600/20 hover:shadow-red-600/30 ${scrolled ? 'text-[9px] px-4 py-2' : 'text-[10px] px-5 py-2.5'}`}
+              className={`hidden sm:block bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest transition-all rounded-xl shadow-lg shadow-red-600/20 hover:shadow-red-600/30 ${scrolled ? 'text-[9px] px-4 py-2' : 'text-[10px] px-5 py-2.5'}`}
             >
               🏎️ Moja Garáž
             </Link>
 
             <Link
               href="/system"
-              className="text-zinc-800 hover:text-zinc-500 transition-all text-base"
+              className="hidden md:block text-zinc-800 hover:text-zinc-500 transition-all text-base"
               title="Pre zamestnancov"
             >
               ⚙
@@ -205,70 +280,59 @@ export default function HomePage() {
       </nav>
 
       {/* HERO */}
-      <section className="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-red-600/5 via-transparent to-transparent pointer-events-none" />
+      <section className="flex flex-col items-center justify-center text-center px-6 pt-28 md:pt-32 pb-16 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-red-600/10 via-transparent to-transparent pointer-events-none" />
 
-        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-red-600 mb-5 italic">
-          Bratislava · Svornosti 119
+        <p className="text-[10px] font-black uppercase tracking-[0.35em] text-red-600 mb-4 italic">
+          Bratislava – Podunajské Biskupice · Svornosti 119
         </p>
 
-        <h1 className="text-5xl md:text-8xl font-black uppercase italic tracking-tighter leading-none mb-4">
-          Auto<span className="text-red-600">Alma</span>
+        <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-[0.95] mb-6 max-w-4xl">
+          Autoservis, ktorý vám <span className="text-red-600">povie, čo sa deje</span> s vaším autom
         </h1>
 
-        <p className="text-white text-sm md:text-base font-bold max-w-lg mb-2 leading-relaxed">
-          Máme možno prvý autoservis,
+        <p className="text-zinc-200 text-base md:text-xl font-bold max-w-2xl leading-relaxed mb-3">
+          Servis, diagnostika, klimatizácia, pneuservis aj STK — auto odovzdáte raz
+          a vyzdvihnete hotové.
         </p>
-        <p className="text-white text-base md:text-lg font-black italic max-w-lg mb-10">
-          ktorému budete veriť.
+        <p className="text-zinc-400 text-sm md:text-base font-bold max-w-2xl leading-relaxed mb-9">
+          Počas opravy vidíte v mobile, čo sa s autom robí a čo to bude stáť.
+          Cenu schvaľujete vy — nie faktúra na konci.
         </p>
 
-        {/* VÝHODY GARÁŽE — viditeľné hneď */}
-        <div className="w-full max-w-6xl mb-10">
-          <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-6 italic">
-            🏎️ Moja Garáž — váš online servisný účet
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[
-              { icon: '📡', title: 'Stav opravy naživo', desc: 'Vidíte čo sa s autom deje — bez volania' },
-              { icon: '📋', title: 'Schvaľujete práce online', desc: 'Cenová ponuka priamo na telefón' },
-              { icon: '🧾', title: 'Faktúry vždy po ruke', desc: 'Všetky doklady na jednom mieste' },
-              { icon: '🚗', title: 'História každého auta', desc: 'Kompletná servisná karta vozidla' },
-              { icon: '📱', title: 'Funguje na mobile', desc: 'Bez aplikácie, stačí prehliadač' },
-              { icon: '🔒', title: 'Len váš účet', desc: 'Súkromný prístup, vaše dáta' },
-            ].map((b, i) => (
-              <div key={i} className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-8 md:p-10 rounded-[2rem] text-left transition-all group flex items-start gap-6">
-                <span className="text-4xl md:text-5xl shrink-0 mt-0.5">{b.icon}</span>
-                <div>
-                  <p className="text-white text-sm md:text-base font-black uppercase italic tracking-tight leading-tight mb-2 group-hover:text-red-500 transition-colors">{b.title}</p>
-                  <p className="text-zinc-300 text-xs md:text-sm font-bold leading-relaxed">{b.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-center gap-4">
+        {/* CTA */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full max-w-lg">
           <button
-            onClick={() => router.push('/objednavka')}
-            className="bg-red-600 hover:bg-red-500 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all shadow-2xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-105"
+            onClick={() => goToBooking('hero')}
+            className="flex-1 bg-red-600 hover:bg-red-500 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-2xl shadow-red-600/25 hover:shadow-red-600/40 hover:scale-[1.03]"
           >
-            📅 Objednať sa online
+            📅 Objednať termín
           </button>
-          <Link
-            href="/login"
-            className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.3em] transition-all"
+          <a
+            href="tel:0940449449"
+            onClick={() => trackPhoneClick('hero')}
+            className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white px-8 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all text-center"
           >
-            🏎️ Aktivovať Moju Garáž
-          </Link>
+            📞 0940 449 449
+          </a>
         </div>
-        <p className="text-zinc-500 text-[9px] font-black uppercase tracking-widest mt-4">
-          Objednajte sa bez registrácie · Garáž dáva prístup k stavu opravy
+        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mt-4">
+          Objednanie bez registrácie · Po–Pi 8:00–16:00
         </p>
+
+        {/* DÔKAZY */}
+        <div className="w-full max-w-5xl mt-14 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {proofs.map((p, i) => (
+            <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl px-5 py-6 text-left">
+              <p className="text-white text-xl md:text-2xl font-black italic tracking-tight leading-none mb-2">{p.value}</p>
+              <p className="text-zinc-400 text-[11px] md:text-xs font-bold leading-snug">{p.label}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* SLOGANY */}
-      <section className="py-14 px-6 border-y border-zinc-900 bg-zinc-950">
+      <section className="py-12 px-6 border-y border-zinc-900 bg-zinc-950">
         <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
           {slogans.map((s, i) => (
             <div key={i}>
@@ -319,7 +383,126 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* GALÉRIA */}
+      {/* STK — samostatný ťahák */}
+      <section className="px-6 pb-24">
+        <div className="max-w-6xl mx-auto bg-gradient-to-br from-red-950/40 via-zinc-950 to-zinc-950 border border-red-900/40 rounded-[2rem] p-8 md:p-12">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+            <div className="max-w-2xl">
+              <p className="text-[10px] text-red-500 font-black uppercase tracking-[0.4em] mb-4">Nemusíte nikam chodiť</p>
+              <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter mb-4">
+                STK a emisnú kontrolu <span className="text-red-600">vybavíme za vás</span>
+              </h2>
+              <p className="text-zinc-300 font-bold text-sm md:text-base leading-relaxed">
+                Auto u nás necháte, my ho pripravíme, odvezieme na stanicu a vrátime vám ho
+                s platnou kontrolou. V cene 140 € je aj kontrola vozidla pred STK — aby ste
+                sa nevrátili s chybou a neplatili dvakrát.
+              </p>
+            </div>
+            <button
+              onClick={() => goToBooking('stk')}
+              className="bg-red-600 hover:bg-red-500 text-white px-10 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-xl shadow-red-600/25 hover:scale-105 shrink-0 w-full lg:w-auto"
+            >
+              Objednať STK
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* AKO TO PREBIEHA */}
+      <section id="ako-to-prebieha" className="py-24 px-6 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Od objednania po odovzdanie</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Ako to u nás prebieha</h2>
+            <p className="text-zinc-300 text-sm font-bold mt-4 max-w-xl mx-auto">
+              Nič sa nedeje bez toho, aby ste o tom vedeli.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {steps.map((s, i) => (
+              <div key={i} className="bg-black border border-zinc-900 rounded-2xl p-7 flex gap-5">
+                <span className="text-red-600 font-black italic text-3xl leading-none shrink-0">{s.n}</span>
+                <div>
+                  <p className="text-white font-black uppercase italic tracking-tight text-base mb-2">{s.title}</p>
+                  <p className="text-zinc-400 text-sm font-bold leading-relaxed">{s.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* RECENZIE */}
+      <section id="recenzie" className="py-24 px-6 border-t border-zinc-900 bg-black">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Čo hovoria zákazníci</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">
+              4,6 ★ zo 148 hodnotení
+            </h2>
+            <p className="text-zinc-300 text-sm font-bold mt-4">Hodnotenia na Google, ktoré si viete overiť.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
+            {reviews.map((r, i) => (
+              <div key={i} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-7 flex flex-col gap-4">
+                <p className="text-yellow-500 text-sm tracking-widest">★★★★★</p>
+                <p className="text-zinc-200 text-sm font-bold leading-relaxed flex-grow">„{r.text}“</p>
+                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">{r.name} · {r.when}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-10">
+            <a
+              href="https://www.google.com/maps/place/Autoalma"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 px-6 py-3 rounded-xl transition-all"
+            >
+              Pozrieť všetkých 148 recenzií na Google →
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* MOJA GARÁŽ */}
+      <section className="py-24 px-6 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">🏎️ Váš online servisný účet</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Moja Garáž</h2>
+            <p className="text-zinc-300 text-sm font-bold mt-4 max-w-xl mx-auto">
+              Väčšina servisov vám povie cenu až pri preberaní auta. U nás ju schvaľujete vopred — v mobile, bez aplikácie.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {[
+              { icon: '📡', title: 'Stav opravy naživo', desc: 'Vidíte, čo sa s autom práve deje — bez volania do servisu.' },
+              { icon: '📋', title: 'Cenu schvaľujete vy', desc: 'Ponuka príde do mobilu. Kým ju nepotvrdíte, nepracujeme.' },
+              { icon: '🚗', title: 'História a faktúry', desc: 'Všetky doklady a servisná karta vozidla na jednom mieste.' },
+            ].map((b, i) => (
+              <div key={i} className="bg-black border border-zinc-900 hover:border-red-600/30 p-8 rounded-2xl transition-all group">
+                <span className="text-4xl block mb-5">{b.icon}</span>
+                <p className="text-white text-base font-black uppercase italic tracking-tight mb-2 group-hover:text-red-500 transition-colors">{b.title}</p>
+                <p className="text-zinc-400 text-sm font-bold leading-relaxed">{b.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-10">
+            <Link
+              href="/login"
+              onClick={() => trackMojaGarazClick('sekcia')}
+              className="inline-block bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all"
+            >
+              🏎️ Aktivovať Moju Garáž
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* GALÉRIA — zobrazí sa až keď sú v nej fotky */}
+      {galleryPhotos.length > 0 && (
       <section id="galeria" className="py-24 px-6 border-t border-zinc-900 bg-black">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
@@ -327,36 +510,31 @@ export default function HomePage() {
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Galéria</h2>
           </div>
 
-          {galleryPhotos.length === 0 ? (
-            <div className="border-2 border-dashed border-zinc-800 rounded-[2rem] py-24 text-center text-zinc-700 text-xs font-black uppercase tracking-widest italic">
-              Fotky z dielne — pripravujeme
+          {(
+            <div className="columns-2 md:columns-3 gap-4">
+              {galleryPhotos.map((photo) => (
+                <div
+                  key={photo.id}
+                  className="break-inside-avoid mb-4 rounded-2xl overflow-hidden cursor-pointer group relative"
+                  onClick={() => setLightbox(photo)}
+                >
+                  <img
+                    src={photo.url}
+                    alt={photo.caption || 'AutoAlma servis Bratislava'}
+                    className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  {photo.caption && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3 opacity-0 group-hover:opacity-100 transition-all">
+                      <p className="text-white text-xs font-bold">{photo.caption}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          ) : (
-            <>
-              <div className="columns-2 md:columns-3 gap-4">
-                {galleryPhotos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    className="break-inside-avoid mb-4 rounded-2xl overflow-hidden cursor-pointer group relative"
-                    onClick={() => setLightbox(photo)}
-                  >
-                    <img
-                      src={photo.url}
-                      alt={photo.caption || 'AutoAlma servis'}
-                      className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    {photo.caption && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3 opacity-0 group-hover:opacity-100 transition-all">
-                        <p className="text-white text-xs font-bold">{photo.caption}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
           )}
         </div>
       </section>
+      )}
 
       {/* LIGHTBOX */}
       {lightbox && (
@@ -384,7 +562,7 @@ export default function HomePage() {
             <div className="text-center mb-16">
               <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Orientačné ceny</p>
               <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Cenník</h2>
-              <p className="text-zinc-300 text-sm font-bold mt-4 max-w-lg mx-auto">Ceny sú orientačné a závisia od konkrétneho vozidla. Presná cena vždy po diagnostike.</p>
+              <p className="text-zinc-300 text-sm font-bold mt-4 max-w-lg mx-auto">Ceny sú orientačné a závisia od konkrétneho vozidla. Presná cena vždy po diagnostike — a vždy skôr, než začneme.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {cennik.map((cat, ci) => (
@@ -414,17 +592,44 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* KONTAKTNÝ FORMULÁR */}
-      <section id="napiste-nam" className="py-24 px-6 border-t border-zinc-900 bg-black">
+      {/* FAQ */}
+      <section id="faq" className="py-24 px-6 border-t border-zinc-900 bg-black">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-14">
-            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Rýchly kontakt</p>
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Než zavoláte</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Časté otázky</h2>
+          </div>
+          <div className="divide-y divide-zinc-900 border-y border-zinc-900">
+            {faqs.map((f, i) => (
+              <div key={i}>
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
+                  className="w-full text-left py-6 flex items-start justify-between gap-6 group"
+                  aria-expanded={openFaq === i}
+                >
+                  <span className="text-white font-black text-base md:text-lg group-hover:text-red-500 transition-colors">{f.q}</span>
+                  <span className={`text-red-600 text-xl font-black shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-45' : ''}`}>+</span>
+                </button>
+                {openFaq === i && (
+                  <p className="text-zinc-300 text-sm md:text-base font-bold leading-relaxed pb-7 pr-10">{f.a}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* KONTAKTNÝ FORMULÁR */}
+      <section id="napiste-nam" className="py-24 px-6 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Neviete, čo autu je?</p>
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Napíšte nám</h2>
-            <p className="text-zinc-300 font-bold text-sm mt-4">Odpovieme do 24 hodín v pracovné dni.</p>
+            <p className="text-zinc-300 font-bold text-sm mt-4">Opíšte problém vlastnými slovami — ozveme sa a povieme, čo s tým.</p>
           </div>
 
           {contactSent ? (
-            <div className="bg-zinc-950 border border-green-900/50 rounded-[2rem] p-12 text-center">
+            <div className="bg-black border border-green-900/50 rounded-[2rem] p-12 text-center">
               <div className="text-5xl mb-4">✅</div>
               <h3 className="text-2xl font-black uppercase italic tracking-tighter text-white mb-2">Správa odoslaná</h3>
               <p className="text-zinc-300 font-bold text-sm mb-6">Ozveme sa vám čo najskôr.</p>
@@ -436,91 +641,105 @@ export default function HomePage() {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleContactSubmit} className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-8 md:p-10 space-y-5">
+            <form onSubmit={handleContactSubmit} className="bg-black border border-zinc-900 rounded-[2rem] p-8 md:p-10 space-y-5">
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Meno *</label>
+                  <label htmlFor="kf-meno" className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Meno *</label>
                   <input
+                    id="kf-meno"
                     required
                     value={contactForm.name}
                     onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))}
                     placeholder="Ján Novák"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
+                    className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">E-mail *</label>
+                  <label htmlFor="kf-tel" className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Telefón *</label>
                   <input
-                    required
-                    type="email"
-                    value={contactForm.email}
-                    onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))}
-                    placeholder="jan@email.sk"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Telefón *</label>
-                  <input
+                    id="kf-tel"
                     required
                     type="tel"
                     value={contactForm.phone}
                     onChange={e => setContactForm(p => ({ ...p, phone: e.target.value }))}
                     placeholder="+421 900 000 000"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Vozidlo</label>
-                  <input
-                    value={contactForm.vehicle}
-                    onChange={e => setContactForm(p => ({ ...p, vehicle: e.target.value }))}
-                    placeholder="napr. Škoda Octavia 2.0 TDI"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">ŠPZ</label>
-                  <input
-                    value={contactForm.plate}
-                    onChange={e => setContactForm(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
-                    placeholder="BA123AB"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors tracking-widest"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Rok výroby</label>
-                  <input
-                    type="number"
-                    min="1980"
-                    max="2026"
-                    value={contactForm.year}
-                    onChange={e => setContactForm(p => ({ ...p, year: e.target.value }))}
-                    placeholder="napr. 2018"
-                    className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
+                    className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Správa *</label>
+                <label htmlFor="kf-sprava" className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Čo potrebujete? *</label>
                 <textarea
+                  id="kf-sprava"
                   required
-                  rows={5}
+                  rows={4}
                   value={contactForm.message}
                   onChange={e => setContactForm(p => ({ ...p, message: e.target.value }))}
-                  placeholder="Opíšte problém s vozidlom alebo čo potrebujete..."
-                  className="w-full bg-black border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors resize-none"
+                  placeholder="Napr. pri brzdení počuť škrípanie, alebo potrebujem STK a nemám čas to riešiť..."
+                  className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-4 pt-2">
-                <p className="text-zinc-400 text-[10px] font-black uppercase tracking-widest">* povinné polia</p>
+              <details className="group">
+                <summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors list-none">
+                  + Doplniť údaje o vozidle (nepovinné)
+                </summary>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+                  <div className="space-y-2">
+                    <label htmlFor="kf-email" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">E-mail</label>
+                    <input
+                      id="kf-email"
+                      type="email"
+                      value={contactForm.email}
+                      onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))}
+                      placeholder="jan@email.sk"
+                      className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="kf-vozidlo" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Vozidlo</label>
+                    <input
+                      id="kf-vozidlo"
+                      value={contactForm.vehicle}
+                      onChange={e => setContactForm(p => ({ ...p, vehicle: e.target.value }))}
+                      placeholder="napr. Škoda Octavia 2.0 TDI"
+                      className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="kf-spz" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">ŠPZ</label>
+                    <input
+                      id="kf-spz"
+                      value={contactForm.plate}
+                      onChange={e => setContactForm(p => ({ ...p, plate: e.target.value.toUpperCase() }))}
+                      placeholder="BA123AB"
+                      className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors tracking-widest"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="kf-rok" className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Rok výroby</label>
+                    <input
+                      id="kf-rok"
+                      type="number"
+                      min="1980"
+                      max="2030"
+                      value={contactForm.year}
+                      onChange={e => setContactForm(p => ({ ...p, year: e.target.value }))}
+                      placeholder="napr. 2018"
+                      className="w-full bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-red-600/60 rounded-xl px-4 py-3 text-white text-sm font-bold placeholder-zinc-500 focus:outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+              </details>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Odpovieme do 24 hodín v pracovné dni</p>
                 <button
                   type="submit"
                   disabled={contactSending}
-                  className="bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-xl shadow-red-600/20 hover:scale-105 hover:shadow-red-600/30"
+                  className="w-full sm:w-auto bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-4 rounded-2xl font-black uppercase text-xs tracking-[0.25em] transition-all shadow-xl shadow-red-600/20 hover:scale-105 hover:shadow-red-600/30"
                 >
                   {contactSending ? 'Odosielam...' : 'Odoslať správu'}
                 </button>
@@ -532,48 +751,49 @@ export default function HomePage() {
       </section>
 
       {/* KONTAKT */}
-      <section id="kontakt" className="py-24 px-6 bg-zinc-950 border-t border-zinc-900">
+      <section id="kontakt" className="py-24 px-6 bg-black border-t border-zinc-900">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Kde nás nájdete</p>
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Kontakt</h2>
+            <p className="text-zinc-300 text-sm font-bold mt-4">
+              Bratislava – Podunajské Biskupice. Sme kúsok od Vrakune, Ružinova aj Rovinky.
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             {/* TELEFÓNY */}
-            <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] flex flex-col gap-5">
-              <div>
-                <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-4">📞 Telefón</p>
-                <a href="tel:0940449449" onClick={() => trackPhoneClick('kontakt')} className="flex flex-col group mb-4">
-                  <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0940 449 449</span>
-                  <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Christian Flickinger</span>
-                  <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Prijímací technik</span>
-                </a>
-                <div className="h-px bg-zinc-900 mb-4" />
-                <a href="tel:0908647227" onClick={() => trackPhoneClick('kontakt')} className="flex flex-col group">
-                  <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0908 647 227</span>
-                  <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Maroš Jurkovič</span>
-                  <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Diagnostik</span>
-                </a>
-              </div>
+            <div className="bg-zinc-950 border border-zinc-900 p-8 rounded-[2rem]">
+              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-5">📞 Telefón</p>
+              <a href="tel:0940449449" onClick={() => trackPhoneClick('kontakt')} className="flex flex-col group mb-5">
+                <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0940 449 449</span>
+                <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Christian Flickinger</span>
+                <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Prijímací technik</span>
+              </a>
+              <div className="h-px bg-zinc-900 mb-5" />
+              <a href="tel:0908647227" onClick={() => trackPhoneClick('kontakt')} className="flex flex-col group">
+                <span className="text-white font-black text-lg tracking-widest group-hover:text-red-500 transition-colors">0908 647 227</span>
+                <span className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-1">Maroš Jurkovič</span>
+                <span className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest">Diagnostik</span>
+              </a>
             </div>
 
             {/* ADRESA */}
             <a
-              href="https://maps.google.com/?q=Svornosti+119,+Bratislava"
+              href="https://maps.google.com/?q=Ulica+Svornosti+119,+821+06+Bratislava"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-black border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer"
+              className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer flex flex-col justify-center"
             >
               <span className="text-4xl mb-4 block">📍</span>
-              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Kde nás nájdete</p>
-              <p className="text-white font-black text-xl group-hover:text-red-500 transition-colors">Svornosti 119</p>
-              <p className="text-zinc-300 font-bold text-sm mt-2">821 06 Bratislava</p>
-              <p className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-3">Po–Pi 8:00–16:00</p>
+              <p className="text-white font-black text-xl group-hover:text-red-500 transition-colors">Ulica Svornosti 119</p>
+              <p className="text-zinc-300 font-bold text-sm mt-2">821 06 Bratislava<br />Podunajské Biskupice</p>
+              <p className="text-zinc-300 font-bold text-[10px] uppercase tracking-widest mt-4">Po–Pi 8:00–16:00</p>
+              <p className="text-red-500 font-black text-[10px] uppercase tracking-widest mt-4">Otvoriť navigáciu →</p>
             </a>
 
             {/* E-MAILY */}
-            <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] flex flex-col gap-4">
+            <div className="bg-zinc-950 border border-zinc-900 p-8 rounded-[2rem] flex flex-col gap-4">
               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest">✉️ E-mail</p>
               <a href="mailto:autoalma@autoalma.sk" className="group">
                 <p className="text-white font-black text-sm break-all group-hover:text-red-500 transition-colors">autoalma@autoalma.sk</p>
@@ -590,38 +810,22 @@ export default function HomePage() {
                 <p className="text-zinc-400 font-bold text-[9px] uppercase tracking-widest mt-1">Christian Flickinger · Príjem</p>
               </a>
             </div>
-
-            {/* FAKTURAČNÉ ÚDAJE */}
-            <div className="bg-black border border-zinc-900 p-8 rounded-[2rem] text-center">
-              <span className="text-4xl mb-4 block">🧾</span>
-              <p className="text-[9px] text-red-600 font-black uppercase tracking-widest mb-3">Fakturačné údaje</p>
-              <p className="text-white font-black text-base">Autoalma s.r.o.</p>
-              <div className="mt-2 mb-4">
-                <p className="text-zinc-300 font-bold text-sm">Tilgnerova 712/3</p>
-                <p className="text-zinc-300 font-bold text-sm">841 04 Bratislava</p>
-              </div>
-              <div className="space-y-1 border-t border-zinc-900 pt-4">
-                <p className="text-zinc-300 font-bold text-sm">IČO: 46044876</p>
-                <p className="text-zinc-300 font-bold text-sm">DIČ: 2023194316</p>
-                <p className="text-zinc-300 font-bold text-sm">IČ DPH: SK2023194316</p>
-              </div>
-            </div>
           </div>
 
           {/* MAPA */}
           <div className="mt-10 rounded-[2rem] overflow-hidden border border-zinc-900 relative">
             <iframe
-              src="https://maps.google.com/maps?q=Svornosti+119,+Bratislava&t=&z=16&ie=UTF8&iwloc=&output=embed"
+              src="https://maps.google.com/maps?q=Ulica+Svornosti+119,+821+06+Bratislava&t=&z=16&ie=UTF8&iwloc=&output=embed"
               width="100%"
               height="400"
               style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg)' }}
               allowFullScreen=""
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
-              title="AutoAlma Servis – Svornosti 119, Bratislava"
+              title="AutoAlma Servis – Ulica Svornosti 119, Bratislava"
             />
             <a
-              href="https://maps.google.com/?q=Svornosti+119,+Bratislava"
+              href="https://maps.google.com/?q=Ulica+Svornosti+119,+821+06+Bratislava"
               target="_blank"
               rel="noopener noreferrer"
               className="absolute bottom-4 right-4 bg-black/90 border border-zinc-800 hover:border-red-600/50 text-white font-black uppercase text-[10px] tracking-widest px-4 py-2.5 rounded-xl transition-all"
@@ -633,18 +837,47 @@ export default function HomePage() {
       </section>
 
       {/* FOOTER */}
-      <footer className="py-8 px-6 border-t border-zinc-900 flex flex-col md:flex-row items-center justify-between gap-4">
-        <p className="text-zinc-700 text-[10px] font-black uppercase tracking-widest">
-          © {new Date().getFullYear()} Autoalma s.r.o. · IČO: 46044876
-        </p>
-        <Link
-          href="/system"
-          className="text-zinc-800 hover:text-zinc-500 text-[9px] font-black uppercase tracking-widest transition-all"
-        >
-          Pre zamestnancov →
-        </Link>
+      <footer className="px-6 py-12 border-t border-zinc-900 bg-zinc-950">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-start justify-between gap-8">
+          <div>
+            <p className="font-black uppercase italic tracking-tighter text-lg mb-3">
+              Auto<span className="text-red-600">Alma</span>
+            </p>
+            <p className="text-zinc-500 text-xs font-bold leading-relaxed">
+              Autoalma s.r.o. · Tilgnerova 712/3, 841 04 Bratislava<br />
+              IČO: 46044876 · DIČ: 2023194316 · IČ DPH: SK2023194316
+            </p>
+          </div>
+          <div className="flex flex-col items-start md:items-end gap-3">
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+              © {new Date().getFullYear()} Autoalma s.r.o.
+            </p>
+            <Link
+              href="/system"
+              className="text-zinc-700 hover:text-zinc-500 text-[9px] font-black uppercase tracking-widest transition-all"
+            >
+              Pre zamestnancov →
+            </Link>
+          </div>
+        </div>
       </footer>
 
+      {/* LEPIACA LIŠTA NA MOBILE */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/95 backdrop-blur-xl border-t border-zinc-800 px-3 py-3 flex gap-3">
+        <a
+          href="tel:0940449449"
+          onClick={() => trackPhoneClick('sticky')}
+          className="flex-1 bg-zinc-900 border border-zinc-700 text-white py-3.5 rounded-xl font-black uppercase text-[11px] tracking-widest text-center"
+        >
+          📞 Zavolať
+        </a>
+        <button
+          onClick={() => goToBooking('sticky')}
+          className="flex-1 bg-red-600 text-white py-3.5 rounded-xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-red-600/25"
+        >
+          📅 Objednať termín
+        </button>
+      </div>
 
     </div>
   );
