@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { supabaseServer } from '@/app/lib/supabaseServer';
+import { vlastnaStranka, odkazNaSluzbu } from '@/app/lib/specialneStranky';
 import ImageGallery from './ImageGallery';
 import SiteHeader from '@/app/components/SiteHeader';
 import StickyCta from '@/app/components/StickyCta';
@@ -81,6 +83,7 @@ function rozdelPopis(desc) {
 
 export async function generateMetadata({ params }) {
   const { slug, item } = await params;
+  if (vlastnaStranka(slug, item)) return {};
   const { itemData } = await getData(slug, item);
   if (!itemData) return { title: 'Služba nenájdená' };
 
@@ -102,6 +105,12 @@ export async function generateMetadata({ params }) {
 
 export default async function ItemDetailPage({ params }) {
   const { slug, item } = await params;
+
+  // Ak má služba vlastnú podrobnú stránku, pošleme tam aj toho, kto prišiel
+  // na starú adresu — inak by na tú istú službu existovali dve rôzne stránky.
+  const vlastna = vlastnaStranka(slug, item);
+  if (vlastna) redirect(vlastna);
+
   const { section, itemData } = await getData(slug, item);
 
   if (!itemData) {
@@ -208,7 +217,16 @@ export default async function ItemDetailPage({ params }) {
 
           <div className="min-w-0">
             {bloky.length > 0 ? (
-              <div className="max-w-[68ch]">
+              <div className="max-w-[72ch]">
+                {/* Fotka v texte — odseky ju obtekajú, pôsobí to živšie
+                    než zoznam fotiek až na konci stránky. */}
+                <FotoMiesto
+                  nazov={`sluzba-${item}`}
+                  bezRamika
+                  popis={`${itemData.title} — záber z dielne`}
+                  alt={`${itemData.title} — AutoAlma Bratislava`}
+                  className="md:float-right md:w-[300px] md:ml-8 mb-6"
+                />
                 {bloky.map((b, i) => {
                   if (b.typ === 'nadpis') return (
                     <h2 key={i} className={`text-lg md:text-xl font-black uppercase italic tracking-tight text-white flex items-center gap-3 ${i > 0 ? 'mt-10' : ''} mb-4`}>
@@ -247,21 +265,14 @@ export default async function ItemDetailPage({ params }) {
             )}
 
             {/* FOTKY — z databázy alebo zo súborov, ak sú */}
-            {images.length > 0 ? (
-              <div className="mt-10">
+            {images.length > 0 && (
+              <div className="mt-10 clear-both">
                 <ImageGallery images={images} />
-              </div>
-            ) : (
-              <div className="mt-10 grid sm:grid-cols-2 gap-5">
-                <FotoMiesto nazov={`sluzba-${item}`} bezRamika
-                  popis={`${itemData.title} — záber z dielne`} alt={`${itemData.title} — AutoAlma Bratislava`} />
-                <FotoMiesto nazov={`sluzba-${item}-2`} bezRamika
-                  popis={`${itemData.title} — druhý záber`} alt={`${itemData.title} — AutoAlma Bratislava`} />
               </div>
             )}
 
             {/* AKO TO PREBIEHA */}
-            <div className="mt-14">
+            <div className="mt-14 clear-both">
               <p className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500 mb-6">Ako to u nás prebieha</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {postup.map((k, i) => (
@@ -323,7 +334,7 @@ export default async function ItemDetailPage({ params }) {
                 <ul className="space-y-1">
                   {dalsie.map((d, i) => (
                     <li key={i}>
-                      <Link href={`/sluzby/${slug}/${toSlug(d.title)}`}
+                      <Link href={odkazNaSluzbu(slug, toSlug(d.title))}
                         className="flex items-center gap-3 py-2 px-3 -mx-3 rounded-xl hover:bg-red-600 transition-colors group">
                         <span className="w-1.5 h-1.5 bg-zinc-600 group-hover:bg-white rounded-full shrink-0 transition-colors" />
                         <span className="text-zinc-300 group-hover:text-white text-[13px] font-bold transition-colors">{d.title}</span>

@@ -24,6 +24,16 @@ diagnostika-displej    Displej pristroja s nacitanymi hodnotami
 diagnostika-praca      Technik pri merani v motorovom priestore
 
 
+KATEGORIE SLUZIEB  (/sluzby/<kategoria>)
+----------------------------------------
+Siroky zaber (pomer 21:9, foť na sirku), zobrazi sa pod nadpisom kategorie:
+
+  kategoria-mechanicke-prace
+  kategoria-elektro-diagnostika
+  kategoria-klimatizacia
+  kategoria-pneuservis
+
+
 JEDNOTLIVE SLUZBY  (/sluzby/<kategoria>/<sluzba>)
 -------------------------------------------------
 Meno suboru:  sluzba-<slug sluzby>       a volitelne  sluzba-<slug>-2
@@ -43,6 +53,7 @@ Slug je posledna cast adresy stranky. Priklady:
   sluzba-prezuvanie-pneumatiky   /sluzby/pneuservis/prezuvanie-pneumatiky
   sluzba-vyvazovanie             /sluzby/pneuservis/vyvazovanie
 
+Fotka sa vlozi PRIAMO DO TEXTU vpravo a odseky ju obtekaju.
 Na tychto strankach sa prazdny ramik NEZOBRAZUJE - kym fotka chyba, nie je
 tam nic. Az ked subor pridas, objavi sa. (Fotky nahrate v administracii ku
 konkretnej sluzbe maju prednost pred tymto priecinkom.)

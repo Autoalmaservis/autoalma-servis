@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
+import { odkazNaSluzbu } from '@/app/lib/specialneStranky';
 import BannerPopup from '@/app/components/BannerPopup';
 import {
   trackMojaGarazClick, trackPhoneClick, trackContactSubmit, trackBookingCta,
@@ -388,7 +389,7 @@ export default function HomePage() {
                   {s.items.map((item, j) => (
                     <li key={j}>
                       <button
-                        onClick={() => { trackServiceClick(item, s.name); router.push(`/sluzby/${s.slug}/${toSlug(item)}`); }}
+                        onClick={() => { trackServiceClick(item, s.name); router.push(odkazNaSluzbu(s.slug, toSlug(item))); }}
                         className="w-full text-left flex items-center gap-3 group/item py-2 px-3 -mx-3 rounded-xl hover:bg-red-600 transition-all duration-200 cursor-pointer"
                       >
                         <span className="w-1.5 h-1.5 bg-zinc-600 group-hover/item:bg-white rounded-full shrink-0 transition-colors" />

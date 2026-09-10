@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { supabaseServer } from '@/app/lib/supabaseServer';
 import SiteHeader from '@/app/components/SiteHeader';
+import FotoMiesto from '@/app/components/FotoMiesto';
+import { odkazNaSluzbu } from '@/app/lib/specialneStranky';
 import StickyCta from '@/app/components/StickyCta';
 
 // Stránka sa vygeneruje na serveri a raz za hodinu sa obnoví.
@@ -125,7 +127,7 @@ export default async function SluzbaPage({ params }) {
       </section>
 
       {/* OBRÁZKY */}
-      {images.length > 0 && (
+      {images.length > 0 ? (
         <section className="px-6 pb-16">
           <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-3">
             {images.map((url, i) => (
@@ -133,6 +135,17 @@ export default async function SluzbaPage({ params }) {
                 <img src={url} alt={`${section.name} — AutoAlma Bratislava`} className="w-full h-full object-cover aspect-video" />
               </div>
             ))}
+          </div>
+        </section>
+      ) : (
+        <section className="px-6 pb-16">
+          <div className="max-w-5xl mx-auto">
+            <FotoMiesto
+              nazov={`kategoria-${slug}`}
+              popis={`${section.name} — široký záber z dielne, ktorý vystihuje túto kategóriu`}
+              alt={`${section.name} — AutoAlma Bratislava`}
+              pomer="aspect-[21/9]"
+            />
           </div>
         </section>
       )}
@@ -149,7 +162,7 @@ export default async function SluzbaPage({ params }) {
                 return (
                   <Link
                     key={i}
-                    href={`/sluzby/${slug}/${toSlug(title)}`}
+                    href={odkazNaSluzbu(slug, toSlug(title))}
                     className="bg-zinc-950 border border-zinc-900 hover:border-red-600/40 p-7 rounded-[2rem] transition-all group block"
                   >
                     <div className="flex items-start gap-4 mb-3">
