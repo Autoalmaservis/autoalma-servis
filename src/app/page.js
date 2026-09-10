@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import BannerPopup from '@/app/components/BannerPopup';
-import { trackMojaGarazClick, trackPhoneClick, trackContactSubmit, trackBookingCta } from '@/app/lib/analytics';
+import {
+  trackMojaGarazClick, trackPhoneClick, trackContactSubmit, trackBookingCta,
+  trackFaqOpen, trackServiceClick, trackReviewsClick, trackMapClick, trackPriceListView,
+} from '@/app/lib/analytics';
 
 const services = [
   {
@@ -127,6 +130,26 @@ export default function HomePage() {
       .single()
       .then(({ data }) => { if (data?.value) setCennik(JSON.parse(data.value)); });
   }, []);
+
+  // Dopozeranie k cenníku je najsilnejší signál nákupného zámeru pred konverziou.
+  // Pošleme ho raz za návštevu, keď sa sekcia naozaj dostane na obrazovku.
+  useEffect(() => {
+    if (cennik.length === 0) return;
+    const el = document.getElementById('cennik');
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    let sent = false;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && !sent) {
+          sent = true;
+          trackPriceListView();
+          io.disconnect();
+        }
+      });
+    }, { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [cennik]);
 
   const goToBooking = (source) => {
     trackBookingCta(source);
@@ -365,7 +388,7 @@ export default function HomePage() {
                   {s.items.map((item, j) => (
                     <li key={j}>
                       <button
-                        onClick={() => router.push(`/sluzby/${s.slug}/${toSlug(item)}`)}
+                        onClick={() => { trackServiceClick(item, s.name); router.push(`/sluzby/${s.slug}/${toSlug(item)}`); }}
                         className="w-full text-left flex items-center gap-3 group/item py-2 px-3 -mx-3 rounded-xl hover:bg-red-600 transition-all duration-200 cursor-pointer"
                       >
                         <span className="w-1.5 h-1.5 bg-zinc-600 group-hover/item:bg-white rounded-full shrink-0 transition-colors" />
@@ -458,6 +481,7 @@ export default function HomePage() {
               href="https://www.google.com/maps/place/Autoalma"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => trackReviewsClick()}
               className="inline-block text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 px-6 py-3 rounded-xl transition-all"
             >
               Pozrieť všetkých 148 recenzií na Google →
@@ -603,7 +627,7 @@ export default function HomePage() {
             {faqs.map((f, i) => (
               <div key={i}>
                 <button
-                  onClick={() => setOpenFaq(openFaq === i ? -1 : i)}
+                  onClick={() => { if (openFaq !== i) trackFaqOpen(f.q); setOpenFaq(openFaq === i ? -1 : i); }}
                   className="w-full text-left py-6 flex items-start justify-between gap-6 group"
                   aria-expanded={openFaq === i}
                 >
@@ -783,6 +807,7 @@ export default function HomePage() {
               href="https://maps.google.com/?q=Ulica+Svornosti+119,+821+06+Bratislava"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => trackMapClick('adresa')}
               className="bg-zinc-950 border border-zinc-900 hover:border-red-600/30 p-8 rounded-[2rem] text-center transition-all group cursor-pointer flex flex-col justify-center"
             >
               <span className="text-4xl mb-4 block">📍</span>
@@ -828,6 +853,7 @@ export default function HomePage() {
               href="https://maps.google.com/?q=Ulica+Svornosti+119,+821+06+Bratislava"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => trackMapClick('mapa')}
               className="absolute bottom-4 right-4 bg-black/90 border border-zinc-800 hover:border-red-600/50 text-white font-black uppercase text-[10px] tracking-widest px-4 py-2.5 rounded-xl transition-all"
             >
               Otvoriť v Maps →

@@ -1,8 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { trackObjednavkaSubmit } from '@/app/lib/analytics';
+import { trackObjednavkaSubmit, trackBookingStep, trackBookingAbandon } from '@/app/lib/analytics';
 import { supabase } from '../../lib/supabase';
+
+const STEP_NAMES = { 1: 'udaje', 2: 'ukony', 3: 'termin' };
 
 const nd = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -40,6 +42,43 @@ export default function VerejnaObjednavkaPage() {
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
     '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00',
   ];
+
+  // ─── MERANIE LIEVIKA ────────────────────────────────────────
+  // Drží aktuálny krok a čas jeho začiatku aj pri odchode zo stránky,
+  // kde už React stav nie je k dispozícii.
+  const stepRef = useRef(1);
+  const stepStartedRef = useRef(Date.now());
+  const completedRef = useRef(false);
+
+  // Zaznamená vstup na krok a reštartuje meranie času
+  const enterStep = (n) => {
+    stepRef.current = n;
+    stepStartedRef.current = Date.now();
+    trackBookingStep(n, STEP_NAMES[n]);
+  };
+
+  useEffect(() => {
+    trackBookingStep(1, STEP_NAMES[1]);
+
+    // Odchod bez odoslania — pošleme, na ktorom kroku a po akom čase odišiel
+    const reportAbandon = () => {
+      if (completedRef.current) return;
+      completedRef.current = true; // aby sa neposlalo dvakrát
+      const seconds = Math.round((Date.now() - stepStartedRef.current) / 1000);
+      trackBookingAbandon(stepRef.current, STEP_NAMES[stepRef.current], seconds);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') reportAbandon();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', reportAbandon);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', reportAbandon);
+    };
+  }, []);
 
   const fetchServiceData = async () => {
     const [{ data: cats }, { data: nrms }] = await Promise.all([
@@ -98,6 +137,7 @@ export default function VerejnaObjednavkaPage() {
     setCustomerNote('');
     setCalendarMonth(new Date());
     setStep(2);
+    enterStep(2);
   };
 
   const confirmStep2 = () => {
@@ -106,6 +146,7 @@ export default function VerejnaObjednavkaPage() {
       if (!ok) return;
     }
     setStep(3);
+    enterStep(3);
   };
 
   const handleSubmit = async () => {
@@ -202,6 +243,7 @@ export default function VerejnaObjednavkaPage() {
         }).catch(() => {});
       }
 
+      completedRef.current = true; // objednávka dokončená — neposielať booking_abandon
       trackObjednavkaSubmit();
       alert('Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.');
       router.push('/');
@@ -297,7 +339,7 @@ export default function VerejnaObjednavkaPage() {
 
             {/* Navigácia */}
             <div className="flex items-center justify-between mb-8">
-              <button onClick={() => setStep(1)} className="text-zinc-500 hover:text-white text-sm font-black uppercase tracking-widest transition-colors">← Späť</button>
+              <button onClick={() => { setStep(1); enterStep(1); }} className="text-zinc-500 hover:text-white text-sm font-black uppercase tracking-widest transition-colors">← Späť</button>
               <div className="flex items-center gap-2">
                 <span className="w-7 h-1.5 rounded-full bg-red-600" />
                 <span className="w-7 h-1.5 rounded-full bg-red-600" />
@@ -466,7 +508,7 @@ export default function VerejnaObjednavkaPage() {
 
             {/* Navigácia */}
             <div className="flex items-center justify-between mb-8">
-              <button onClick={() => setStep(2)} className="text-zinc-500 hover:text-white text-sm font-black uppercase tracking-widest transition-colors">← Späť</button>
+              <button onClick={() => { setStep(2); enterStep(2); }} className="text-zinc-500 hover:text-white text-sm font-black uppercase tracking-widest transition-colors">← Späť</button>
               <div className="flex items-center gap-2">
                 <span className="w-7 h-1.5 rounded-full bg-red-600" />
                 <span className="w-7 h-1.5 rounded-full bg-red-600" />

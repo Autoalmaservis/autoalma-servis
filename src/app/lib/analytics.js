@@ -64,6 +64,51 @@ export const trackBookingCta = (source = 'hero') =>
 export const trackObjednavkaSubmit = () =>
   trackEvent('public_booking_submit');
 
+// ─── LIEVIK OBJEDNÁVKY ────────────────────────────────────────
+// Každý krok objednávkového formulára. Z týchto troch udalostí sa v GA4
+// postaví lievik a vidno, na ktorom kroku ľudia odpadávajú.
+export const trackBookingStep = (stepNumber, stepName) =>
+  trackEvent('booking_step', { step_number: stepNumber, step_name: stepName });
+
+// Odchod z objednávky bez odoslania. seconds = koľko na tom kroku strávil.
+export const trackBookingAbandon = (stepNumber, stepName, seconds) =>
+  trackEvent('booking_abandon', {
+    step_number: stepNumber,
+    step_name: stepName,
+    seconds_on_step: seconds,
+  });
+
+// ─── SPRÁVANIE NA WEBE ────────────────────────────────────────
+// Otvorenie otázky vo FAQ — hovorí, čo ľudí pred objednaním trápi
+export const trackFaqOpen = (question) =>
+  trackEvent('faq_open', { question });
+
+// Klik na konkrétnu službu v zozname — podklad pre výber kľúčových slov
+export const trackServiceClick = (service, category) =>
+  trackEvent('service_click', { service, category });
+
+// Klik na recenzie / adresu / mapu — signály, že si zákazník overuje dôveryhodnosť
+export const trackReviewsClick = () => trackEvent('reviews_click');
+export const trackMapClick = (source = 'kontakt') =>
+  trackEvent('map_click', { source });
+
+// Dopozeranie k cenníku — najsilnejší signál nákupného zámeru pred konverziou
+export const trackPriceListView = () => trackEvent('price_list_view');
+
 // ─── NÁVOD ────────────────────────────────────────────────────
 export const trackGuideStepOpen = (stepNum, stepTitle) =>
   trackEvent('guide_step_open', { step: stepNum, step_title: stepTitle });
+
+// ─── SÚHLAS S COOKIES ─────────────────────────────────────────
+// Google Consent Mode v2 — bez udeleného súhlasu sa neukladajú cookies,
+// GA4 posiela len anonymné signály bez identifikátorov.
+export const setConsent = (granted) => {
+  const value = granted ? 'granted' : 'denied';
+  gtag('consent', 'update', {
+    ad_storage: value,
+    ad_user_data: value,
+    ad_personalization: value,
+    analytics_storage: value,
+  });
+  trackEvent(granted ? 'cookie_consent_accept' : 'cookie_consent_reject');
+};

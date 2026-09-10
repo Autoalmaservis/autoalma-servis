@@ -1,10 +1,15 @@
 import './globals.css';
 import Script from 'next/script';
+import CookieConsent from '@/app/components/CookieConsent';
 
 // Hodnota NEXT_PUBLIC_GA_ID ma na zaciatku neviditelny BOM znak (ulozena ako UTF-8 with BOM),
 // takze sa gtag nacitaval ako ?id=%EF%BB%BFG-250VH3NKCB — taky identifikator Google odmietne
 // a GA4 nezbiera vobec ziadne udaje. Preto BOM a biele znaky odstranujeme.
 const GA_ID = (process.env.NEXT_PUBLIC_GA_ID || '').replace(/[\uFEFF\u200B\s]/g, '');
+
+// Microsoft Clarity \u2014 nahr\u00E1vky n\u00E1v\u0161tev a teplotn\u00E9 mapy. Rovnak\u00E9 \u010Distenie
+// hodnoty, aby sa nezopakoval ten ist\u00FD probl\u00E9m ako pri GA4.
+const CLARITY_ID = (process.env.NEXT_PUBLIC_CLARITY_ID || '').replace(/[\uFEFF\u200B\s]/g, '');
 
 export const metadata = {
   metadataBase: new URL('https://autoalma.sk'),
@@ -61,6 +66,23 @@ export default function RootLayout({ children }) {
         {children}
         {GA_ID && (
           <>
+            {/* Predvolený stav súhlasu MUSÍ byť nastavený skôr, než sa načíta gtag.
+                Preto beforeInteractive — inak by sa stihli uložiť cookies bez súhlasu. */}
+            <Script id="consent-default" strategy="beforeInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('consent', 'default', {
+                  ad_storage: 'denied',
+                  ad_user_data: 'denied',
+                  ad_personalization: 'denied',
+                  analytics_storage: 'denied',
+                  wait_for_update: 500
+                });
+                gtag('set', 'ads_data_redaction', true);
+                gtag('set', 'url_passthrough', true);
+              `}
+            </Script>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
               strategy="afterInteractive"
@@ -79,6 +101,18 @@ export default function RootLayout({ children }) {
             </Script>
           </>
         )}
+        {CLARITY_ID && (
+          <Script id="clarity-init" strategy="afterInteractive">
+            {`
+              (function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "${CLARITY_ID}");
+            `}
+          </Script>
+        )}
+        <CookieConsent />
       </body>
     </html>
   );
