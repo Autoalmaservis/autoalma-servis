@@ -33,8 +33,8 @@ const redirects = async () => [
   { source: '/servisna-prehliadka', destination: '/sluzby/mechanicke-prace/pravidelny-servis', permanent: true },
   { source: '/vymena/brzd', destination: '/sluzby/mechanicke-prace/vymena-brzd', permanent: true },
   { source: '/vymena-brzd', destination: '/sluzby/mechanicke-prace/vymena-brzd', permanent: true },
-  { source: '/vymena/rozvodov', destination: '/sluzby/mechanicke-prace', permanent: true },
-  { source: '/vymena-rozvodov', destination: '/sluzby/mechanicke-prace', permanent: true },
+  { source: '/vymena/rozvodov', destination: '/sluzby/mechanicke-prace/vymena-rozvodov', permanent: true },
+  { source: '/vymena-rozvodov', destination: '/sluzby/mechanicke-prace/vymena-rozvodov', permanent: true },
   { source: '/oprava-podvozku', destination: '/sluzby/mechanicke-prace/oprava-podvozku', permanent: true },
 
   // --- Sekcie, ktoré sú dnes kotvami na hlavnej stránke --------------------

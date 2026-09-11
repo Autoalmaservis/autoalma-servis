@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
 import { odkazNaSluzbu } from '@/app/lib/specialneStranky';
 import BannerPopup from '@/app/components/BannerPopup';
+import HladanieSluzieb from '@/app/components/HladanieSluzieb';
 import {
   trackMojaGarazClick, trackPhoneClick, trackContactSubmit, trackBookingCta,
   trackFaqOpen, trackServiceClick, trackReviewsClick, trackMapClick, trackPriceListView,
@@ -15,7 +16,7 @@ const services = [
     icon: '🔧',
     name: 'Mechanické práce',
     slug: 'mechanicke-prace',
-    items: ['Pravidelný servis', 'Výmena bŕzd', 'Oprava podvozku', 'Čistenie DPF/CAT', 'Spojka a prevodovka', 'Dekarbonizácia'],
+    items: ['Pravidelný servis', 'Výmena bŕzd', 'Oprava podvozku', 'Výmena rozvodov', 'Čistenie DPF/CAT', 'Spojka a prevodovka', 'Dekarbonizácia'],
   },
   {
     icon: '⚡',
@@ -177,7 +178,9 @@ export default function HomePage() {
         body: JSON.stringify(contactForm),
       });
     } catch {}
-    trackContactSubmit();
+    // E-mail a telefón idú do Ads pre rozšírené konverzie — hashujú sa
+    // v prehliadači, samotné kontakty Googlu neodchádzajú.
+    trackContactSubmit({ email: contactForm.email, phone: contactForm.phone });
     setContactSent(true);
     setContactForm({ name: '', email: '', phone: '', plate: '', vehicle: '', year: '', message: '' });
     setContactSending(false);
@@ -379,6 +382,9 @@ export default function HomePage() {
           Počas opravy vidíte v mobile, čo sa s autom robí a čo to bude stáť.
           Cenu schvaľujete vy — nie faktúra na konci.
         </p>
+
+        {/* HĽADANIE SLUŽBY */}
+        <HladanieSluzieb services={services} cennik={cennik} toSlug={toSlug} />
 
         {/* CTA */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full max-w-lg">

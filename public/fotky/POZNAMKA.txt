@@ -42,6 +42,7 @@ Slug je posledna cast adresy stranky. Priklady:
   sluzba-cistenie-dpf-cat        /sluzby/mechanicke-prace/cistenie-dpf-cat
   sluzba-vymena-brzd             /sluzby/mechanicke-prace/vymena-brzd
   sluzba-oprava-podvozku         /sluzby/mechanicke-prace/oprava-podvozku
+  sluzba-vymena-rozvodov         /sluzby/mechanicke-prace/vymena-rozvodov
   sluzba-pravidelny-servis       /sluzby/mechanicke-prace/pravidelny-servis
   sluzba-dekarbonizacia          /sluzby/mechanicke-prace/dekarbonizacia
   sluzba-diagnostika             /sluzby/elektro-diagnostika/diagnostika
