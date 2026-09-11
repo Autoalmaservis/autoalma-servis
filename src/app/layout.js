@@ -11,6 +11,12 @@ const GA_ID = (process.env.NEXT_PUBLIC_GA_ID || '').replace(/[\uFEFF\u200B\s]/g,
 // hodnoty, aby sa nezopakoval ten ist\u00FD probl\u00E9m ako pri GA4.
 const CLARITY_ID = (process.env.NEXT_PUBLIC_CLARITY_ID || '').replace(/[\uFEFF\u200B\s]/g, '');
 
+// Znacka Google Ads. Uctu AutoAlma.sk (100-312-8662) patri natrvalo,
+// nie je to tajomstvo ani sa nemeni medzi prostrediami \u2014 preto priamo
+// v kode a nie v premennej prostredia (tam uz raz BOM rozbil meranie).
+// Identifikatory jednotlivych konverznych akcii su v src/app/lib/analytics.js.
+const ADS_ID = 'AW-556717584';
+
 export const metadata = {
   metadataBase: new URL('https://autoalma.sk'),
   icons: {
@@ -92,6 +98,17 @@ export default function RootLayout({ children }) {
                 gtag('config', '${GA_ID}', {
                   anonymize_ip: true,
                   cookie_flags: 'SameSite=None;Secure'
+                });
+
+                // Google Ads (účet AutoAlma.sk 100-312-8662). Značka Ads je
+                // v Ads pripojená k tej istej značke Google ako GA4, takže
+                // gtag.js by si ju natiahol aj sám. Píšeme ju sem explicitne,
+                // aby konverzie a remarketing fungovali aj vtedy, keby sa
+                // prepojenie značiek v účte niekedy rozpadlo.
+                // Rozšírené konverzie: allow_enhanced_conversions zapína
+                // odosielanie hashovaného e-mailu/telefónu z formulárov.
+                gtag('config', '${ADS_ID}', {
+                  allow_enhanced_conversions: true
                 });
 
                 // Služobný prehliadač (prihlásil sa v ňom zamestnanec) sa nemeria.

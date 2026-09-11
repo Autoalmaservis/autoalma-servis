@@ -252,7 +252,9 @@ export default function VerejnaObjednavkaPage() {
       }
 
       completedRef.current = true; // objednávka dokončená — neposielať booking_abandon
-      trackObjednavkaSubmit();
+      // E-mail a telefón idú do Ads pre rozšírené konverzie — hashujú sa
+      // v prehliadači, samotné kontakty Googlu neodchádzajú.
+      trackObjednavkaSubmit({ email: customerData.email, phone: customerData.phone });
       alert('Vaša žiadosť o termín bola úspešne odoslaná. Budeme Vás kontaktovať pre potvrdenie termínu.');
       router.push('/');
     } catch (err) {

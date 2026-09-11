@@ -24,7 +24,9 @@ export default function LeadForm({ sluzba = '', placeholder = 'Opíšte, čo aut
         }),
       });
       if (!res.ok) throw new Error('send failed');
-      trackContactSubmit();
+      // Telefón ide do Ads pre rozšírené konverzie — zahashuje sa
+      // v prehliadači, samotné číslo Googlu neodchádza.
+      trackContactSubmit({ phone: form.phone });
       setSent(true);
       setForm({ name: '', phone: '', vehicle: '', message: '' });
     } catch {

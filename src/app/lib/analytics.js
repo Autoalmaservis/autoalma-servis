@@ -18,17 +18,84 @@ export const trackEvent = (eventName, params = {}) => {
   gtag('event', eventName, params);
 };
 
+// ─── GOOGLE ADS KONVERZIE ─────────────────────────────────────
+// Účet Google Ads: AutoAlma.sk (100-312-8662), značka AW-556717584.
+//
+// Značka Ads je pripojená k tej istej značke Google ako GA4
+// (G-250VH3NKCB), takže na web netreba pridávať druhý skript —
+// gtag.js si destináciu AW natiahne sám. V layout.js je aj tak
+// explicitný `config` na AW, aby meranie fungovalo aj vtedy, keby
+// sa prepojenie značiek v Ads raz rozpadlo.
+//
+// Hodnoty konverzií sú nastavené v Ads, nie tu (objednávka 40 USD,
+// telefonát 25 USD, formulár 15 USD). Bez hodnôt Ads optimalizuje
+// na počet a klik na telefón by mu vyšiel rovnako hodnotný ako
+// dokončená objednávka termínu.
+export const ADS_ID = 'AW-556717584';
+
+const ADS_LABELS = {
+  objednavka: 'ObUTCNK5lvMcEJCsu4kC', // Objednavka terminu (web)
+  telefonat: 'GSVJCNW5lvMcEJCsu4kC',  // Kontakt — klik na telefónne číslo
+  formular: 'HO-fCI3mnvMcEJCsu4kC',   // Kontaktny formular (web)
+};
+
+// ROZŠÍRENÉ KONVERZIE
+// Ak zákazník nechal e-mail alebo telefón, pošleme ich Googlu ešte
+// pred samotnou konverziou. gtag ich zahashuje (SHA-256) priamo
+// v prehliadači — Googlu odchádza odtlačok, nie samotný kontakt.
+// Slúži to na spárovanie konverzie s klikom vtedy, keď zlyhajú
+// cookies; podľa Googlu to doháňa rádovo desiatky percent konverzií.
+//
+// Značka si vie údaje z formulára odčítať aj sama, ale len keď polia
+// rozpozná. Takto máme istotu, že dostane presne tie správne.
+const normalizePhone = (phone) => {
+  const digits = String(phone).replace(/[^\d+]/g, '');
+  if (!digits) return null;
+  // Google vyžaduje medzinárodný formát. Slovenské čísla sa píšu ako
+  // 0940 449 449 — úvodná nula sa nahrádza predvoľbou +421.
+  if (digits.startsWith('+')) return digits;
+  if (digits.startsWith('00')) return `+${digits.slice(2)}`;
+  if (digits.startsWith('0')) return `+421${digits.slice(1)}`;
+  return `+421${digits}`;
+};
+
+const setAdsUserData = ({ email, phone } = {}) => {
+  const data = {};
+  if (email && email.includes('@')) data.email = email.trim().toLowerCase();
+  if (phone) {
+    const normalized = normalizePhone(phone);
+    if (normalized) data.phone_number = normalized;
+  }
+  if (!Object.keys(data).length) return;
+  gtag('set', 'user_data', data);
+};
+
+// Posiela sa popri udalosti GA4 — sú to dva rôzne systémy. GA4 slúži
+// na prehľady, táto udalosť priamo kŕmi optimalizáciu kampaní v Ads.
+// userData je nepovinné; ak chýba, konverzia sa pošle aj tak.
+const trackAdsConversion = (key, userData) => {
+  const label = ADS_LABELS[key];
+  if (!label) return;
+  if (userData) setAdsUserData(userData);
+  trackEvent('conversion', { send_to: `${ADS_ID}/${label}` });
+};
+
 // ─── NAVIGÁCIA ────────────────────────────────────────────────
 export const trackMojaGarazClick = (source = 'nav') =>
   trackEvent('moja_garaz_click', { source });
 
 // ─── TELEFÓN ──────────────────────────────────────────────────
-export const trackPhoneClick = (source = 'nav') =>
+export const trackPhoneClick = (source = 'nav') => {
   trackEvent('phone_click', { source, phone: '0940449449' });
+  trackAdsConversion('telefonat');
+};
 
 // ─── KONTAKTNÝ FORMULÁR ───────────────────────────────────────
-export const trackContactSubmit = () =>
+// userData = { email, phone } zo samotného formulára — pre rozšírené konverzie.
+export const trackContactSubmit = (userData) => {
   trackEvent('contact_form_submit');
+  trackAdsConversion('formular', userData);
+};
 
 // ─── BANNERY ──────────────────────────────────────────────────
 export const trackBannerView = (title) =>
@@ -68,8 +135,10 @@ export const trackBookingSubmit = (plate, worksCount) =>
 export const trackBookingCta = (source = 'hero') =>
   trackEvent('booking_cta_click', { source });
 
-export const trackObjednavkaSubmit = () =>
+export const trackObjednavkaSubmit = (userData) => {
   trackEvent('public_booking_submit');
+  trackAdsConversion('objednavka', userData);
+};
 
 // ─── LIEVIK OBJEDNÁVKY ────────────────────────────────────────
 // Každý krok objednávkového formulára. Z týchto troch udalostí sa v GA4
