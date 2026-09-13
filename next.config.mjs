@@ -10,10 +10,40 @@ const redirects = async () => [
   { source: '/doplnkove-sluzby/cistenie-dpf-kat', destination: '/cistenie-dpf', permanent: true },
   { source: '/doplnkove-sluzby/dekarbonizacia', destination: '/sluzby/mechanicke-prace/dekarbonizacia', permanent: true },
   { source: '/doplnkove-sluzby/chiptuning', destination: '/sluzby/elektro-diagnostika/chiptuning', permanent: true },
+  // Klimatizačné služby musia byť PRED zberným pravidlom nižšie, inak by
+  // skončili na mechanických prácach — to je iná kategória.
+  { source: '/doplnkove-sluzby/plnenie-klimatizacie', destination: '/sluzby/klimatizacia/plnenie-klimatizacie', permanent: true },
+  { source: '/doplnkove-sluzby/dezinfekcia-ozonom', destination: '/sluzby/klimatizacia/cistenie-ozonom', permanent: true },
   { source: '/doplnkove-sluzby/:slug*', destination: '/sluzby/mechanicke-prace', permanent: false },
 
   // --- Staré stránky služieb ----------------------------------------------
   { source: '/autoservis', destination: '/sluzby/mechanicke-prace', permanent: true },
+
+  // --- Staré podstránky /autoservis/... ------------------------------------
+  // Zoznam adries pochádza z Google Ads → konverzná akcia clickKontakt →
+  // karta Webové stránky (rozsah „Od začiatku"). Sú to stránky, na ktoré
+  // reálne chodila platená návštevnosť starého webu. Bez presmerovania
+  // vracali 404 — napr. /autoservis/vymena-oleja malo 243 konverzií.
+  { source: '/autoservis/vymena-oleja', destination: '/sluzby/mechanicke-prace/pravidelny-servis', permanent: true },
+  { source: '/autoservis/vymena-brzd', destination: '/sluzby/mechanicke-prace/vymena-brzd', permanent: true },
+  { source: '/autoservis/vymena-rozvodov', destination: '/sluzby/mechanicke-prace/vymena-rozvodov', permanent: true },
+  { source: '/autoservis/vymena-spojky-a-prevodovky', destination: '/sluzby/mechanicke-prace/spojka-a-prevodovka', permanent: true },
+  { source: '/autoservis/oprava-podvozku', destination: '/sluzby/mechanicke-prace/oprava-podvozku', permanent: true },
+  { source: '/autoservis/mechanicke-prace', destination: '/sluzby/mechanicke-prace', permanent: true },
+  // Prezúvanie patrí do pneuservisu, nie medzi mechanické práce.
+  { source: '/autoservis/prezuvanie', destination: '/sluzby/pneuservis/prezuvanie-pneumatiky', permanent: true },
+  { source: '/autoservis/:slug*', destination: '/sluzby/mechanicke-prace', permanent: false },
+
+  // --- Staré podstránky /elektro-servis/... --------------------------------
+  // Diagnostika ide na cieľovú stránku kampane, nie na výpis služby.
+  { source: '/elektro-servis/diagnostika', destination: '/diagnostika-vozidiel', permanent: true },
+  { source: '/elektro-servis/chiptuning', destination: '/sluzby/elektro-diagnostika/chiptuning', permanent: true },
+  { source: '/elektro-servis/oprava-abs', destination: '/sluzby/elektro-diagnostika/oprava-abs', permanent: true },
+  { source: '/elektro-servis/oprava-adblue', destination: '/sluzby/elektro-diagnostika/oprava-adblue', permanent: true },
+  { source: '/elektro-servis/oprava-budikov', destination: '/sluzby/elektro-diagnostika/oprava-budikov', permanent: true },
+  { source: '/elektro-servis/oprava-rjm', destination: '/sluzby/elektro-diagnostika/rjm-oprava', permanent: true },
+  { source: '/elektro-servis', destination: '/sluzby/elektro-diagnostika', permanent: true },
+  { source: '/elektro-servis/:slug*', destination: '/sluzby/elektro-diagnostika', permanent: false },
   { source: '/mechanicke-prace', destination: '/sluzby/mechanicke-prace', permanent: true },
   { source: '/pneuservis', destination: '/sluzby/pneuservis', permanent: true },
   { source: '/klimatizacia', destination: '/sluzby/klimatizacia', permanent: true },
