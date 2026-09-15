@@ -200,6 +200,12 @@ export default function KlientiPage() {
   const handleSaveCar = async (e) => {
     e.preventDefault();
     const klientInfo = klienti.find(k => k.customer_name === selectedKlient);
+    // Nové vozidlo bez klienta by sa uložilo ako sirota (owner_id aj owner_name
+    // prázdne) — v zozname by ho nikto nevidel a ŠPZ by už bola obsadená.
+    if (!carForm.id && !klientInfo) {
+      alert('Najprv vyberte klienta, ku ktorému vozidlo patrí.');
+      return;
+    }
     const payload = {
       owner_name: selectedKlient,
       owner_email: klientInfo?.customer_email || '',
@@ -288,7 +294,10 @@ export default function KlientiPage() {
 
       setIsClientModalOpen(false);
       await fetchKlienti();
-      if (!editMode) setAskVehicleForClient(clientForm.customer_name);
+      // Zoznam klientov používa ako meno firmu (ak je), až potom osobu — rovnako
+      // ako fetchKlienti. Keby sme sem dali len meno osoby, firemný klient by sa
+      // v zozname nenašiel a vozidlo by sa uložilo bez majiteľa.
+      if (!editMode) setAskVehicleForClient(clientForm.company_name || clientForm.customer_name || clientForm.customer_email);
     } catch (err) { alert("Chyba: " + err.message); }
     finally { setLoading(false); }
   };
