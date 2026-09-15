@@ -21,7 +21,15 @@ export default function KlientiPage() {
   const [historyModal, setHistoryModal] = useState(null);
   const [sortMode, setSortMode] = useState('abc');
   const [askVehicleForClient, setAskVehicleForClient] = useState(null);
-  
+
+  // Hľadanie vozidla podľa ŠPZ a priradenie klienta — na opravu áut, ktoré sa
+  // uložili bez majiteľa alebo k nesprávnemu klientovi.
+  const [isFindCarOpen, setIsFindCarOpen] = useState(false);
+  const [findTerm, setFindTerm] = useState('');
+  const [findResults, setFindResults] = useState([]);
+  const [findLoading, setFindLoading] = useState(false);
+  const [assignPick, setAssignPick] = useState({}); // id vozidla → meno vybraného klienta
+
   const [clientForm, setClientForm] = useState({ 
     customer_name: '', customer_phone: '', customer_email: '',
     client_type: 'Osoba', address: '', city: '', zip: '', ico: '', dic: '', ic_dph: '', company_name: '',
@@ -196,6 +204,57 @@ export default function KlientiPage() {
     setApiLoading(false);
   };
 
+  // Polia vlastníka na vozidle. Jedno miesto pre ukladanie aj priraďovanie,
+  // aby obe cesty zapisovali majiteľa rovnako.
+  const vlastnikPayload = (klientInfo) => ({
+    owner_name: klientInfo?.customer_name || null,
+    owner_email: klientInfo?.customer_email || '',
+    owner_id: klientInfo?._customerId ? null : (klientInfo?.id || null),
+  });
+
+  // Ku ktorému klientovi vozidlo patrí — rovnaké pravidlá ako pri skladaní
+  // zoznamu klientov vo fetchKlienti.
+  const najdiMajitela = (v) => klienti.find(k =>
+    (k._customerId && k._customerId === v.owner_id) ||
+    (k.id && k.id === v.owner_id) ||
+    (k.customer_email && v.owner_email && k.customer_email === v.owner_email) ||
+    (v.owner_name && k.customer_name === v.owner_name)
+  ) || null;
+
+  // --- 4b. HĽADANIE VOZIDLA A PRIRADENIE KLIENTA ---
+  const hladajVozidla = async (term) => {
+    setFindLoading(true);
+    const spz = (term || '').toUpperCase().replace(/\s/g, '');
+    let data;
+    if (spz.length >= 2) {
+      ({ data } = await supabase.from('vehicles').select('*').ilike('license_plate', `%${spz}%`).order('license_plate').limit(30));
+    } else {
+      // Bez zadanej ŠPZ ukážeme rovno všetky autá bez majiteľa.
+      ({ data } = await supabase.from('vehicles').select('*').is('owner_id', null).order('license_plate'));
+      data = (data || []).filter(v => !najdiMajitela(v));
+    }
+    setFindResults((data || []).map(v => ({ ...v, majitel: najdiMajitela(v) })));
+    setFindLoading(false);
+  };
+
+  const otvorHladanie = () => {
+    setFindTerm('');
+    setAssignPick({});
+    setIsFindCarOpen(true);
+    hladajVozidla('');
+  };
+
+  const priradVozidlo = async (vozidlo) => {
+    const meno = assignPick[vozidlo.id];
+    const klientInfo = klienti.find(k => k.customer_name === meno);
+    if (!klientInfo) { alert('Vyberte klienta.'); return; }
+    const { error } = await supabase.from('vehicles').update(vlastnikPayload(klientInfo)).eq('id', vozidlo.id);
+    if (error) { alert('Chyba pri priraďovaní: ' + error.message); return; }
+    await fetchKlienti();
+    await hladajVozidla(findTerm);
+    if (selectedKlient === klientInfo.customer_name) nacitajVozidla(klientInfo);
+  };
+
   // --- 5. UKLADANIE VOZIDLA DO SUPABASE ---
   const handleSaveCar = async (e) => {
     e.preventDefault();
@@ -207,9 +266,7 @@ export default function KlientiPage() {
       return;
     }
     const payload = {
-      owner_name: selectedKlient,
-      owner_email: klientInfo?.customer_email || '',
-      owner_id: klientInfo?._customerId ? null : (klientInfo?.id || null),
+      ...vlastnikPayload(klientInfo),
       license_plate: carForm.plate_number.toUpperCase().replace(/\s/g, ''),
       brand_model: `${carForm.brand} ${carForm.model}`.trim(),
       vin_number: carForm.vin_number.toUpperCase().trim(),
@@ -384,6 +441,7 @@ export default function KlientiPage() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2 italic uppercase">Správa Partnerov</p>
         </div>
         <div className="flex gap-4 flex-wrap">
+          <button onClick={otvorHladanie} className="bg-zinc-900 border border-zinc-800 text-white font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:border-red-600 hover:text-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2">🔍 Nájsť vozidlo</button>
           <Link href="/historia" className="bg-zinc-900 border border-zinc-800 text-white font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:border-red-600 hover:text-red-500 transition-all shadow-xl tracking-widest flex items-center gap-2">🚗 História Vozidiel</Link>
           <button onClick={() => { setEditMode(false); setClientForm({customer_name:'', customer_phone:'', customer_email:'', client_type:'Osoba', address:'', city:'', zip:'', ico:'', dic:'', ic_dph:'', company_name: '', password: ''}); setIsClientModalOpen(true); }} className="bg-white text-black font-black px-8 py-3.5 rounded-2xl text-[10px] uppercase hover:bg-red-600 hover:text-white transition-all shadow-xl font-bold">+ Nový Partner</button>
         </div>
@@ -609,6 +667,75 @@ export default function KlientiPage() {
               <button onClick={() => setAskVehicleForClient(null)} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-zinc-400 font-black text-[10px] uppercase tracking-widest hover:bg-zinc-700 transition-colors">Nie, neskôr</button>
               <button onClick={handleAddVehicleAfterCreate} className="flex-1 py-4 rounded-2xl bg-red-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-red-500 transition-colors shadow-xl">Áno, pridať</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NÁJSŤ VOZIDLO A PRIRADIŤ KLIENTA */}
+      {isFindCarOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[100] flex items-center justify-center p-4 overflow-y-auto font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-8 md:p-12 rounded-[3.5rem] w-full max-w-3xl shadow-2xl my-auto">
+            <div className="flex justify-between items-start gap-6 mb-8">
+              <div>
+                <h2 className="text-4xl font-black uppercase italic text-white tracking-tighter leading-none">Nájsť vozidlo</h2>
+                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mt-3">Zadajte ŠPZ, alebo nechajte prázdne pre autá bez majiteľa</p>
+              </div>
+              <button onClick={() => setIsFindCarOpen(false)} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white w-12 h-12 rounded-2xl text-xl shrink-0 transition-colors">×</button>
+            </div>
+
+            <input
+              type="text"
+              autoFocus
+              value={findTerm}
+              onChange={(e) => { setFindTerm(e.target.value); hladajVozidla(e.target.value); }}
+              placeholder="ŠPZ, napr. AA661JV alebo len 661"
+              className="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-white font-mono uppercase tracking-widest outline-none focus:border-red-600 mb-6 shadow-inner"
+            />
+
+            {findLoading ? (
+              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest text-center py-10">Hľadám…</p>
+            ) : findResults.length === 0 ? (
+              <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest text-center py-10">
+                {findTerm.trim().length >= 2 ? 'Žiadne vozidlo s takou ŠPZ.' : 'Všetky vozidlá majú majiteľa.'}
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+                {findResults.map(v => (
+                  <div key={v.id} className="bg-black/50 border border-zinc-800 rounded-3xl p-5 flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xl font-black font-mono tracking-widest text-white">{v.license_plate}</span>
+                        <span className="text-zinc-400 text-sm truncate">{v.brand_model || '—'}</span>
+                      </div>
+                      <p className="text-[10px] font-black uppercase tracking-widest mt-2">
+                        {v.majitel
+                          ? <span className="text-zinc-500">Majiteľ: <span className="text-white">{v.majitel.customer_name}</span></span>
+                          : <span className="text-red-500">Bez majiteľa</span>}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 md:w-[46%]">
+                      <select
+                        value={assignPick[v.id] || ''}
+                        onChange={(e) => setAssignPick({ ...assignPick, [v.id]: e.target.value })}
+                        className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-3 text-xs text-white outline-none focus:border-red-600"
+                      >
+                        <option value="">{v.majitel ? 'Zmeniť klienta…' : 'Vybrať klienta…'}</option>
+                        {[...klienti].sort((a, b) => a.customer_name.localeCompare(b.customer_name, 'sk')).map(k => (
+                          <option key={k.customer_name} value={k.customer_name}>{k.customer_name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => priradVozidlo(v)}
+                        disabled={!assignPick[v.id]}
+                        className="bg-red-600 hover:bg-red-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shrink-0"
+                      >
+                        Priradiť
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
