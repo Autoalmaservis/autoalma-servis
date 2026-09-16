@@ -74,6 +74,9 @@ export default function DetailZakazkyPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  // Otázka, keď vygenerované číslo faktúry nie je hneď za poslednou vystavenou.
+  // { vygenerovane, posledna, dalsie, resolve } — resolve dostane voľbu z modalu.
+  const [cisloOtazka, setCisloOtazka] = useState(null);
 
   // Modál dokončenia zákazky
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -538,6 +541,26 @@ export default function DetailZakazkyPage() {
   };
 
   // --- UPRAVENÁ FUNKCIA FINALIZÁCIE S ADRESAMI A SPLATNOSŤOU ---
+  // Posledná vystavená faktúra daného radu (podľa dátumu, nie podľa najvyššieho
+  // čísla — v rade sa vyskytujú aj ručne zadané čísla mimo poradia) a číslo,
+  // ktoré by malo nasledovať.
+  const ocakavaneCislo = async (pfx) => {
+    const { data } = await supabase
+      .from('invoices')
+      .select('invoice_number, created_at')
+      .like('invoice_number', `${pfx}%`)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    const vzor = new RegExp(`^${pfx}(\\d+)$`);
+    const posledna = (data || []).find(i => vzor.test(i.invoice_number));
+    if (!posledna) return { posledna: null, dalsie: `${pfx}001` };
+    const n = parseInt(posledna.invoice_number.match(vzor)[1], 10) + 1;
+    return { posledna: posledna.invoice_number, dalsie: `${pfx}${String(n).padStart(3, '0')}` };
+  };
+
+  // Otvorí modal a počká na voľbu: 'vygenerovane' | 'dalsie' | 'zrusit'.
+  const spytajSaNaCislo = (info) => new Promise(resolve => setCisloOtazka({ ...info, resolve }));
+
   const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false, manualNumber = '') => {
     setInvoiceLoading(true);
     try {
@@ -628,6 +651,27 @@ export default function DetailZakazkyPage() {
             invoiceNumErr = retry.error;
           }
           if (invoiceNumErr) throw new Error('Nepodarilo sa vygenerovať číslo faktúry: ' + invoiceNumErr.message);
+
+          // Ak číslo nie je hneď za poslednou vystavenou (napr. rezervované číslo
+          // z diery uprostred radu), spýtame sa. Bežný prípad prejde bez otázky.
+          const pfx = (isOfficial ? 'F' : 'A') + rr;
+          const { posledna, dalsie } = await ocakavaneCislo(pfx);
+          if (invoiceNumData !== dalsie) {
+            const volba = await spytajSaNaCislo({ vygenerovane: invoiceNumData, posledna, dalsie });
+            if (volba === 'zrusit') {
+              // číslo vraciame do zásobníka, zákazka ostáva otvorená
+              try { await supabase.rpc('release_invoice_number', { inv_number: invoiceNumData, p_job_id: id }); } catch (_) {}
+              return;
+            }
+            if (volba === 'dalsie') {
+              try {
+                await supabase.rpc('release_invoice_number', { inv_number: invoiceNumData, p_job_id: id });
+                await supabase.rpc('claim_invoice_number', { p_number: dalsie, p_job_id: id });
+              } catch (_) {}
+              invoiceNumData = dalsie;
+            }
+          }
+
           invoicePayload.invoice_number = invoiceNumData;
           const res = await supabase.from('invoices').insert([invoicePayload]).select().single();
           invData = res.data;
@@ -2106,6 +2150,55 @@ Inšpektor ${companyName}
           onFinalize={(isOfficial, paymentMethod, noVat, manualNumber) => handleFinalizeJob(isOfficial, paymentMethod, noVat, manualNumber)}
           onClose={() => setIsInvoiceModalOpen(false)}
         />
+      )}
+
+      {/* ===== OTÁZKA: ČÍSLO FAKTÚRY NIE JE V PORADÍ ===== */}
+      {cisloOtazka && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[300] flex items-center justify-center p-6 font-bold">
+          <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-[3rem] max-w-md w-full shadow-2xl">
+            <p className="text-[10px] text-red-500 font-black uppercase tracking-[0.4em] mb-3">Pozor</p>
+            <p className="text-3xl font-black uppercase italic tracking-tighter leading-none mb-6">Číslo faktúry nie je v poradí</p>
+
+            <div className="space-y-3 mb-8 text-sm">
+              <div className="flex justify-between items-center bg-black/50 border border-zinc-800 rounded-2xl px-5 py-3">
+                <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Posledná vystavená</span>
+                <span className="font-mono tracking-widest">{cisloOtazka.posledna || '—'}</span>
+              </div>
+              <div className="flex justify-between items-center bg-black/50 border border-zinc-800 rounded-2xl px-5 py-3">
+                <span className="text-zinc-500 text-[10px] font-black uppercase tracking-widest">Ďalšie v poradí</span>
+                <span className="font-mono tracking-widest">{cisloOtazka.dalsie}</span>
+              </div>
+              <div className="flex justify-between items-center bg-red-600/10 border border-red-600/40 rounded-2xl px-5 py-3">
+                <span className="text-red-400 text-[10px] font-black uppercase tracking-widest">Táto faktúra by dostala</span>
+                <span className="font-mono tracking-widest text-white">{cisloOtazka.vygenerovane}</span>
+              </div>
+            </div>
+            <p className="text-zinc-400 text-[11px] leading-relaxed mb-8">
+              Zvyčajne ide o číslo, ktoré si táto zákazka rezervovala pri zrušení skoršej faktúry.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => { cisloOtazka.resolve('vygenerovane'); setCisloOtazka(null); }}
+                className="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-[10px] uppercase tracking-widest transition-colors shadow-xl"
+              >
+                Vystaviť s {cisloOtazka.vygenerovane}
+              </button>
+              <button
+                onClick={() => { cisloOtazka.resolve('dalsie'); setCisloOtazka(null); }}
+                className="w-full py-4 rounded-2xl bg-white hover:bg-zinc-200 text-black font-black text-[10px] uppercase tracking-widest transition-colors"
+              >
+                Použiť {cisloOtazka.dalsie} (ďalšie v poradí)
+              </button>
+              <button
+                onClick={() => { cisloOtazka.resolve('zrusit'); setCisloOtazka(null); }}
+                className="w-full py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-black text-[10px] uppercase tracking-widest transition-colors"
+              >
+                Zrušiť, nevystavovať
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ===== MODÁL DOKONČENIA ZÁKAZKY ===== */}
