@@ -64,8 +64,11 @@ export default function DashboardLayout({ children }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, fetchPendingCount)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, pollJobStatuses)
       .subscribe();
-    const pendingInterval = setInterval(fetchPendingCount, 10000);
-    const jobInterval = setInterval(pollJobStatuses, 30000);
+    // Poistka pre pripad, ze realtime kanal vypadne. Hlavny zdroj aktualizacii je
+    // kanal 'dashboard-global-updates' vyssie, preto staci kontrola raz za 5 minut.
+    // (Povodne 10 s / 30 s = desattisice dopytov denne na kazdy otvoreny tab.)
+    const pendingInterval = setInterval(fetchPendingCount, 300000);
+    const jobInterval = setInterval(pollJobStatuses, 300000);
     return () => { supabase.removeChannel(channel); clearInterval(pendingInterval); clearInterval(jobInterval); };
   }, []);
 

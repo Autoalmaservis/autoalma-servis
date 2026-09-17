@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useStickyFilter } from '@/app/lib/useStickyFilter';
@@ -16,6 +16,10 @@ export default function ZakazkyZoznamPage() {
     }
     return 'Prebieha';
   });
+
+  // Archivovane zakazky su najvacsia cast tabulky a v beznom zozname nie su vidiet,
+  // preto ich nacitame az ked si ich pouzivatel vyziada (tab Archivovane / Vsetky).
+  const archivedLoadedRef = useRef(false);
 
   // --- LOGIKA NOTIFIKÁCIÍ S PAMÄŤOU (localStorage) ---
   const [notifState, setNotifState] = useState({
@@ -53,22 +57,39 @@ export default function ZakazkyZoznamPage() {
     };
   }, []);
 
-  const fetchJobs = async () => {
+  // Prepnutie na archiv (alebo Vsetky) dotiahne aj archivovane zakazky - raz za navstevu.
+  useEffect(() => {
+    if ((filterStatus === 'Archivované' || filterStatus === 'Všetky') && !archivedLoadedRef.current) {
+      archivedLoadedRef.current = true;
+      fetchJobs(true);
+    }
+  }, [filterStatus]);
+
+  const fetchJobs = async (includeArchived = archivedLoadedRef.current) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Nacitavame len stlpce, ktore zoznam naozaj pouziva (uz nie select('*')).
+      let query = supabase
         .from('job_tickets')
-        .select('*, job_items(name, quantity, unit_price, type), price_offers(status)')
+        .select('id, job_number, customer_name, customer_phone, plate_number, car_brand_model, status, technician_name, created_at, job_items(name, quantity, unit_price, type), price_offers(status)')
         .order('created_at', { ascending: false });
+
+      if (!includeArchived) query = query.neq('status', 'Archivované');
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       // Načítame job_tasks oddelene — ak tabuľka nemá RLS alebo neexistuje, nespadne hlavný zoznam
       let tasksMap = {};
       try {
-        const { data: tasksData } = await supabase
+        const jobIds = (data || []).map(j => j.id);
+        let tasksQuery = supabase
           .from('job_tasks')
           .select('job_id, task_description, is_completed');
+        // pri rozumnom pocte zakaziek pytame len ich ukony, nie celu tabulku job_tasks
+        if (jobIds.length > 0 && jobIds.length <= 200) tasksQuery = tasksQuery.in('job_id', jobIds);
+        const { data: tasksData } = await tasksQuery;
         if (tasksData) {
           tasksData.forEach(t => {
             if (!tasksMap[t.job_id]) tasksMap[t.job_id] = [];

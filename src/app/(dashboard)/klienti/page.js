@@ -51,7 +51,8 @@ export default function KlientiPage() {
     const [{ data: webProfiles }, { data: customersData }, { data: vehiclesData }] = await Promise.all([
       supabase.from('user_profiles').select('*').or('role.eq.zakaznik,role.eq.klient'),
       supabase.from('customers').select('*'),
-      supabase.from('vehicles').select('*'),
+      // len stlpce potrebne na parovanie majitela a SPZ (nie cela tabulka)
+      supabase.from('vehicles').select('owner_id, owner_email, owner_name, license_plate'),
     ]);
 
     const mapaKlientov = {};
