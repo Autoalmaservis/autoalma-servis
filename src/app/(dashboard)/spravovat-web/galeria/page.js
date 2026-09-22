@@ -102,10 +102,14 @@ export default function GaleriaPage() {
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE gallery_photos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public read" ON gallery_photos
-  FOR SELECT USING (true);
-CREATE POLICY "Auth write" ON gallery_photos
-  FOR ALL USING (auth.role() = 'authenticated');`}</pre>
+-- Cita kazdy (galeria je na verejnej stranke)
+CREATE POLICY "select public" ON gallery_photos
+  FOR SELECT TO anon, authenticated USING (true);
+-- Zapisuje IBA admin. Nepouzivat auth.role() = 'authenticated' —
+-- registracia zakaznikov je otvorena, takze by web mohol menit ktokolvek.
+CREATE POLICY "admin write" ON gallery_photos
+  FOR ALL TO authenticated
+  USING (is_admin_safe()) WITH CHECK (is_admin_safe());`}</pre>
         <button onClick={fetchPhotos} className="mt-4 bg-red-600 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest">
           Skúsiť znova
         </button>
