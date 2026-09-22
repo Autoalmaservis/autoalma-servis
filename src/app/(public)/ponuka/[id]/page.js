@@ -65,11 +65,9 @@ export default function VerejnaPonukaPage() {
 
   const fetchOffer = async () => {
     try {
-      const { data, error } = await supabase
-        .from('price_offers')
-        .select(`*, job_tickets (*, id, customer_id, customer_name, customer_phone, customer_email, address, city, car_brand_model, plate_number, vin_number, mileage)`)
-        .eq('id', id)
-        .single();
+      // RPC namiesto priameho SELECT-u: verejný odkaz funguje bez prihlásenia,
+      // ale tabuľka price_offers sa už nedá anonymne vylistovať (RLS).
+      const { data, error } = await supabase.rpc('get_price_offer', { p_id: id });
 
       if (error) {
         console.error('fetchOffer error:', error);
@@ -174,28 +172,20 @@ export default function VerejnaPonukaPage() {
     if (!confirm(message)) return;
 
     const finalStatus = selectedCount === 0 ? 'Zamietnuté' : 'Schválené';
+    // Server prevezme iba výber položiek (is_selected); ceny a množstvá berie z DB.
+    // Notifikáciu zákazníkovi vkladá API (service role), nie stránka.
     const res = await fetch('/api/ponuka-response', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ offerId: id, status: finalStatus, items }),
+      body: JSON.stringify({
+        offerId: id,
+        status: finalStatus,
+        selections: items.map((it, idx) => ({ id: it.id ?? null, index: idx, is_selected: !!it.is_selected })),
+      }),
     });
     const error = res.ok ? null : await res.json();
 
     if (!error) {
-      const targetUserId = offer?.job_tickets?.customer_id;
-      if (targetUserId) {
-        await supabase.from('notifications').insert([{
-          user_id: targetUserId,
-          customer_id: targetUserId,
-          title: finalStatus === 'Schválené' ? '✅ Ponuka schválená' : '✕ Ponuka zamietnutá',
-          content: finalStatus === 'Schválené'
-            ? `Vozidlo ${offer.job_tickets.plate_number}: Schválili ste opravy za ${finalTotal.toFixed(2)}€.`
-            : `Vozidlo ${offer.job_tickets.plate_number}: Ponuka bola zamietnutá.`,
-          type: finalStatus === 'Schválené' ? 'success' : 'error',
-          is_read: false,
-          link: '/garaz'
-        }]);
-      }
       setResponded(true);
       setOffer({ ...offer, status: finalStatus });
     }

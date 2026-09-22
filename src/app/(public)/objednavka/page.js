@@ -108,7 +108,8 @@ export default function VerejnaObjednavkaPage() {
   const fetchDayEvents = async (dateStr) => {
     const [{ data: settings }, { data: evts }] = await Promise.all([
       supabase.from('business_settings').select('*').in('id', ['work_start', 'work_end']),
-      supabase.from('calendar_events')
+      // calendar_slots = view iba s časmi a mechanikom (bez kontaktov zákazníkov) — čitateľné anonymne
+      supabase.from('calendar_slots')
         .select('start_datetime, end_datetime, employee_id')
         .gte('start_datetime', `${dateStr}T00:00:00`)
         .lte('start_datetime', `${dateStr}T23:59:59`),
