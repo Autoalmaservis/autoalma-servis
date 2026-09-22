@@ -11,17 +11,19 @@ with kampan(email) as (values
   ('alica.sctukova@gmail.com'), ('obchodnik8@gmail.com'), ('juba00731@gmail.com'),
   ('korossy.peter3@gmail.com')
 ),
--- Pri impad1113 je hranica posunutá: testovacia kópia e-mailu (s jeho skutočným
--- odkazom) prišla do firemnej schránky a odkaz tam bol otvorený 22.9. o 14:19:50 UTC.
--- Bez posunu by sa to počítalo ako jeho prihlásenie.
+-- Pozn. k impad1113: prihlásil sa 22.9. o 14:19:50, teda 2 minúty po odoslaní.
+-- Je to pravdepodobne skutočné prihlásenie, ale do firemnej schránky išla aj
+-- testovacia kópia s jeho odkazom — ak by ju otvoril poštový skener, vyzeralo
+-- by to rovnako. Rozhodne až to, či sa prihlási aj neskôr (stĺpec nižšie).
 odoslane as (select timestamptz '2026-09-22 14:17:00+00' as cas)
 select
   k.email,
   coalesce(nullif(btrim(u.raw_user_meta_data->>'full_name'), ''), p.full_name, '—') as meno,
-  case when u.last_sign_in_at > (case when k.email = 'impad1113@gmail.com'
-                                      then timestamptz '2026-09-22 14:21:00+00'
-                                      else o.cas end)
-       then 'ÁNO' else 'nie' end as prihlasil_sa_po_emaile,
+  case when u.last_sign_in_at > o.cas then 'ÁNO' else 'nie' end as prihlasil_sa_po_emaile,
+  -- Prihlásenie do 5 minút od rozoslania môže byť aj automatický skener pošty,
+  -- ktorý odkaz otvoril za zákazníka. Neskoršie prihlásenie je jednoznačné.
+  case when u.last_sign_in_at > o.cas and u.last_sign_in_at < o.cas + interval '5 minutes'
+       then 'do 5 min - overit' else '' end as poznamka,
   u.last_sign_in_at                                   as posledne_prihlasenie,
   (u.email_confirmed_at is not null)                  as email_potvrdeny,
   (select count(*) from vehicles v  where v.owner_id  = u.id) as vozidiel,
