@@ -3,19 +3,18 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from '@supabase/supabase-js';
-
-async function isAuthenticated(request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return false;
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { data: { user } } = await sb.auth.getUser(token);
-  return !!user;
-}
+import { requireUser } from '@/app/lib/apiAuth';
+import { isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export async function POST(req) {
-  if (!await isAuthenticated(req)) {
+  // Používa aj zákazník v Garáži (sken TP pri pridaní auta) → stačí prihlásenie, ale volá
+  // Google AI: bežný používateľ max 10 skenov / 10 min, admin bez stropu (audit 2026-09)
+  const caller = await requireUser(req);
+  if (!caller) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (caller.role !== 'admin' && isRateLimited('scan-tp', caller.user.id, 10, 10 * 60 * 1000)) {
+    return rateLimitResponse();
   }
   const apiKey = process.env.GOOGLE_AI_KEY;
   if (!apiKey) {

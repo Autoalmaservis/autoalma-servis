@@ -1,13 +1,11 @@
 import { createMailTransport } from '@/app/lib/mailer';
-import { createClient } from '@supabase/supabase-js';
 import { getCompanySettings } from '@/app/lib/companySettings';
+import { requireAdmin } from '@/app/lib/apiAuth';
 
+// Iba admin — e-mail z firemnej adresy s vlastným "nastavte si heslo" odkazom = phishing,
+// keby ho mohol volať ktokoľvek prihlásený (audit 2026-09). Volá kalendár, klienti, príjem.
 async function isAuthenticated(request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return false;
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { data: { user } } = await supabase.auth.getUser(token);
-  return !!user;
+  return !!(await requireAdmin(request));
 }
 
 export async function POST(request) {

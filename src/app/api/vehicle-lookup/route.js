@@ -1,17 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-async function isAuthenticated(request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return false;
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { data: { user } } = await sb.auth.getUser(token);
-  return !!user;
-}
+import { requireUser } from '@/app/lib/apiAuth';
+import { isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export async function GET(request) {
-  if (!await isAuthenticated(request)) {
+  // Používa aj zákazník v Garáži pri pridaní auta → stačí prihlásenie, ale platená kvóta
+  // databazavozidiel.sk: bežný používateľ max 20 dopytov / 10 min, admin bez stropu (audit 2026-09)
+  const caller = await requireUser(request);
+  if (!caller) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (caller.role !== 'admin' && isRateLimited('vehicle-lookup', caller.user.id, 20, 10 * 60 * 1000)) {
+    return rateLimitResponse();
   }
   const { searchParams } = new URL(request.url);
   const ecv = searchParams.get('ecv');

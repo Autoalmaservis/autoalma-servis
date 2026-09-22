@@ -1,18 +1,17 @@
 import { createMailTransport } from '@/app/lib/mailer';
 import { getCompanySettings } from '@/app/lib/companySettings';
-import { createClient } from '@supabase/supabase-js';
-
-async function isAuthenticated(request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return false;
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { data: { user } } = await sb.auth.getUser(token);
-  return !!user;
-}
+import { requireUser } from '@/app/lib/apiAuth';
+import { isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export async function POST(request) {
-  if (!await isAuthenticated(request)) {
+  // Interná notifikácia adminovi o novom zákazníkovi (volá registrácia) — e-mail ide iba
+  // na firemnú adresu, takže stačí prihlásenie; strop 3 / 10 min na používateľa (audit 2026-09)
+  const caller = await requireUser(request);
+  if (!caller) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (isRateLimited('notify-new-customer', caller.user.id, 3, 10 * 60 * 1000)) {
+    return rateLimitResponse();
   }
   try {
     const { name, email, phone, clientType, companyName } = await request.json();

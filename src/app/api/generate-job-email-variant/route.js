@@ -1,12 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/app/lib/apiAuth';
 
+// Iba admin — volá Anthropic API (kredit), používa iba dashboard (audit 2026-09)
 async function isAuthenticated(request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return false;
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { data: { user } } = await sb.auth.getUser(token);
-  return !!user;
+  return !!(await requireAdmin(request));
 }
 
 const TONE_DESCRIPTIONS = {

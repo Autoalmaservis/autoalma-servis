@@ -1,13 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from '@/app/lib/apiAuth';
 import { NextResponse } from 'next/server';
 import { buildUblXml } from '@/app/lib/peppol-builder';
 
+// Iba admin — export faktúry podľa ID (audit 2026-09)
 async function isAuthenticated(request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) return false;
-  const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  const { data: { user } } = await sb.auth.getUser(token);
-  return !!user;
+  return !!(await requireAdmin(request));
 }
 
 export async function POST(request) {
