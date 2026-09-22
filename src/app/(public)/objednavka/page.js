@@ -184,9 +184,8 @@ export default function VerejnaObjednavkaPage() {
       const customMinutes = customItems.filter(i => i.duration !== 'technik').reduce((a, i) => a + i.duration, 0);
       const estimatedMinutes = normMinutes + customMinutes || 60;
       const timeForEvent = letTechDecideTime ? '08:00' : selectedSlot;
-      const endDate = new Date(`${selectedDay}T${timeForEvent}:00`);
-      endDate.setMinutes(endDate.getMinutes() + estimatedMinutes);
-      const endStr = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+      // Koniec termínu dopočíta server (/api/public-booking) podľa pracovného času —
+      // pri príchode na konci dňa presunie prácu na ráno najbližšieho pracovného dňa.
 
       const plateFinal = customerData.plate.trim().toUpperCase();
 
@@ -204,7 +203,7 @@ export default function VerejnaObjednavkaPage() {
           plate: plateFinal,
           date: selectedDay,
           start: timeForEvent,
-          end: endStr,
+          estimatedMinutes,
           title: `ONLINE: ${plateFinal || customerData.name.trim()}`,
           issueDescription,
           customerNote: [

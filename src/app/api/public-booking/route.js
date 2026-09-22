@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { vypocitajTermin, poznamkaKTerminu } from '@/app/lib/terminy';
 
 /**
  * Verejná žiadosť o termín z /objednavka.
@@ -66,19 +67,22 @@ export async function POST(request) {
   }
 
   const {
-    plate, date, start, end,
+    plate, date, start, end, estimatedMinutes,
     customerName, phone, email,
     issueDescription, customerNote, title,
   } = body || {};
 
   // --- validácia ---
-  if (!customerName || !date || !start || !end) {
+  const maOdhad = Number.isFinite(Number(estimatedMinutes)) && Number(estimatedMinutes) > 0;
+  if (!customerName || !date || !start || (!end && !maOdhad)) {
     return NextResponse.json({ error: 'Chýbajú povinné polia' }, { status: 400 });
   }
-  if (!DATE_RE.test(date) || !TIME_RE.test(start) || !TIME_RE.test(end)) {
+  if (!DATE_RE.test(date) || !TIME_RE.test(start) || (end && !TIME_RE.test(end))) {
     return NextResponse.json({ error: 'Neplatný dátum alebo čas' }, { status: 400 });
   }
-  if (end <= start) {
+  // Koniec počítame na serveri z odhadu trvania — klient ho posielať nemusí.
+  // Staršia verzia formulára posiela iba 'end', preto ho stále prijmeme.
+  if (!maOdhad && end <= start) {
     return NextResponse.json({ error: 'Koniec musí byť neskôr ako začiatok' }, { status: 400 });
   }
 
@@ -170,11 +174,31 @@ export async function POST(request) {
     }
 
     // --- 4. Žiadosť do kalendára ---
+    // Pracovný čas z nastavení firmy; keď zákazník privezie auto na konci dňa,
+    // práca sa naplánuje na ráno najbližšieho pracovného dňa (auto prenocuje).
+    const { data: nastavenia } = await supabaseAdmin
+      .from('business_settings').select('id, value').in('id', ['work_start', 'work_end']);
+    const workStart = nastavenia?.find(n => n.id === 'work_start')?.value || '08:00';
+    const workEnd = nastavenia?.find(n => n.id === 'work_end')?.value || '16:00';
+
+    const odhadMin = maOdhad
+      ? Math.min(Number(estimatedMinutes), 8 * 60)
+      : Math.max(30, (new Date(`${date}T${end}:00`) - new Date(`${date}T${start}:00`)) / 60000);
+
+    const termin = vypocitajTermin({
+      datum: date, cas: start, minuty: odhadMin, workStart, workEnd,
+    });
+
+    const poznamkaFinal = [
+      ...poznamkaKTerminu(termin),
+      trim(customerNote, 1000) || null,
+    ].filter(Boolean).join(' | ');
+
     const { error: eventError } = await supabaseAdmin.from('calendar_events').insert([{
       title: trim(title, 120) || `ONLINE: ${plateFinal || nameFinal}`,
-      start_datetime: `${date}T${start}:00`,
-      end_datetime: `${date}T${end}:00`,
-      customer_note: trim(customerNote, 1000) || null,
+      start_datetime: termin.startText,
+      end_datetime: termin.endText,
+      customer_note: poznamkaFinal || null,
       plate_number: plateFinal || null,
       issue_description: trim(issueDescription, 4000) || null,
       customer_name: nameFinal,

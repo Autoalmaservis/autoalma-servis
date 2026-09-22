@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { trackBookingSubmit } from '@/app/lib/analytics';
+import { vypocitajTermin, poznamkaKTerminu } from '@/app/lib/terminy';
 
 export default function GarazPage() {
   const [vehicles, setVehicles] = useState([]);
@@ -347,11 +348,16 @@ export default function GarazPage() {
         : '';
       const finalDescription = [normsList, customList].filter(Boolean).join('\n\n');
 
-      const timeForEvent = letTechDecideTime ? '08:00' : selectedSlot;
-      const finalDateTime = `${selectedDay}T${timeForEvent}:00`;
-      const startTime = new Date(finalDateTime);
-      const endTime = new Date(startTime.getTime() + estimatedMinutes * 60000);
-      const endTimeStr = `${selectedDay}T${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}:00`;
+      const timeForEvent = letTechDecideTime ? `${workHours.start}:00` : selectedSlot;
+      // Termín práce sa počíta v pracovnom čase. Keď zákazník privezie auto na konci
+      // dňa, práca sa naplánuje na ráno najbližšieho pracovného dňa — auto prenocuje.
+      const termin = vypocitajTermin({
+        datum: selectedDay,
+        cas: timeForEvent,
+        minuty: estimatedMinutes,
+        workStart: `${workHours.start}:00`,
+        workEnd: `${workHours.end}:00`,
+      });
 
       const { error } = await supabase
         .from('calendar_events')
@@ -361,12 +367,12 @@ export default function GarazPage() {
           issue_description: finalDescription,
           planned_work: "Bude určené technikom",
           customer_note: [
-            `Odhadované trvanie: ${estimatedMinutes} min.`,
+            ...poznamkaKTerminu(termin),
             letTechDecideTime ? '⏰ Čas príchodu: určí prijímací technik' : null,
             customerNote ? `Poznámka zákazníka: ${customerNote}` : null,
           ].filter(Boolean).join(' | '),
-          start_datetime: finalDateTime,
-          end_datetime: endTimeStr,
+          start_datetime: termin.startText,
+          end_datetime: termin.endText,
           plate_number: orderingVehicle.license_plate,
           customer_name: userProfile?.full_name || 'Zákazník z garáže',
           customer_phone: userProfile?.phone || null,
