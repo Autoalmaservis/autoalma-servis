@@ -22,7 +22,7 @@ export async function POST(request) {
     }
 
     const company = await getCompanySettings();
-    const klientiUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/klienti`;
+    const klientiUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://www.autoalma.sk'}/klienti`;
 
     const displayName = clientType === 'Firma' ? (companyName || name) : name;
 

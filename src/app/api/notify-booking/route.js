@@ -29,7 +29,7 @@ export async function POST(request) {
       ? new Date(`${date}T12:00:00`).toLocaleDateString('sk-SK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
       : '—';
 
-    const calendarUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/kalendar`;
+    const calendarUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://www.autoalma.sk'}/kalendar`;
 
     const rows = [
       ['Zákazník', customerName || '—'],

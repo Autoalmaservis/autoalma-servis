@@ -49,6 +49,10 @@ export default function RegistraciaPage() {
 
     // 1. Registrácia do Supabase Auth
     // PRIDANÉ redirectTo: Zabezpečí, že po kliknutí v maile ho to vráti presne na login
+    // Všetky údaje idú do metadát účtu. Dôvod: pri zapnutom potvrdení e-mailu
+    // vráti signUp() používateľa BEZ relácie, takže zápis profilu z prehliadača
+    // zlyhá na RLS. Profil preto dokončí server (/api/registracia-dokoncit)
+    // a údaje si zoberie práve odtiaľto.
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email.trim(),
       password: formData.password,
@@ -56,6 +60,19 @@ export default function RegistraciaPage() {
         emailRedirectTo: `${window.location.origin}/login`,
         data: {
           full_name: formData.full_name,
+          phone: formData.phone || null,
+          company_name: clientType === 'Firma' ? formData.company_name : null,
+          ico: clientType === 'Firma' ? formData.ico : null,
+          dic: clientType === 'Firma' ? formData.dic : null,
+          ic_dph: clientType === 'Firma' ? formData.ic_dph : null,
+          address: formData.address || null,
+          city: formData.city || null,
+          zip: formData.zip || null,
+          country: formData.country || null,
+          referral_source: formData.referral_source || null,
+          gdpr_consent_at: new Date().toISOString(),
+          gdpr_consent_version: GDPR_VERSION,
+          gdpr_marketing: formData.gdprMarketing,
         }
       }
     });
@@ -68,64 +85,31 @@ export default function RegistraciaPage() {
 
     // DÔLEŽITÉ: Kontrolujeme, či nám Supabase vrátil užívateľa (niektoré nastavenia vracajú null, ak je mail už použitý)
     if (authData?.user) {
-      // 2. Uloženie detailných údajov do public.user_profiles
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert([{
-          id: authData.user.id,
-          email: formData.email.trim(),
-          full_name: formData.full_name,
-          role: 'zakaznik',
-          phone: formData.phone,
-          company_name: clientType === 'Firma' ? formData.company_name : null,
-          ico: clientType === 'Firma' ? formData.ico : null,
-          dic: clientType === 'Firma' ? formData.dic : null,
-          ic_dph: clientType === 'Firma' ? formData.ic_dph : null,
-          address: formData.address,
-          city: formData.city,
-          zip: formData.zip,
-          country: formData.country,
-          referral_source: formData.referral_source,
-          gdpr_consent_at: new Date().toISOString(),
-          gdpr_consent_version: GDPR_VERSION,
-          gdpr_marketing: formData.gdprMarketing,
-        }]);
+      // Profil, uvítací e-mail aj upozornenie do servisu dokončí server —
+      // z prehliadača to pri potvrdzovaní e-mailu nejde (chýba relácia → RLS).
+      const res = await fetch('/api/registracia-dokoncit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email.trim() }),
+      }).catch(() => null);
 
-      if (profileError) {
-        console.error("Detail chyby profilu:", profileError);
-        alert("Účet vytvorený, ale profil v databáze zlyhal. Prosím, kontaktujte nás.");
-      } else {
-        fetch('/api/send-welcome-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: formData.email.trim(),
-            name: formData.full_name,
-            createdByAdmin: false,
-          }),
-        }).catch(() => {});
-
-        fetch('/api/notify-new-customer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: formData.full_name,
-            email: formData.email.trim(),
-            phone: formData.phone,
-            clientType,
-            companyName: formData.company_name,
-          }),
-        }).catch(() => {});
-
-        trackRegistrationSuccess(clientType);
-        if (authData.session === null) {
-            alert("Registrácia úspešná! Skontrolujte si e-mailovú schránku a potvrďte svoju adresu kliknutím na odkaz.");
-        } else {
-            alert("Registrácia úspešná! Vitajte v AutoAlma.");
-        }
+      if (!res || !res.ok) {
+        console.error('Dokončenie registrácie zlyhalo', res && res.status);
+        alert('Účet bol vytvorený, ale nastavenie profilu sa nedokončilo. Skúste sa prosím prihlásiť — profil sa doplní automaticky. Ak to nepôjde, zavolajte nám na 0940 449 449.');
         router.push('/login');
+        setLoading(false);
+        return;
       }
+
+      trackRegistrationSuccess(clientType);
+      if (authData.session === null) {
+        alert('Registrácia úspešná! Skontrolujte si e-mailovú schránku a potvrďte svoju adresu kliknutím na odkaz.');
+      } else {
+        alert('Registrácia úspešná! Vitajte v AutoAlma.');
+      }
+      router.push('/login');
     }
+
     setLoading(false);
   };
 

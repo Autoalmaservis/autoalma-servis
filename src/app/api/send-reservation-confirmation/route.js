@@ -23,7 +23,7 @@ export async function POST(request) {
     }
 
     const company = await getCompanySettings();
-    const garageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma-servis.vercel.app'}/garaz`;
+    const garageUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://www.autoalma.sk'}/garaz`;
 
     const dateFormatted = new Date(`${date}T12:00:00`).toLocaleDateString('sk-SK', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',

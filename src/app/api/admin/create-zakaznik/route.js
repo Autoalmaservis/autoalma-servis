@@ -99,7 +99,7 @@ export async function POST(request) {
   // "Zabudnuté heslo" na prihlasovacej stránke.
   let setPasswordUrl = null;
   try {
-    const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://autoalma.sk';
+    const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.autoalma.sk';
     const { data: linkData } = await sb.auth.admin.generateLink({
       type: 'recovery',
       email: emailNorm,
