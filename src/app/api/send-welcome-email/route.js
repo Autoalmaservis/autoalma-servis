@@ -16,7 +16,9 @@ export async function POST(request) {
   }
   try {
     const body = await request.json();
-    const { email, name, createdByAdmin, setPasswordUrl } = body;
+    // booking: { date: 'YYYY-MM-DD', startTime: 'HH:MM', plateNumber, issueDescription }
+    // — vyplnené, keď účet vznikol automaticky pri zápise termínu do kalendára.
+    const { email, name, createdByAdmin, setPasswordUrl, booking } = body;
 
     if (!email) return Response.json({ error: 'Chýba e-mail' }, { status: 400 });
 
@@ -50,6 +52,27 @@ export async function POST(request) {
           <p style="color:#333;font-size:13px;margin:0">Heslo si nastavíte na prihlasovacej stránke cez možnosť <strong>„Zabudnuté heslo"</strong> — zadajte tento e-mail a príde vám odkaz.</p>
         </div>`;
 
+    let bookingBlock = '';
+    if (booking?.date) {
+      const dateFormatted = new Date(`${booking.date}T12:00:00`).toLocaleDateString('sk-SK', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      });
+      const rows = [
+        ['Dátum', `${dateFormatted}${booking.startTime ? ` o ${booking.startTime}` : ''}`],
+        booking.plateNumber ? ['ŠPZ', booking.plateNumber] : null,
+        booking.issueDescription ? ['Popis', booking.issueDescription] : null,
+      ].filter(Boolean).map(([label, value]) => `
+        <tr>
+          <td style="padding:8px 16px 8px 0;color:#71717a;font-size:11px;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;vertical-align:top">${label}</td>
+          <td style="padding:8px 0;color:#222;font-size:13px;font-weight:600">${value}</td>
+        </tr>`).join('');
+      bookingBlock = `
+        <div style="margin-top:20px;background:#fff;border:1px solid #e5e5e5;border-left:4px solid #22c55e;border-radius:8px;padding:16px">
+          <p style="color:#999;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 6px">✅ Váš servisný termín</p>
+          <table style="width:100%;border-collapse:collapse">${rows}</table>
+        </div>`;
+    }
+
     const introText = createdByAdmin
       ? `Prijímací technik ${company.name} vám vytvoril prístup do zákazníckej zóny — <strong>Vašej Garáže</strong>.`
       : `Váš účet bol úspešne vytvorený. Vitajte v zákazníckej zóne ${company.name}.`;
@@ -64,6 +87,7 @@ export async function POST(request) {
         <p style="color:#333;font-size:14px;margin:0 0 16px">Dobrý deň${name ? `, <strong>${name}</strong>` : ''},</p>
         <p style="color:#333;font-size:14px;margin:0 0 20px">${introText}</p>
 
+        ${bookingBlock}
         ${credentialsBlock}
         ${createdByAdmin ? setPasswordBlock : ''}
 
@@ -89,7 +113,9 @@ export async function POST(request) {
         <p style="color:#ccc;font-size:10px;text-align:center;margin-top:16px">${company.name} · ${company.web}</p>
       </div>`;
 
-    const subject = createdByAdmin
+    const subject = booking?.date
+      ? `AutoAlma Servis — potvrdenie termínu${booking.plateNumber ? ` ${booking.plateNumber}` : ''} a prístup do Vašej Garáže`
+      : createdByAdmin
       ? `AutoAlma Servis — prístup do Vašej Garáže`
       : `Vitajte v AutoAlma Servis — Vaša Garáž je pripravená`;
 

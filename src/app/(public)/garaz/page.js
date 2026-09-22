@@ -217,6 +217,9 @@ export default function GarazPage() {
     setIsInvoiceListOpen(true);
     setInvoiceLoading(true);
     try {
+      // Tabulka invoices nema stlpec plate_number - SPZ je len v JSONB car_details.
+      // Aby to neslo cez cely sekvencny scan, je na tom vyraze GIN trgm index
+      // (idx_invoices_plate_trgm), ktory ILIKE vie vyuzit.
       const { data, error } = await supabase
         .from('invoices')
         .select('*')

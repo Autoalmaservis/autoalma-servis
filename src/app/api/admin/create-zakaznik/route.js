@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { capitalizeName, normalizePhone } from '@/app/lib/textNormalize';
 
 function adminClient() {
   return createClient(
@@ -24,7 +25,12 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { full_name, email, phone, clientType, company_name, ico, dic, ic_dph, address, city, zip, vehicle } = await request.json();
+  const body = await request.json();
+  const { email, clientType, company_name, ico, dic, ic_dph, address, city, zip, vehicle } = body;
+  // Meno vždy s veľkým začiatočným písmenom (aj priezvisko), telefón bez zdvojených medzier —
+  // rovnako pre klienta z /klienti aj z kalendára.
+  const full_name = capitalizeName(body.full_name) || null;
+  const phone = normalizePhone(body.phone) || null;
 
   if (!email) {
     return NextResponse.json({ error: 'E-mail je povinný' }, { status: 400 });
@@ -76,6 +82,7 @@ export async function POST(request) {
       owner_id: userId,
       owner_name: full_name || null,
       owner_email: emailNorm,
+      owner_phone: phone,
       license_plate: vehicle.license_plate.toUpperCase(),
       brand_model: vehicle.brand_model || null,
       vin_number: vehicle.vin ? vehicle.vin.toUpperCase() : null,

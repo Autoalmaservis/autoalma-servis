@@ -7,6 +7,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { supabase } from '@/app/lib/supabase';
 import { fetchWithAuth } from '@/app/lib/apiHelpers';
+import { capitalizeName, normalizeEmail, normalizePhone } from '@/app/lib/textNormalize';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SmsPanel from '../prijem/SmsPanel'; // Import SMS panela
@@ -16,17 +17,17 @@ const nd = (s) => (s || '').toString().toLowerCase().normalize('NFD').replace(/[
 
 export default function KalendarPage() {
   const router = useRouter();
-  const calendarRef = useRef(null); 
+  const calendarRef = useRef(null);
   const [events, setEvents] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isInboxOpen, setIsInboxOpen] = useState(false); 
-  const [selectionMode, setSelectionMode] = useState(null); 
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(null);
   const [editingEventId, setEditingEventId] = useState(null);
   const [isConfirmed, setIsConfirmed] = useState(true);
 
-  const [allClients, setAllClients] = useState([]); 
-  const [selectedClientName, setSelectedClientName] = useState(''); 
+  const [allClients, setAllClients] = useState([]);
+  const [selectedClientName, setSelectedClientName] = useState('');
 
   const [workStart, setWorkStart] = useState('07:00');
   const [workEnd, setWorkEnd] = useState('17:00');
@@ -38,10 +39,10 @@ export default function KalendarPage() {
   const [plate, setPlate] = useState('');
   const [title, setTitle] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
-  
+
   const [issueDescription, setIssueDescription] = useState('');
   const [plannedWork, setPlannedWork] = useState('');
-  
+
   const [tempCustomerContact, setTempCustomerContact] = useState({ phone: '', email: '', customerName: '', userId: null });
   const [eventCustomerNote, setEventCustomerNote] = useState('');
 
@@ -74,6 +75,7 @@ export default function KalendarPage() {
   // preto samostatný príznak, že klient už je uložený.
   const [clientSaved, setClientSaved] = useState(false);
   const [vehicleLookupLoading, setVehicleLookupLoading] = useState(false);
+  const [savingReservation, setSavingReservation] = useState(false);
 
   // --- 1. NAČÍTANIE DÁT ---
   const fetchData = async () => {
@@ -96,11 +98,11 @@ export default function KalendarPage() {
     }
 
     const { data: evData } = await supabase.from('calendar_events').select('*, employees(name, color)');
-    
+
     const formattedEvents = (evData || []).map(ev => {
       const isOnlinePending = ev.is_confirmed === false;
       const isActuallyBlocked = ev.is_blocked === true || ev.plate_number === 'BLOK';
-      
+
       let displayTitle = ev.title;
       if (isActuallyBlocked) displayTitle = `🚫 BLOKOVANÉ: ${ev.title}`;
       else if (ev.issue_description) displayTitle = `${ev.title} (${ev.issue_description})`;
@@ -113,8 +115,8 @@ export default function KalendarPage() {
         backgroundColor: isActuallyBlocked ? '#3f3f46' : (isOnlinePending ? '#f59e0b' : (ev.employees?.color || '#dc2626')),
         borderColor: isOnlinePending ? '#ffffff' : 'transparent',
         classNames: isOnlinePending ? ['animate-pulse', 'border-2'] : [],
-        extendedProps: { 
-          pureTitle: ev.title, 
+        extendedProps: {
+          pureTitle: ev.title,
           employeeName: ev.employees?.name,
           employeeId: ev.employee_id,
           customerName: ev.customer_name,
@@ -180,7 +182,7 @@ export default function KalendarPage() {
   // --- 3. MANIPULÁCIA S KALENDÁROM (OPRAVA DRAG & DROP) ---
   const handleEventChange = async (changeInfo) => {
     const { event } = changeInfo;
-    
+
     if (!changeInfo.event.startStr || !changeInfo.event.endStr) return;
 
     const startStr = changeInfo.event.startStr.split('+')[0].split('Z')[0];
@@ -217,10 +219,10 @@ export default function KalendarPage() {
       setSelectionMode('block');
       setCarData(null);
     }
-    
+
     setIsConfirmed(props.isConfirmed !== false);
     setTitle(props.pureTitle || ev.title);
-    
+
     // OPRAVA: Prenos času aj z Inboxu (ak startStr nie je dostupné, použijeme objekt start)
     let startStr = ev.startStr;
     let endStr = ev.endStr;
@@ -235,7 +237,7 @@ export default function KalendarPage() {
         const offset = d.getTimezoneOffset() * 60000;
         endStr = new Date(d.getTime() - offset).toISOString();
     }
-    
+
     if (startStr && startStr.includes('T')) {
       setSelectedDate(startStr.split('T')[0]);
       setStartTime(startStr.split('T')[1].substring(0, 5));
@@ -243,7 +245,7 @@ export default function KalendarPage() {
     if (endStr && endStr.includes('T')) {
       setEndTime(endStr.split('T')[1].substring(0, 5));
     }
-    
+
     setPlate(props.plateNumber || '');
     setSelectedEmployee(props.employeeId || '');
     setSelectedClientName(props.customerName || '');
@@ -321,8 +323,9 @@ export default function KalendarPage() {
       source: 'garáž', ownerId: c.id,
       name: c.company_name || c.full_name, phone: c.phone, email: c.email, plate: null,
     }));
+    // customers.id NIE je auth účet — nesmie skončiť v calendar_events.user_id (FK na auth.users)
     (customers.data || []).forEach(c => add({
-      source: 'klient', ownerId: c.id,
+      source: 'klient', ownerId: null,
       name: c.company_name || c.full_name, phone: c.phone, email: c.email, plate: null,
     }));
     (vehicles.data || []).forEach(v => add({
@@ -418,11 +421,11 @@ export default function KalendarPage() {
   const handleSelect = (arg) => {
     setEditingEventId(null);
     setIsConfirmed(true);
-    
+
     // OPRAVA: Bezpečné získanie dátumu a času
     const startStr = arg.startStr || "";
     const endStr = arg.endStr || "";
-    
+
     if (startStr.includes('T')) {
       setSelectedDate(startStr.split('T')[0]);
       setStartTime(startStr.split('T')[1].substring(0, 5));
@@ -430,7 +433,7 @@ export default function KalendarPage() {
     if (endStr.includes('T')) {
       setEndTime(endStr.split('T')[1].substring(0, 5));
     }
-    
+
     setPlate(''); setTitle(''); setSelectedClientName(''); setIssueDescription(''); setPlannedWork(''); setEventCustomerNote('');
     setCarData(null); setTempCustomerContact({ phone: '', email: '', customerName: '', userId: null }); setSelectedEmployee('');
     setClientSaved(false);
@@ -441,11 +444,146 @@ export default function KalendarPage() {
   };
 
   // --- 5. UKLADANIE ---
+  // Načíta vozidlo z databazavozidiel.sk a vráti payload pre tabuľku vehicles (bez majiteľa).
+  const fetchVehiclePayloadFromApi = async (spz) => {
+    const ecv = (spz || '').toUpperCase().replace(/\s/g, '');
+    const base = { license_plate: ecv, brand_model: carData?.brand_model || null };
+    if (!ecv) return base;
+    try {
+      const res = await fetchWithAuth(`/api/vehicle-lookup?ecv=${ecv}`);
+      const result = await res.json();
+      const v = result?.vehicle;
+      if (!v) return base;
+      const yearOnly = v.dat_prva_evid ? parseInt(v.dat_prva_evid.split('.').pop()) : null;
+      return {
+        license_plate: ecv,
+        brand_model: `${v.znacka || ''} ${v.obch_nazov || ''}`.trim() || base.brand_model,
+        vin_number: v.vin ? v.vin.toUpperCase() : null,
+        year_produced: yearOnly || null,
+        engine_volume: v.objem ? parseInt(v.objem) : null,
+        engine_power: v.vykon ? parseInt(v.vykon) : null,
+        fuel_type: v.druh_paliva === 'Nafta' ? 'Diesel' : (v.druh_paliva || 'Diesel'),
+      };
+    } catch {
+      return base;
+    }
+  };
+
+  // Pri zápise termínu sa zákazník založí automaticky (účet do Garáže + vozidlo z API),
+  // aby ho príjem auta našiel v Klientoch aj s rozpoznanou ŠPZ.
+  // Vracia null, ak chýbajú povinné údaje (meno, telefón, e-mail).
+  const ensureCustomerForReservation = async () => {
+    const name = capitalizeName(selectedClientName || tempCustomerContact.customerName);
+    const email = normalizeEmail(tempCustomerContact.email);
+    const phone = normalizePhone(tempCustomerContact.phone);
+    const spz = (plate || '').toUpperCase().replace(/\s/g, '');
+
+    const missing = [];
+    if (!name) missing.push('meno');
+    if (!phone) missing.push('telefón');
+    if (!email) missing.push('e-mail');
+    if (missing.length) { alert(`Doplň povinné údaje zákazníka: ${missing.join(', ')}.`); return null; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('E-mail zákazníka nemá správny tvar.'); return null; }
+
+    // 1. Má zákazník už účet? (id z vybraného záznamu musí naozaj existovať v user_profiles —
+    //    môže pochádzať aj z job_tickets.customer_id, ktoré nie je vždy auth účet)
+    let userId = null;
+    if (tempCustomerContact.userId) {
+      const { data } = await supabase.from('user_profiles').select('id').eq('id', tempCustomerContact.userId).maybeSingle();
+      userId = data?.id || null;
+    }
+    if (!userId) {
+      const { data } = await supabase.from('user_profiles').select('id').ilike('email', email).limit(1);
+      userId = data?.[0]?.id || null;
+    }
+
+    let welcomeSent = false;
+    const { data: existingVehicle } = spz
+      ? await supabase.from('vehicles').select('id, owner_id, brand_model').eq('license_plate', spz).maybeSingle()
+      : { data: null };
+
+    if (!userId) {
+      // 2. Nový zákazník → účet do Garáže + vozidlo (rozpoznané cez databazavozidiel.sk)
+      const vehiclePayload = spz && !existingVehicle ? await fetchVehiclePayloadFromApi(spz) : null;
+      try {
+        const res = await fetchWithAuth('/api/admin/create-zakaznik', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: name, email, phone, clientType: 'Osoba',
+            vehicle: vehiclePayload ? {
+              license_plate: vehiclePayload.license_plate,
+              brand_model: vehiclePayload.brand_model,
+              vin: vehiclePayload.vin_number,
+              year_produced: vehiclePayload.year_produced,
+              engine_volume: vehiclePayload.engine_volume,
+              engine_power: vehiclePayload.engine_power,
+              fuel_type: vehiclePayload.fuel_type,
+            } : null,
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || 'Nepodarilo sa vytvoriť klienta');
+        userId = json.userId;
+
+        // Rovnaký uvítací e-mail ako pri založení klienta v /klienti + dátum termínu
+        fetchWithAuth('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email, name, createdByAdmin: true,
+            setPasswordUrl: json.setPasswordUrl || null,
+            booking: { date: selectedDate, startTime, plateNumber: spz, issueDescription },
+          }),
+        }).catch(() => {});
+        welcomeSent = true;
+      } catch (err) {
+        // Termín sa uloží aj tak — technik to musí vedieť, aby klienta doplnil ručne
+        alert('Termín sa uloží, ale klienta sa nepodarilo založiť: ' + err.message);
+      }
+    }
+
+    // 3. Vozidlo — existujúce spárovať s majiteľom, chýbajúce doplniť z API
+    if (spz && userId) {
+      if (existingVehicle) {
+        if (!existingVehicle.owner_id) {
+          await supabase.from('vehicles').update({
+            owner_id: userId, owner_name: name, owner_email: email, owner_phone: phone,
+          }).eq('id', existingVehicle.id);
+        }
+      } else {
+        const { data: check } = await supabase.from('vehicles').select('id').eq('license_plate', spz).maybeSingle();
+        if (!check) {
+          const vehiclePayload = await fetchVehiclePayloadFromApi(spz);
+          await supabase.from('vehicles').insert([{
+            ...vehiclePayload, owner_id: userId, owner_name: name, owner_email: email, owner_phone: phone,
+          }]);
+        }
+      }
+    }
+
+    return { userId, name, email, phone, welcomeSent };
+  };
+
   const saveReservation = async (e) => {
     if (e) e.preventDefault();
-    
+
     const isBlocking = selectionMode === 'block';
-    
+
+    if (savingReservation) return;
+    setSavingReservation(true);
+    let customer = null;
+    if (!isBlocking) {
+      try {
+        customer = await ensureCustomerForReservation();
+      } catch (err) {
+        alert('Chyba pri zakladaní klienta: ' + (err.message || err));
+      }
+      if (!customer) { setSavingReservation(false); return; }
+      setSelectedClientName(customer.name);
+      setTempCustomerContact(prev => ({ ...prev, customerName: customer.name, email: customer.email, phone: customer.phone, userId: customer.userId || prev.userId }));
+    }
+
     const finalStart = `${selectedDate}T${startTime}:00`;
     // Pre BLOK: ak je zadaný endDate, použijeme ho; inak rovnaký deň
     const finalEndDate = (isBlocking && endDate) ? endDate : selectedDate;
@@ -457,16 +595,16 @@ export default function KalendarPage() {
       start_datetime: finalStart,
       end_datetime: finalEnd,
       employee_id: selectedEmployee || null,
-      customer_name: isBlocking ? 'INTERNÉ' : (selectedClientName || tempCustomerContact.customerName || 'Neznámy'),
-      plate_number: isBlocking ? 'BLOK' : plate,
+      customer_name: isBlocking ? 'INTERNÉ' : (customer?.name || 'Neznámy'),
+      plate_number: isBlocking ? 'BLOK' : plate.toUpperCase().replace(/\s/g, ''),
       issue_description: isBlocking ? 'Blokovaný čas' : issueDescription,
       planned_work: plannedWork,
       is_confirmed: true, // Zmeníme na true, čo spustí Realtime zvonček v garáži
       is_blocked: isBlocking,
       status: isBlocking ? 'Blokované' : 'Naplánované',
-      customer_phone: tempCustomerContact.phone,
-      customer_email: tempCustomerContact.email,
-      user_id: tempCustomerContact.userId
+      customer_phone: isBlocking ? tempCustomerContact.phone : customer?.phone,
+      customer_email: isBlocking ? tempCustomerContact.email : customer?.email,
+      user_id: isBlocking ? tempCustomerContact.userId : (customer?.userId || null)
     };
 
     let error;
@@ -477,11 +615,11 @@ export default function KalendarPage() {
       const result = await supabase.from('calendar_events').insert([reservationData]).select();
       error = result.error;
     }
-    
+
     if (!error) {
-      if (tempCustomerContact.userId && !isBlocking && editingEventId && !isConfirmed) {
+      if (customer?.userId && !isBlocking && editingEventId && !isConfirmed) {
         await supabase.from('notifications').insert([{
-          user_id: tempCustomerContact.userId,
+          user_id: customer.userId,
           title: '✅ Termín bol potvrdený',
           content: `Váš servisný termín pre vozidlo ${plate} bol potvrdený na ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('sk-SK')} o ${startTime}. Tešíme sa na Vás!`,
           type: 'success'
@@ -489,11 +627,12 @@ export default function KalendarPage() {
       }
       // Opýtaj sa technika či poslať potvrdzujúci email
       // — nová rezervácia, alebo potvrdenie čakajúcej žiadosti zákazníka
+      // — novému zákazníkovi už termín odišiel v uvítacom e-maile, druhýkrát ho neposielame
       const isConfirmingPending = editingEventId && !isConfirmed;
-      if (!isBlocking && tempCustomerContact.email && (!editingEventId || isConfirmingPending)) {
+      if (!isBlocking && customer?.email && !customer.welcomeSent && (!editingEventId || isConfirmingPending)) {
         setPendingEmailConfirm({
-          email: tempCustomerContact.email,
-          customerName: selectedClientName || tempCustomerContact.customerName || '',
+          email: customer.email,
+          customerName: customer.name,
           plateNumber: plate,
           date: selectedDate,
           startTime,
@@ -517,6 +656,7 @@ export default function KalendarPage() {
     } else {
       alert("Chyba pri ukladaní: " + error.message);
     }
+    setSavingReservation(false);
   };
 
   const openEventFromList = (ev) => {
@@ -757,12 +897,12 @@ export default function KalendarPage() {
           cursor: pointer;
         }
       `}</style>
-      
+
       <div className="pb-6 flex justify-between items-end bg-black font-bold">
         <div className="border-l-4 border-red-600 pl-5">
           <h1 className="text-3xl font-black uppercase italic text-white tracking-tighter leading-none"> Harmonogram <span className="text-red-600">Dielne</span> </h1>
         </div>
-        
+
         <div className="flex gap-3 items-center">
           {/* PREPÍNAČ ZOBRAZENIA */}
           <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1">
@@ -1147,9 +1287,11 @@ export default function KalendarPage() {
                           <div>
                             <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Meno klienta</label>
                             <input
+                              required
                               type="text"
                               value={selectedClientName}
                               onChange={e => setSelectedClientName(e.target.value)}
+                              onBlur={e => setSelectedClientName(capitalizeName(e.target.value))}
                               placeholder="Ján Novák..."
                               className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-4 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 text-sm"
                             />
@@ -1157,6 +1299,7 @@ export default function KalendarPage() {
                           <div>
                             <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Telefón</label>
                             <input
+                              required
                               type="tel"
                               value={tempCustomerContact.phone}
                               onChange={e => setTempCustomerContact(p => ({ ...p, phone: e.target.value }))}
@@ -1170,9 +1313,11 @@ export default function KalendarPage() {
                         <div>
                           <label className="block text-[10px] font-black text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">E-mail</label>
                           <input
+                            required
                             type="email"
                             value={tempCustomerContact.email}
                             onChange={e => setTempCustomerContact(p => ({ ...p, email: e.target.value }))}
+                            onBlur={e => setTempCustomerContact(p => ({ ...p, email: normalizeEmail(e.target.value) }))}
                             placeholder="jan.novak@email.sk"
                             className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-4 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 text-sm"
                           />
@@ -1185,7 +1330,8 @@ export default function KalendarPage() {
                               Zákazník zatiaľ nie je v systéme
                             </p>
                             <p className="text-[11px] text-zinc-500 font-bold leading-relaxed">
-                              Použijú sa údaje z tejto objednávky — meno, telefón, e-mail a ŠPZ. Nič neprepisuj ručne.
+                              Pri uložení termínu sa založí automaticky — dostane prístup do Garáže, vozidlo sa rozpozná podľa ŠPZ a e-mailom mu odíde potvrdenie termínu.
+                              Tlačidlá nižšie použi len ak chceš doplniť viac údajov (firma, adresa…).
                             </p>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <button
@@ -1235,8 +1381,8 @@ export default function KalendarPage() {
                       {selectionMode === 'order' && editingEventId && (
                         <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] text-center shadow-lg transition-all italic font-bold block"> 📋 Otvoriť Zákazkový list </Link>
                       )}
-                      <button type="submit" className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] shadow-xl transition-all italic font-bold`}>
-                        {editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}
+                      <button type="submit" disabled={savingReservation} className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} disabled:opacity-50 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] shadow-xl transition-all italic font-bold`}>
+                        {savingReservation ? 'Ukladám…' : editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}
                       </button>
 
                       {editingEventId && (
@@ -1253,12 +1399,12 @@ export default function KalendarPage() {
 
                   <div className="hidden lg:block bg-zinc-950 p-8 md:p-12 space-y-10 border-l border-zinc-900 font-bold overflow-y-auto">
                     <h3 className="text-sm font-black uppercase text-zinc-600 tracking-[0.4em] border-b border-zinc-900 pb-4 italic font-black">Detail Vozidla a Partnera</h3>
-                    
+
                     {selectionMode === 'block' ? (
                       <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-[4rem] text-zinc-600 text-center p-12 font-bold"> <span className="text-6xl mb-4">🔒</span> <p className="font-black uppercase tracking-widest text-xs font-bold">Termín je zablokovaný</p> </div>
                     ) : (
                       <div className="space-y-8 animate-in slide-in-from-right duration-500 font-bold">
-                        
+
                         {!isConfirmed && (
                           <div className="border-2 border-amber-500 rounded-[3rem] shadow-2xl shadow-amber-600/10 overflow-hidden">
                             <div className="bg-amber-600/30 px-8 py-4 flex items-center gap-3">
@@ -1321,13 +1467,13 @@ export default function KalendarPage() {
                               <p className="text-xs text-zinc-400 font-bold flex items-center gap-2 font-bold"> 📞 <span className="text-white text-lg tracking-widest font-bold">{tempCustomerContact.phone}</span> </p>
                               <div className="flex flex-col gap-4 mt-4">
                                 <a href={`tel:${tempCustomerContact.phone}`} className="w-full text-center bg-red-600 text-white px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest font-bold hover:bg-red-500 transition-all">Zavolať ihneď</a>
-                                
+
                                 {/* SMS PANEL INTEGRÁCIA */}
                                 <div className="border-t border-zinc-800 pt-4 mt-2">
                                   {tempCustomerContact.phone && (
-                                    <SmsPanel 
-                                      phone={tempCustomerContact.phone} 
-                                      plate={plate} 
+                                    <SmsPanel
+                                      phone={tempCustomerContact.phone}
+                                      plate={plate}
                                       customerName={tempCustomerContact.customerName || selectedClientName}
                                       userId={tempCustomerContact.userId}
                                     />
