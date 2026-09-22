@@ -19,6 +19,23 @@ export default function DashboardLayout({ children }) {
   const jobStatusRef = useRef({});
   const pathname = usePathname();
 
+  // Klientska poistka k src/proxy.js: bez prihlásenia → /login, iná rola → kam patrí.
+  // Proxy to rieši už na serveri; toto zachytí prípad, keby proxy nebežalo.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (!user) { router.replace('/login'); return; }
+      const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle();
+      if (cancelled) return;
+      const role = profile?.role;
+      if (role === 'admin') return;
+      router.replace(role === 'zakaznik' ? '/garaz' : role === 'mechanik' ? '/mechanik' : '/unauthorized');
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const fetchCount = async () => {
       const { count } = await supabase.from('todos').select('*', { count: 'exact', head: true }).eq('done', false);
