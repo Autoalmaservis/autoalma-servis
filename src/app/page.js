@@ -102,11 +102,14 @@ const slogans = [
   { main: 'Transparentná diagnostika', sub: 'bez technického žargónu' },
 ];
 
-// Odkazy v hlavičke — rovnaké pre desktop aj pre mobilné menu
+// Odkazy v hlavičke — rovnaké pre desktop aj pre mobilné menu.
+// `onlyWithGallery` sa zobrazí len vtedy, keď sú v galérii fotky — inak by odkaz
+// viedol na sekciu, ktorá sa nevykresľuje.
 const navLinks = [
   { href: '#sluzby', label: 'Naše služby' },
   { href: '#cennik', label: 'Cenník' },
   { href: '#recenzie', label: 'Recenzie' },
+  { href: '#galeria', label: 'Galéria', onlyWithGallery: true },
   { href: '#faq', label: 'Časté otázky' },
   { href: '#kontakt', label: 'Kontakt' },
 ];
@@ -122,6 +125,9 @@ export default function HomePage() {
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
   const router = useRouter();
+
+  // Galéria sa v menu objaví, až keď v nej nejaké fotky sú
+  const viditelneOdkazy = navLinks.filter(l => !l.onlyWithGallery || galleryPhotos.length > 0);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -256,7 +262,7 @@ export default function HomePage() {
             </a>
 
             <div className="hidden md:flex items-center gap-1">
-              {navLinks.map(link => (
+              {viditelneOdkazy.map(link => (
                 <a
                   key={link.href}
                   href={link.href}
@@ -324,7 +330,7 @@ export default function HomePage() {
         {/* ROZBALENÉ MENU NA MOBILE */}
         {menuOpen && (
           <div className="md:hidden border-t border-zinc-800 bg-black/95 px-6 py-4 flex flex-col max-h-[70vh] overflow-y-auto">
-            {navLinks.map(link => (
+            {viditelneOdkazy.map(link => (
               <a
                 key={link.href}
                 href={link.href}
