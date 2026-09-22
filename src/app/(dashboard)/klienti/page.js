@@ -126,7 +126,15 @@ export default function KlientiPage() {
     setSelectedKlient(meno);
     
     const nameFilters = [meno, realFullName, realCompName].filter(Boolean);
-    const ticketOrParts = nameFilters.map(n => `customer_name.eq."${n}"`).join(',');
+    // História sa hľadá aj podľa customer_id — po premenovaní klienta (alebo pri
+    // preklepe/medzere v mene na zákazke) by inak zákazky "zmizli", lebo majú
+    // v customer_name ešte staré meno.
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const clientUuid = [klientObj._customerId, klientObj.id].find(v => typeof v === 'string' && uuidRe.test(v));
+    const ticketOrParts = [
+      ...nameFilters.map(n => `customer_name.eq."${n}"`),
+      ...(clientUuid ? [`customer_id.eq.${clientUuid}`] : []),
+    ].join(',');
     const vehicleOrParts = [
       ...nameFilters.map(n => `owner_name.eq."${n}"`),
       ...(email ? [`owner_email.eq."${email}"`] : []),
@@ -339,6 +347,13 @@ export default function KlientiPage() {
         // Sync telefónu do všetkých zákaziek tohto klienta
         if (clientForm.customer_phone && clientForm.id) {
           supabase.from('job_tickets').update({ customer_phone: clientForm.customer_phone }).eq('customer_id', clientForm.id).then(() => {});
+        }
+        // Premenovanie klienta: nové meno prepíšeme aj do jeho zákaziek a vozidiel
+        // (párované cez ID, nie cez staré meno), aby história zostala pri klientovi.
+        const noveMeno = clientForm.company_name || clientForm.customer_name;
+        if (clientForm.id && noveMeno && originalName && noveMeno !== originalName) {
+          supabase.from('job_tickets').update({ customer_name: noveMeno }).eq('customer_id', clientForm.id).then(() => {});
+          supabase.from('vehicles').update({ owner_name: noveMeno }).eq('owner_id', clientForm.id).then(() => {});
         }
       } else {
         // Nový klient — použij admin API, ktoré nevysiela Supabase confirm email (obchádza rate limit)
