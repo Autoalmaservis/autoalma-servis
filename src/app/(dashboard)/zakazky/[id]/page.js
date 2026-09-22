@@ -519,8 +519,16 @@ export default function DetailZakazkyPage() {
 
   const updateJobStatus = async (newStatus) => {
     const { error } = await supabase.from('job_tickets').update({ status: newStatus, updated_at: new Date() }).eq('id', id);
-    if (!error) setZakazka(prev => ({ ...prev, status: newStatus }));
-    else alert("Chyba pri zmene stavu: " + error.message);
+    if (error) { alert("Chyba pri zmene stavu: " + error.message); return; }
+    let completedAt = zakazka?.completed_at || null;
+    if (newStatus === 'Dokončené') {
+      // Čas uzatvorenia zákazky = predvolený dátum vyhotovenia na faktúre.
+      // Samostatný update, aby stav prešiel aj keby stĺpec ešte nebol pridaný (sql/job_completed_at.sql).
+      completedAt = new Date().toISOString();
+      const { error: cErr } = await supabase.from('job_tickets').update({ completed_at: completedAt }).eq('id', id);
+      if (cErr) completedAt = zakazka?.completed_at || null;
+    }
+    setZakazka(prev => ({ ...prev, status: newStatus, completed_at: completedAt }));
   };
 
   const openCompleteModal = () => setShowCompleteModal(true);
@@ -561,7 +569,7 @@ export default function DetailZakazkyPage() {
   // Otvorí modal a počká na voľbu: 'vygenerovane' | 'dalsie' | 'zrusit'.
   const spytajSaNaCislo = (info) => new Promise(resolve => setCisloOtazka({ ...info, resolve }));
 
-  const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false, manualNumber = '') => {
+  const handleFinalizeJob = async (isOfficial, paymentMethod, noVat = false, manualNumber = '', dates = null) => {
     setInvoiceLoading(true);
     try {
       const { subtotal, tax, total, discountAmount } = calculateTotal();
@@ -570,11 +578,22 @@ export default function DetailZakazkyPage() {
       const effectiveSubtotal = noVat ? Number(subtotal) : (discountAmount > 0 ? effectiveTotal / 1.23 : Number(subtotal));
       const effectiveTax = noVat ? 0 : (discountAmount > 0 ? effectiveTotal - effectiveSubtotal : Number(tax));
       const teraz = new Date();
-      
-      // LOGIKA SPLATNOSTI (+14 dní)
-      const datumSplatnosti = new Date();
-      datumSplatnosti.setDate(teraz.getDate() + 14);
 
+      // DÁTUMY NA DOKLADE (z modalu; ak by chýbali, vyhotovenie = teraz, splatnosť +14 dní).
+      // Vyhotovenie nesie aktuálny čas dňa, aby poradie faktúr v rámci dňa zostalo
+      // podľa vystavenia; dodanie a splatnosť sú na poludnie (len dátum).
+      const zDatumu = (dateStr, ref) => {
+        if (!dateStr) return null;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return ref
+          ? new Date(y, m - 1, d, ref.getHours(), ref.getMinutes(), ref.getSeconds())
+          : new Date(y, m - 1, d, 12, 0, 0);
+      };
+      const datumVyhotovenia = zDatumu(dates?.issueDate, teraz) || teraz;
+      const datumDodania = zDatumu(dates?.deliveryDate) || datumVyhotovenia;
+      const datumSplatnosti = zDatumu(dates?.dueDate) || new Date(datumVyhotovenia.getFullYear(), datumVyhotovenia.getMonth(), datumVyhotovenia.getDate() + 14, 12);
+
+      // Rad čísel podľa dnešného roku — rovnako ako DB funkcia generate_invoice_number
       const rr = String(teraz.getFullYear()).slice(-2);
 
       const invoicePayload = {
@@ -605,8 +624,10 @@ export default function DetailZakazkyPage() {
           city: zakazka.city || zakazka.customer_city,
           zip: zakazka.zip || zakazka.customer_zip
         },
+        created_at: datumVyhotovenia.toISOString(),
         payment_info: {
-            issue_date: teraz.toISOString(),
+            issue_date: datumVyhotovenia.toISOString(),
+            delivery_date: datumDodania.toISOString(),
             due_date: datumSplatnosti.toISOString(),
             payment_method: isOfficial ? (paymentMethod === 'cash' ? 'Hotovosť' : 'Kartou') : 'Odložená platba',
             no_vat: noVat || false,
@@ -2147,7 +2168,7 @@ Inšpektor ${companyName}
           zakazka={zakazka}
           total={total}
           invoiceLoading={invoiceLoading}
-          onFinalize={(isOfficial, paymentMethod, noVat, manualNumber) => handleFinalizeJob(isOfficial, paymentMethod, noVat, manualNumber)}
+          onFinalize={(isOfficial, paymentMethod, noVat, manualNumber, dates) => handleFinalizeJob(isOfficial, paymentMethod, noVat, manualNumber, dates)}
           onClose={() => setIsInvoiceModalOpen(false)}
         />
       )}

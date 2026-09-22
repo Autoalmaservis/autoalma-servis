@@ -2,9 +2,32 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
 
+// YYYY-MM-DD v lokálnom čase (nie UTC — inak by večer preskočil deň)
+const toDateInput = (v) => {
+  const d = v ? new Date(v) : new Date();
+  if (isNaN(d.getTime())) return toDateInput(null);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const addDays = (dateStr, dni) => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return toDateInput(new Date(y, m - 1, d + dni));
+};
+
 export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinalize, onClose }) {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [noVat, setNoVat] = useState(false);
+
+  // Dátumy na doklade — vyhotovenie = uzatvorenie zákazky, dodanie = odovzdanie auta
+  // (predvolene dnes), splatnosť = 14 dní od vyhotovenia. Všetky sa dajú prepísať.
+  const [issueDate, setIssueDate] = useState(() => toDateInput(zakazka?.completed_at || null));
+  const [deliveryDate, setDeliveryDate] = useState(() => toDateInput(null));
+  const [dueDate, setDueDate] = useState(() => addDays(toDateInput(zakazka?.completed_at || null), 14));
+  const [dueTouched, setDueTouched] = useState(false);
+
+  const changeIssueDate = (v) => {
+    setIssueDate(v);
+    if (v && !dueTouched) setDueDate(addDays(v, 14));
+  };
 
   // Číslo faktúry — automaticky, alebo ručne zadané
   const [manualOn, setManualOn] = useState(false);
@@ -24,7 +47,12 @@ export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinaliz
   }, [zakazka?.id]);
 
   const reservedFor = (isOfficial) => reserved.find(r => r.prefix?.startsWith(isOfficial ? 'F' : 'A'))?.invoice_number || null;
-  const submit = (isOfficial) => onFinalize(isOfficial, paymentMethod, noVat, manualOn ? manualNumber : '');
+  const submit = (isOfficial) => {
+    if (!issueDate || !deliveryDate || !dueDate) { alert('Doplň všetky tri dátumy na doklade.'); return; }
+    onFinalize(isOfficial, paymentMethod, noVat, manualOn ? manualNumber : '', { issueDate, deliveryDate, dueDate });
+  };
+
+  const dateInputCls = 'w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-3 py-3 text-white font-black text-sm outline-none transition-all text-center';
 
   return (
     <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[250] flex items-center justify-center p-6 no-print font-black">
@@ -58,6 +86,28 @@ export default function InvoiceModal({ zakazka, total, invoiceLoading, onFinaliz
               DPH nebude účtovaná — platí pre zahraničné firmy s IČ DPH
             </p>
           )}
+        </div>
+
+        {/* DÁTUMY NA DOKLADE */}
+        <div className="mb-8">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-3">Dátumy na doklade</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Vyhotovenie</p>
+              <input type="date" value={issueDate} onChange={e => changeIssueDate(e.target.value)} className={dateInputCls} />
+              <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest mt-1.5">Uzatvorenie zákazky</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dodanie</p>
+              <input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className={dateInputCls} />
+              <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest mt-1.5">Odovzdanie auta</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Splatnosť</p>
+              <input type="date" value={dueDate} onChange={e => { setDueTouched(true); setDueDate(e.target.value); }} className={dateInputCls} />
+              <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest mt-1.5">14 dní od vyhotovenia</p>
+            </div>
+          </div>
         </div>
 
         {/* ČÍSLO DOKLADU */}

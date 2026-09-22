@@ -123,7 +123,9 @@ export default function DetailFakturyPage() {
               <td width="50%" valign="top" align="right">
                 <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
                 <p style={{ fontSize: '24pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{inv.invoice_number}</p>
-                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum vystavenia: <strong>{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum vyhotovenia: <strong>{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum dodania: <strong>{new Date(inv.payment_info?.delivery_date || inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum splatnosti: <strong>{new Date(inv.payment_info?.due_date || (new Date(inv.payment_info?.issue_date || inv.created_at).getTime() + 14 * 24 * 60 * 60 * 1000)).toLocaleDateString('sk-SK')}</strong></p>
               </td>
             </tr>
           </tbody>

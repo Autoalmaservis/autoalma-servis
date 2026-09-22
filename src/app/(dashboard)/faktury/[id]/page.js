@@ -48,6 +48,7 @@ export default function DetailFakturyPage() {
   // Zmena dátumu vystavenia / splatnosti
   const [dateModal, setDateModal] = useState(false);
   const [newIssueDate, setNewIssueDate] = useState('');
+  const [newDeliveryDate, setNewDeliveryDate] = useState('');
   const [newDueDate, setNewDueDate] = useState('');
   const [dateSaving, setDateSaving] = useState(false);
 
@@ -396,6 +397,8 @@ Inspektor ${companyName}
 
   const handleOpenDateModal = () => {
     setNewIssueDate(toDateInput(inv.payment_info?.issue_date || inv.created_at));
+    // staršie faktúry dátum dodania nemajú — predvolene = vyhotovenie
+    setNewDeliveryDate(toDateInput(inv.payment_info?.delivery_date || inv.payment_info?.issue_date || inv.created_at));
     setNewDueDate(toDateInput(inv.payment_info?.due_date));
     setDateModal(true);
   };
@@ -442,6 +445,7 @@ Inspektor ${companyName}
         return new Date(y, m - 1, d, valid ? base.getHours() : 12, valid ? base.getMinutes() : 0, 0, 0).toISOString();
       };
       const issueIso = mkIso(newIssueDate, inv.payment_info?.issue_date || inv.created_at);
+      const deliveryIso = newDeliveryDate ? mkIso(newDeliveryDate, inv.payment_info?.delivery_date) : null;
       const dueIso = newDueDate ? mkIso(newDueDate, inv.payment_info?.due_date) : null;
 
       const payload = {
@@ -449,6 +453,7 @@ Inspektor ${companyName}
         payment_info: {
           ...(inv.payment_info || {}),
           issue_date: issueIso,
+          delivery_date: deliveryIso,
           due_date: dueIso,
         },
       };
@@ -479,7 +484,7 @@ Inspektor ${companyName}
             🔓 Zrušiť faktúru / Otvoriť zákazku
           </button>
           <button onClick={handleOpenDateModal} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
-            📅 Zmeniť dátum
+            📅 Zmeniť dátumy
           </button>
           <button onClick={handleOpenNumberModal} className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-white hover:text-black px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
             🔢 Zmeniť číslo
@@ -538,7 +543,9 @@ Inspektor ${companyName}
               <td width="50%" valign="top" align="right">
                 <h2 style={{ fontSize: '16pt', color: '#dc2626', margin: '0' }}>{inv.is_official ? 'Faktúra' : 'Servisný záznam'}</h2>
                 <p style={{ fontSize: '24pt', color: '#000', fontWeight: '900', margin: '2pt 0' }}>{inv.invoice_number}</p>
-                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum vystavenia: <strong>{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum vyhotovenia: <strong>{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum dodania: <strong>{new Date(inv.payment_info?.delivery_date || inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</strong></p>
+                <p style={{ margin: '0', color: '#000', fontSize: '9pt' }}>Dátum splatnosti: <strong>{new Date(inv.payment_info?.due_date || (new Date(inv.payment_info?.issue_date || inv.created_at).getTime() + 14 * 24 * 60 * 60 * 1000)).toLocaleDateString('sk-SK')}</strong></p>
               </td>
             </tr>
           </tbody>
@@ -591,7 +598,8 @@ Inspektor ${companyName}
             </h2>
             <p className="text-3xl font-black tracking-tighter mb-4 doc-number">{inv.invoice_number}</p>
             <div className="text-[10px] text-zinc-400 uppercase text-right space-y-0.5">
-              <p>Vystavené: <span className="text-white font-black">{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</span></p>
+              <p>Vyhotovené: <span className="text-white font-black">{new Date(inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</span></p>
+              <p>Dodané: <span className="text-white font-black">{new Date(inv.payment_info?.delivery_date || inv.payment_info?.issue_date || inv.created_at).toLocaleDateString('sk-SK')}</span></p>
               {inv.payment_info?.due_date && (
                 <p>Splatnosť: <span className="text-white font-black">{new Date(inv.payment_info.due_date).toLocaleDateString('sk-SK')}</span></p>
               )}
@@ -1057,7 +1065,7 @@ Inspektor ${companyName}
 
             <div className="flex items-start justify-between mb-5">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-0.5">Zmeniť dátum</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.4em] text-red-600 mb-0.5">Zmeniť dátumy</p>
                 <h2 className="text-xl font-black uppercase italic tracking-tighter text-white leading-none">{inv.invoice_number}</h2>
               </div>
               <button onClick={() => setDateModal(false)} className="text-zinc-600 hover:text-white text-lg font-black transition-colors ml-4 shrink-0">✕</button>
@@ -1065,12 +1073,17 @@ Inspektor ${companyName}
 
             <div className="space-y-4 mb-5">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum vystavenia</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum vyhotovenia <span className="text-zinc-700 normal-case tracking-normal">— uzatvorenie zákazky</span></p>
                 <input type="date" value={newIssueDate} onChange={e => setNewIssueDate(e.target.value)}
                   className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black outline-none transition-all" />
               </div>
               <div>
-                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum splatnosti</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum dodania <span className="text-zinc-700 normal-case tracking-normal">— odovzdanie auta</span></p>
+                <input type="date" value={newDeliveryDate} onChange={e => setNewDeliveryDate(e.target.value)}
+                  className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black outline-none transition-all" />
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">Dátum splatnosti <span className="text-zinc-700 normal-case tracking-normal">— 14 dní od vyhotovenia</span></p>
                 <input type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)}
                   className="w-full bg-zinc-950 border-2 border-zinc-800 focus:border-red-600 rounded-2xl px-4 py-3 text-white font-black outline-none transition-all" />
                 <div className="flex gap-2 mt-2">
@@ -1097,7 +1110,7 @@ Inspektor ${companyName}
             <div className="flex gap-3">
               <button onClick={handleSaveDates} disabled={dateSaving || !newIssueDate}
                 className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">
-                {dateSaving ? '⏳ Ukladám...' : '✓ Uložiť dátum'}
+                {dateSaving ? '⏳ Ukladám...' : '✓ Uložiť dátumy'}
               </button>
               <button onClick={() => setDateModal(false)}
                 className="px-5 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white font-black py-3 rounded-2xl text-[10px] uppercase tracking-widest transition-all">

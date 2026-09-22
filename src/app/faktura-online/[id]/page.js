@@ -80,7 +80,9 @@ export default function FakturaOnlinePage() {
           <div className="text-right">
             <h2 className="text-xl font-black uppercase mb-1">Faktúra / Doklad</h2>
             <p className="text-3xl font-light text-blue-600">{invoice.invoice_number}</p>
-            <p className="text-[9px] text-zinc-400 uppercase font-bold mt-2">Dátum vystavenia: {new Date(invoice.created_at).toLocaleDateString('sk-SK')}</p>
+            <p className="text-[9px] text-zinc-400 uppercase font-bold mt-2">Dátum vyhotovenia: {new Date(invoice.payment_info?.issue_date || invoice.created_at).toLocaleDateString('sk-SK')}</p>
+            <p className="text-[9px] text-zinc-400 uppercase font-bold">Dátum dodania: {new Date(invoice.payment_info?.delivery_date || invoice.payment_info?.issue_date || invoice.created_at).toLocaleDateString('sk-SK')}</p>
+            <p className="text-[9px] text-zinc-400 uppercase font-bold">Dátum splatnosti: {new Date(invoice.payment_info?.due_date || (new Date(invoice.payment_info?.issue_date || invoice.created_at).getTime() + 14 * 24 * 60 * 60 * 1000)).toLocaleDateString('sk-SK')}</p>
           </div>
         </div>
 

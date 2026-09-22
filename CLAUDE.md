@@ -57,6 +57,7 @@ Interný servisný systém pre autoservis AutoAlma s.r.o., Bratislava, Svornosti
 - **`job_tickets`**: Zákazky. Stĺpce: `id, customer_name, plate_number, status, assigned_worker_id, car_brand_model, vin_number, mileage, fuel_type, customer_phone, customer_email, customer_id, created_at`
   - `status`: `'Prebieha'`, `'Dokončené'`, `'Archivované'`, `'Čaká na schválenie'`
   - `assigned_worker_id` → FK na `employees.id` (**DÔLEŽITÉ**: nie `employee_id`!)
+  - `completed_at`: čas kliknutia na „Dokončené" — predvolený dátum vyhotovenia faktúry (`sql/job_completed_at.sql`)
 - **`job_items`**: Položky zákazky. Stĺpce: `id, job_id, name, quantity, unit, unit_price, type`
   - `type`: `'Práca'` (unit=hod, quantity=hodiny) alebo `'Materiál'`
 - **`job_tasks`**: Úkony/tasky zákazky. Stĺpce: `id, job_id, task_description, is_completed`
@@ -65,12 +66,14 @@ Interný servisný systém pre autoservis AutoAlma s.r.o., Bratislava, Svornosti
 ### Faktúry a doklady
 - **`invoices`**: `id, invoice_number, customer_name, car_details(jsonb), total_amount, is_official(bool), created_at`
   - `is_official=true` → vystavená faktúra, `is_official=false` → odložená
+  - `payment_info` (jsonb): `issue_date` (vyhotovenie = uzatvorenie zákazky), `delivery_date` (odovzdanie auta), `due_date` (splatnosť, default +14 dní) — všetky editovateľné v `/faktury/[id]`; `created_at` sa drží rovné `issue_date`
 - **`price_offers`**: Cenové ponuky. `id, job_id, offer_number, total_amount, items_json, status, created_at`
 
 ### Zákazníci a vozidlá
 - **`customers`**: `id, name, phone, email, address, city, zip, client_type, company_name, ico, dic, ic_dph`
 - **`vehicles`**: `id, owner_id, license_plate, brand_model, vin, year`
 - **`user_profiles`**: `id, role` — rola: `'admin'`, `'mechanik'`, `'zakaznik'`
+- Nový zákazník z kalendára (`/kalendar` → uloženie termínu) sa zakladá automaticky cez `/api/admin/create-zakaznik` (účet do Garáže + `vehicles` z databazavozidiel.sk) a dostane uvítací e-mail s termínom (`send-welcome-email` s `booking`). Meno/telefón/e-mail sú povinné; normalizácia v `src/app/lib/textNormalize.js`
 
 ### Zamestnanci
 - **`employees`**: `id, name, email, color, role, active`

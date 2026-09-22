@@ -51,9 +51,15 @@ export function buildInvoicePDF(jsPDF, autoTable, inv, company) {
   doc.text(String(inv.invoice_number), R, y + 3, { align: 'right' });
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Datum: ${new Date(inv.created_at).toLocaleDateString('sk-SK')}`, R, y + 9, { align: 'right' });
+  const pi = inv.payment_info || {};
+  const issueTs = new Date(pi.issue_date || inv.created_at);
+  const deliveryTs = new Date(pi.delivery_date || pi.issue_date || inv.created_at);
+  const dueTs = pi.due_date ? new Date(pi.due_date) : new Date(issueTs.getTime() + 14 * 24 * 60 * 60 * 1000);
+  doc.text(sk(`Dátum vyhotovenia: ${issueTs.toLocaleDateString('sk-SK')}`), R, y + 9, { align: 'right' });
+  doc.text(sk(`Dátum dodania: ${deliveryTs.toLocaleDateString('sk-SK')}`), R, y + 13, { align: 'right' });
+  doc.text(sk(`Dátum splatnosti: ${dueTs.toLocaleDateString('sk-SK')}`), R, y + 17, { align: 'right' });
 
-  y += 16;
+  y += 22;
 
   doc.setDrawColor(...RED);
   doc.setLineWidth(0.8);

@@ -150,6 +150,10 @@ export function buildUblXml(invoice, supplierAddr) {
     </cac:Party>
   </cac:AccountingCustomerParty>
 
+  <cac:Delivery>
+    <cbc:ActualDeliveryDate>${fmtDate(p.delivery_date || p.issue_date || invoice.created_at)}</cbc:ActualDeliveryDate>
+  </cac:Delivery>
+
   <cac:PaymentMeans>
     <cbc:PaymentMeansCode>${paymentCode(p.payment_method)}</cbc:PaymentMeansCode>
     <cbc:PaymentDueDate>${fmtDate(p.due_date)}</cbc:PaymentDueDate>${s.bank_account ? `
