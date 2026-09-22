@@ -109,7 +109,7 @@ const navLinks = [
   { href: '#sluzby', label: 'Naše služby' },
   { href: '#cennik', label: 'Cenník' },
   { href: '#recenzie', label: 'Recenzie' },
-  { href: '#galeria', label: 'Galéria', onlyWithGallery: true },
+  { href: '/galeria', label: 'Galéria', onlyWithGallery: true },
   { href: '#faq', label: 'Časté otázky' },
   { href: '#kontakt', label: 'Kontakt' },
 ];
@@ -603,26 +603,40 @@ export default function HomePage() {
             <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Galéria</h2>
           </div>
 
-          {(
-            <div className="columns-2 md:columns-3 gap-4">
-              {galleryPhotos.map((photo) => (
-                <div
-                  key={photo.id}
-                  className="break-inside-avoid mb-4 rounded-2xl overflow-hidden cursor-pointer group relative"
-                  onClick={() => setLightbox(photo)}
-                >
-                  <img
-                    src={photo.url}
-                    alt={photo.caption || 'AutoAlma servis Bratislava'}
-                    className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  {photo.caption && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3 opacity-0 group-hover:opacity-100 transition-all">
-                      <p className="text-white text-xs font-bold">{photo.caption}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
+          {/* Na hlavnej stránke je len ukážka — celá galéria má vlastnú stránku.
+              Fotky sa načítajú až keď sa k nim návštevník dostane (loading="lazy"),
+              aby 20 fotiek nespomaľovalo otvorenie hlavnej stránky. */}
+          <div className="columns-2 md:columns-3 gap-4">
+            {galleryPhotos.slice(0, 6).map((photo) => (
+              <div
+                key={photo.id}
+                className="break-inside-avoid mb-4 rounded-2xl overflow-hidden cursor-pointer group relative"
+                onClick={() => setLightbox(photo)}
+              >
+                <img
+                  src={photo.url}
+                  alt={photo.caption || 'AutoAlma servis Bratislava'}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                {photo.caption && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-4 py-3 opacity-0 group-hover:opacity-100 transition-all">
+                    <p className="text-white text-xs font-bold">{photo.caption}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {galleryPhotos.length > 6 && (
+            <div className="text-center mt-12">
+              <Link
+                href="/galeria"
+                className="inline-block bg-white text-black font-black uppercase italic tracking-tighter px-10 py-4 rounded-2xl text-sm hover:bg-red-600 hover:text-white transition-all shadow-xl"
+              >
+                Zobraziť celú galériu →
+              </Link>
             </div>
           )}
         </div>
