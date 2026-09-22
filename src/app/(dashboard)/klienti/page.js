@@ -470,7 +470,7 @@ export default function KlientiPage() {
   const filteredKlienti = klienti
     .filter(k => {
       const s = nd(searchTerm);
-      return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
+      return nd(k.customer_name).includes(s) || nd(k.db_full_name).includes(s) || nd(k.customer_phone).replace(/\s/g, '').includes(s.replace(/\s/g, '')) || nd(k.customer_email).includes(s) || (k.all_plates || []).some(p => nd(p).includes(s));
     })
     .sort((a, b) => {
       if (sortMode === 'date') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
@@ -492,53 +492,105 @@ export default function KlientiPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+      {/* Bez vybraného partnera zoznam zaberá celú šírku ako mriežka kariet s kontaktmi;
+          po výbere sa zúži do ľavého stĺpca a vpravo sa otvorí karta. */}
+      <div className={`grid grid-cols-1 gap-10 ${selectedKlient ? 'lg:grid-cols-3' : ''}`}>
         {/* ZOZNAM KLIENTOV */}
         <div className="lg:col-span-1">
-          <input type="text" placeholder="Hľadať partnera / ŠPZ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-3 shadow-inner" />
-          {searchTerm && (
-            <div className="flex items-center gap-3 mb-3 flex-wrap">
-              <button
-                onClick={() => setSearchTerm('')}
-                title="Zrušiť filter"
-                className="flex items-center gap-2 bg-red-600/15 border border-red-600/40 text-red-400 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-              >
-                {searchTerm} <span className="text-xs leading-none">✕</span>
-              </button>
-              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">{filteredKlienti.length} z {klienti.length}</span>
+          <div className={`flex flex-col gap-3 mb-5 ${selectedKlient ? '' : 'md:flex-row md:items-center'}`}>
+            <input type="text" placeholder="Hľadať partnera / ŠPZ / telefón / e-mail..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:flex-1 bg-zinc-900 border border-zinc-800 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 shadow-inner" />
+            {searchTerm && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  onClick={() => setSearchTerm('')}
+                  title="Zrušiť filter"
+                  className="flex items-center gap-2 bg-red-600/15 border border-red-600/40 text-red-400 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  {searchTerm} <span className="text-xs leading-none">✕</span>
+                </button>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600 whitespace-nowrap">{filteredKlienti.length} z {klienti.length}</span>
+              </div>
+            )}
+            <div className={`flex gap-2 ${selectedKlient ? '' : 'md:w-64'}`}>
+              <button onClick={() => setSortMode('abc')} className={`flex-1 py-2 md:py-3.5 px-4 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'abc' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>A – Z</button>
+              <button onClick={() => setSortMode('date')} className={`flex-1 py-2 md:py-3.5 px-4 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'date' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>Najnovší</button>
             </div>
-          )}
-          <div className="flex gap-2 mb-5">
-            <button onClick={() => setSortMode('abc')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'abc' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>A – Z</button>
-            <button onClick={() => setSortMode('date')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${sortMode === 'date' ? 'bg-red-600 text-white' : 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-white'}`}>Najnovší</button>
           </div>
-          <div className="space-y-3 max-h-[65vh] overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
-            {filteredKlienti.map((k, i) => (
+          <div className={`max-h-[70vh] overflow-y-auto [&::-webkit-scrollbar]:hidden ${selectedKlient ? 'space-y-3' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4'}`} style={{ scrollbarWidth: 'none' }}>
+            {filteredKlienti.length === 0 && !loading && (
+              <div className="col-span-full py-16 text-center text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700 italic">Žiadny partner nezodpovedá hľadaniu</div>
+            )}
+            {filteredKlienti.map((k, i) => {
+              const isSelected = selectedKlient === k.customer_name;
+              const jeFirma = k.client_type === 'Firma' || !!k.db_company_name;
+              const kontaktnaOsoba = jeFirma && k.db_full_name && k.db_full_name !== k.customer_name ? k.db_full_name : null;
+              const mesto = [k.city, k.zip].filter(Boolean).join(' ');
+              return (
               <div key={i} className="relative group">
-                <button onClick={() => nacitajVozidla(k)} className={`w-full text-left p-6 rounded-3xl border transition-all relative font-bold ${selectedKlient === k.customer_name ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-700'}`}>
-                  <p className="text-2xl font-black uppercase tracking-tight italic">{k.customer_name}</p>
-                  <div className="flex flex-wrap gap-2 mt-3">
+                <button onClick={() => nacitajVozidla(k)} className={`w-full h-full text-left p-6 rounded-3xl border transition-all relative font-bold ${isSelected ? 'bg-red-600 border-red-600 shadow-2xl' : 'bg-zinc-900/40 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-900/70'}`}>
+                  <div className="flex items-start justify-between gap-3 pr-24">
+                    <p className="text-2xl font-black uppercase tracking-tight italic leading-none break-words">{k.customer_name}</p>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                    <span className={`text-[9px] px-2 py-0.5 rounded-md font-black uppercase tracking-widest border ${isSelected ? 'bg-black/30 border-black/20 text-white' : jeFirma ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}`}>{jeFirma ? 'Firma' : 'Osoba'}</span>
+                    {kontaktnaOsoba && <span className={`text-[10px] font-bold normal-case ${isSelected ? 'text-red-100' : 'text-zinc-400'}`}>{kontaktnaOsoba}</span>}
+                    {jeFirma && k.ico && <span className={`text-[9px] font-mono tracking-wider ${isSelected ? 'text-red-100' : 'text-zinc-500'}`}>IČO {k.ico}</span>}
+                  </div>
+
+                  {/* Kontakt — v širokom zobrazení, aby sa dal klient rozpoznať bez otvárania karty */}
+                  {!selectedKlient && (
+                    <div className={`mt-4 space-y-1.5 text-[11px] font-bold normal-case ${isSelected ? 'text-red-50' : 'text-zinc-300'}`}>
+                      <p className="flex items-center gap-2 truncate"><span className="opacity-50 text-[10px]">📞</span> {k.customer_phone ? <span className="font-mono tracking-wider">{k.customer_phone}</span> : <span className="text-zinc-600 italic">bez telefónu</span>}</p>
+                      <p className="flex items-center gap-2 truncate"><span className="opacity-50 text-[10px]">✉️</span> {k.customer_email ? <span className="truncate">{k.customer_email}</span> : <span className="text-zinc-600 italic">bez e-mailu</span>}</p>
+                      {mesto && <p className="flex items-center gap-2 truncate"><span className="opacity-50 text-[10px]">📍</span> <span className="truncate">{k.address ? `${k.address}, ` : ''}{mesto}</span></p>}
+                    </div>
+                  )}
+
+                  <div className={`flex flex-wrap gap-2 ${selectedKlient ? 'mt-3' : 'mt-4 pt-4 border-t border-zinc-800/60'}`}>
                     {k.all_plates?.length > 0 ? k.all_plates.map(p => (
                         <span key={p} className="text-[10px] bg-black/40 px-2.5 py-1 rounded-lg text-zinc-300 font-mono border border-zinc-800 uppercase tracking-widest">{p}</span>
                     )) : <span className="text-[10px] text-zinc-600 italic uppercase">Bez vozidla</span>}
                   </div>
+                  {!selectedKlient && k.created_at && (
+                    <p className="mt-3 text-[9px] font-black uppercase tracking-widest text-zinc-600">Partner od {new Date(k.created_at).toLocaleDateString('sk-SK')}</p>
+                  )}
                 </button>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-2 font-bold">
+                <div className="absolute right-4 top-4 flex gap-2 font-bold">
                   <span onClick={(e) => { e.stopPropagation(); openEditClientModal(k); }} className="bg-black/50 p-3 rounded-xl text-xs hover:bg-white hover:text-black transition-all border border-zinc-800 cursor-pointer">✏️</span>
                   <span onClick={(e) => { e.stopPropagation(); handleDeleteKlient(k); }} className={`p-3 rounded-xl text-[10px] font-black uppercase transition-all border cursor-pointer ${confirmDeleteName === k.customer_name ? 'bg-white text-red-600 border-white' : 'bg-black/50 text-zinc-600 border-zinc-800 hover:text-red-500'}`}>{confirmDeleteName === k.customer_name ? 'ZMAZAŤ?' : '🗑️'}</span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
-        {/* KARTA KLIENTA */}
+        {/* KARTA KLIENTA — zobrazí sa až po výbere partnera */}
+        {selectedKlient && (
         <div className="lg:col-span-2">
-          {selectedKlient ? (
+          {(() => {
+            const kl = klienti.find(k => k.customer_name === selectedKlient);
+            const jeFirma = kl?.client_type === 'Firma' || !!kl?.db_company_name;
+            const mesto = [kl?.city, kl?.zip].filter(Boolean).join(' ');
+            return (
             <div className="space-y-10 animate-in fade-in duration-500 font-bold">
-              <div className="flex justify-between items-center border-b border-zinc-900 pb-8">
-                <h2 className="text-3xl font-black uppercase tracking-tighter italic leading-none font-bold">Karta: <span className="text-red-600">{selectedKlient}</span></h2>
-                <button onClick={() => { setEditMode(false); setCarForm({id:'', plate_number: '', brand: '', model: '', vin_number: '', engine_volume: '', engine_power: '', year_produced: '', fuel_type: 'Diesel', mileage: '' }); setIsCarModalOpen(true); }} className="bg-zinc-800 hover:bg-zinc-700 text-white font-black px-6 py-3 rounded-2xl text-[10px] uppercase border border-zinc-700 shadow-lg">+ Pridať Vozidlo</button>
+              <div className="flex flex-wrap justify-between items-start gap-4 border-b border-zinc-900 pb-8">
+                <div className="min-w-0">
+                  <h2 className="text-3xl font-black uppercase tracking-tighter italic leading-none font-bold">Karta: <span className="text-red-600">{selectedKlient}</span></h2>
+                  {kl && (
+                    <div className="flex flex-wrap gap-x-6 gap-y-1.5 mt-4 text-[11px] font-bold normal-case text-zinc-400">
+                      {jeFirma && kl.db_full_name && kl.db_full_name !== kl.customer_name && <span>👤 {kl.db_full_name}</span>}
+                      {kl.customer_phone && <a href={`tel:${kl.customer_phone.replace(/\s/g, '')}`} className="font-mono tracking-wider hover:text-white transition-colors">📞 {kl.customer_phone}</a>}
+                      {kl.customer_email && <a href={`mailto:${kl.customer_email}`} className="hover:text-white transition-colors">✉️ {kl.customer_email}</a>}
+                      {(kl.address || mesto) && <span>📍 {[kl.address, mesto].filter(Boolean).join(', ')}</span>}
+                      {jeFirma && kl.ico && <span className="font-mono">IČO {kl.ico}{kl.ic_dph ? ` · ${kl.ic_dph}` : ''}</span>}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => { setEditMode(false); setCarForm({id:'', plate_number: '', brand: '', model: '', vin_number: '', engine_volume: '', engine_power: '', year_produced: '', fuel_type: 'Diesel', mileage: '' }); setIsCarModalOpen(true); }} className="bg-zinc-800 hover:bg-zinc-700 text-white font-black px-6 py-3 rounded-2xl text-[10px] uppercase border border-zinc-700 shadow-lg">+ Pridať Vozidlo</button>
+                  <button onClick={() => { setSelectedKlient(null); setVozidla([]); }} title="Zavrieť kartu a vrátiť sa na zoznam" className="bg-zinc-900 hover:bg-white hover:text-black text-zinc-400 font-black px-5 py-3 rounded-2xl text-[10px] uppercase border border-zinc-800 shadow-lg transition-all">✕ Zavrieť</button>
+                </div>
               </div>
               <div className="space-y-16">
                 {vozidla.map((v) => (
@@ -597,10 +649,10 @@ export default function KlientiPage() {
                 ))}
               </div>
             </div>
-          ) : (
-            <div className="h-[60vh] flex flex-col items-center justify-center border-2 border-dashed border-zinc-900 rounded-[4rem] text-zinc-900 opacity-40 uppercase font-black tracking-[0.5em] text-sm text-center px-10 italic">Vyberte partnera v ľavom menu</div>
-          )}
+            );
+          })()}
         </div>
+        )}
       </div>
 
       {/* MODAL VOZIDLA (S API A AI) */}
