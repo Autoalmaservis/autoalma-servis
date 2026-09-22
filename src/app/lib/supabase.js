@@ -11,6 +11,12 @@ export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
+    // createBrowserClient má štandardne flowType 'pkce', ktorý vracia overovací
+    // odkaz ako ?code=… a vyžaduje, aby sa e-mail otvoril v tom istom prehliadači,
+    // kde sa obnova hesla vyžiadala. Pôvodný klient používal 'implicit' (token
+    // v kotve URL) a stránka /login/update-password s ním počíta — necháme ho,
+    // aby odkaz fungoval aj na inom zariadení (zákazník si ho otvorí v mobile).
+    flowType: 'implicit',
   }
 })
 

@@ -731,12 +731,61 @@ export default function KalendarPage() {
 
   // Uloží zákazníka z objednávky rovno do Klientov (bez prístupu do Garáže)
   const saveClientQuick = async () => {
-    const name = (tempCustomerContact.customerName || selectedClientName || '').trim();
+    const name = capitalizeName(tempCustomerContact.customerName || selectedClientName || '');
     if (!name) { alert('Chýba meno zákazníka.'); return; }
+
+    const email = normalizeEmail(tempCustomerContact.email);
+    const phone = normalizePhone(tempCustomerContact.phone);
+
+    // Bez e-mailu sa nedá založiť účet do Garáže — nech je to jasné hneď,
+    // nie až keď bude zákazník volať, že sa nevie prihlásiť.
+    if (!email) {
+      const pokracovat = confirm(
+        `Zákazník ${name} nemá e-mail, takže NEBUDE mať prístup do Garáže ` +
+        '(nevidí stav opravy, ponuky ani faktúry).\n\n' +
+        'Uložiť len do Klientov? Prístup sa dá doplniť neskôr v Klientoch ' +
+        'tlačidlom „Prístup do Garáže“, keď e-mail dodá.'
+      );
+      if (!pokracovat) { setQuickSaveLoading(false); return; }
+    }
+
     setQuickSaveLoading(true);
     try {
-      const email = (tempCustomerContact.email || '').trim().toLowerCase();
-      const phone = (tempCustomerContact.phone || '').trim();
+      // S e-mailom rovno zakladáme aj účet do Garáže + uvítací e-mail.
+      if (email) {
+        const { data: existujuciProfil } = await supabase
+          .from('user_profiles').select('id').ilike('email', email).limit(1);
+
+        if (!existujuciProfil?.length) {
+          const vehiclePayload = plate ? await fetchVehiclePayloadFromApi(plate.toUpperCase()) : null;
+          const res = await fetchWithAuth('/api/admin/create-zakaznik', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              full_name: name, email, phone, clientType: 'Osoba',
+              vehicle: vehiclePayload ? {
+                license_plate: vehiclePayload.license_plate,
+                brand_model: vehiclePayload.brand_model,
+                vin: vehiclePayload.vin_number,
+                year_produced: vehiclePayload.year_produced,
+                engine_volume: vehiclePayload.engine_volume,
+                engine_power: vehiclePayload.engine_power,
+                fuel_type: vehiclePayload.fuel_type,
+              } : (plate ? { license_plate: plate.toUpperCase(), brand_model: carData?.brand_model || null } : null),
+            }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json.error || 'Nepodarilo sa vytvoriť prístup do Garáže');
+
+          fetchWithAuth('/api/send-welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email, name, createdByAdmin: true, setPasswordUrl: json.setPasswordUrl || null,
+            }),
+          }).catch(() => {});
+        }
+      }
 
       let customerId = null;
       if (email) {
@@ -787,7 +836,9 @@ export default function KalendarPage() {
       setTempCustomerContact(prev => ({ ...prev, customerName: name }));
       setSelectedClientName(name);
       if (plate) await loadCarDetails(plate);
-      alert('Zákazník bol uložený do Klientov.');
+      alert(email
+        ? 'Zákazník bol uložený do Klientov a má prístup do Garáže — poslali sme mu e-mail s odkazom na nastavenie hesla.'
+        : 'Zákazník bol uložený do Klientov. Bez e-mailu nemá prístup do Garáže — doplníš ho v Klientoch tlačidlom „Prístup do Garáže“.');
     } catch (err) {
       alert('Chyba pri ukladaní klienta: ' + (err.message || err));
     } finally {

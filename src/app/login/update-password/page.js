@@ -12,26 +12,55 @@ export default function UpdatePasswordPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash) {
-      const params = new URLSearchParams(hash.substring(1));
-      const access_token = params.get('access_token');
-      const refresh_token = params.get('refresh_token');
-      const type = params.get('type');
-      if (type === 'recovery' && access_token && refresh_token) {
-        supabase.auth.setSession({ access_token, refresh_token }).then(() => {
+    // Odkaz z e-mailu môže prísť v dvoch tvaroch:
+    //  a) #access_token=…&refresh_token=…&type=recovery  (implicit — bežný prípad)
+    //  b) ?code=…                                        (PKCE — ak ho vygeneruje iný klient)
+    // Zvládneme oba, aby obnova hesla fungovala bez ohľadu na nastavenie klienta.
+    (async () => {
+      const hash = window.location.hash;
+      if (hash) {
+        const params = new URLSearchParams(hash.substring(1));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        const type = params.get('type');
+        if (access_token && refresh_token && (type === 'recovery' || type === 'invite' || !type)) {
+          await supabase.auth.setSession({ access_token, refresh_token });
           setSessionReady(true);
-        });
+          return;
+        }
+        const hashErr = params.get('error_description') || params.get('error');
+        if (hashErr) {
+          setError('Odkaz je neplatný alebo mu vypršala platnosť. Vyžiadajte si nový.');
+          setSessionReady(true);
+          return;
+        }
+      }
+
+      const code = new URLSearchParams(window.location.search).get('code');
+      if (code) {
+        const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+        if (exErr) {
+          setError('Odkaz je neplatný alebo bol otvorený v inom prehliadači. Vyžiadajte si nový.');
+        }
+        setSessionReady(true);
         return;
       }
-    }
-    setSessionReady(true);
+
+      setSessionReady(true);
+    })();
   }, []);
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setError('Platnosť odkazu vypršala alebo je odkaz neplatný. Vyžiadajte si nový cez „Zabudli ste heslo?“ na prihlasovacej stránke.');
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.auth.updateUser({
       password: password

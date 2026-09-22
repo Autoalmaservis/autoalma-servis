@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { fetchWithAuth } from '@/app/lib/apiHelpers';
+import { normalizeEmail, normalizePhone } from '@/app/lib/textNormalize';
 import { useSearchParams, useRouter } from 'next/navigation';
 import SmsPanel from './SmsPanel';
 
@@ -368,10 +369,14 @@ function PrijemForm() {
     // VYGENEROVANIE UNIKÁTNEHO ČÍSLA ZÁKAZKY
     const newJobNumber = await generateFinalJobNumber();
 
+    // Medzery navyše v mene rozbíjajú párovanie histórie v /klienti ("Ján Novák "
+     // sa nespáruje s "Ján Novák"), preto sa orezávajú už pri ukladaní.
+    const ocisti = (v) => (v ?? '').toString().trim().replace(/\s+/g, ' ');
+
     const payload = {
       job_number: newJobNumber, // ULOŽENIE DO DB
-      customer_name: formData.customer_name,
-      plate_number: formData.plate_number,
+      customer_name: ocisti(formData.customer_name),
+      plate_number: (formData.plate_number || '').trim().toUpperCase(),
       status: formData.status,
       car_brand_model: formData.car_brand_model,
       vin_number: formData.vin_number,
@@ -380,13 +385,13 @@ function PrijemForm() {
       engine_power: formData.engine_power,
       year_produced: formData.year_produced,
       fuel_type: formData.fuel_type,
-      customer_phone: formData.customer_phone,
-      customer_email: formData.customer_email,
-      address: formData.address,
-      city: formData.city,
-      zip: formData.zip,
+      customer_phone: normalizePhone(formData.customer_phone),
+      customer_email: normalizeEmail(formData.customer_email),
+      address: ocisti(formData.address),
+      city: ocisti(formData.city),
+      zip: ocisti(formData.zip),
       client_type: formData.client_type,
-      company_name: formData.company_name,
+      company_name: ocisti(formData.company_name),
       ico: formData.ico,
       dic: formData.dic,
       ic_dph: formData.ic_dph,

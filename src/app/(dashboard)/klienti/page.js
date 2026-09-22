@@ -15,6 +15,7 @@ export default function KlientiPage() {
   const [originalName, setOriginalName] = useState('');
 
   const [confirmDeleteName, setConfirmDeleteName] = useState(null);
+  const [garazLoading, setGarazLoading] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isCarModalOpen, setIsCarModalOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -148,10 +149,25 @@ export default function KlientiPage() {
       webCars = plateCars;
     }
 
+    // História sa páruje na ŠPZ, preto ju dohľadáme priamo podľa ŠPZ vozidiel klienta.
+    // Meno na zákazke totiž nemusí sedieť na znak presne (staršie záznamy majú
+    // medzeru navyše, iné veľké písmená) a customer_id býva pri starších prázdne.
+    const plates = [...new Set((webCars || []).map(c => c.license_plate).filter(Boolean))];
+    let vsetkyZakazky = ticketCars || [];
+    if (plates.length) {
+      const { data: plateTickets } = await supabase
+        .from('job_tickets')
+        .select('*, job_items(*)')
+        .in('plate_number', plates);
+      const podlaId = new Map(vsetkyZakazky.map(t => [t.id, t]));
+      (plateTickets || []).forEach(t => podlaId.set(t.id, t));
+      vsetkyZakazky = [...podlaId.values()];
+    }
+
     let finalVehicles = [];
     if (webCars) {
       finalVehicles = webCars.map(wc => {
-        const history = ticketCars?.filter(d => d.plate_number === wc.license_plate).map(h => {
+        const history = vsetkyZakazky?.filter(d => d.plate_number === wc.license_plate).map(h => {
            const subtotal = h.job_items?.reduce((acc, item) => acc + (item.unit_price * item.quantity), 0) || 0;
            return { ...h, total_price: subtotal * 1.23 };
         }) || [];
@@ -404,6 +420,57 @@ export default function KlientiPage() {
     finally { setLoading(false); }
   };
 
+  // Založí klientovi prístup do Garáže (ak ho nemá) a pošle mu e-mail s odkazom
+  // na nastavenie hesla. Heslo servis nikdy nevidí — nastavuje si ho zákazník sám.
+  const zariadPristupDoGaraze = async (klient) => {
+    const email = (klient?.customer_email || '').trim();
+    if (!email) {
+      alert(`${klient?.customer_name || 'Klient'} nemá e-mail.\n\nBez e-mailu sa prístup do Garáže vytvoriť nedá — doplň mu e-mail cez úpravu klienta a skús znova.`);
+      return;
+    }
+    if (!confirm(`Poslať ${klient.customer_name} (${email}) e-mail s odkazom na prístup do Garáže?`)) return;
+
+    setGarazLoading(true);
+    try {
+      const res = await fetchWithAuth('/api/admin/garaz-pristup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          full_name: klient.db_full_name || klient.customer_name,
+          phone: klient.customer_phone || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Nepodarilo sa vytvoriť prístup');
+
+      const mail = await fetchWithAuth('/api/send-welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          name: klient.db_full_name || klient.customer_name,
+          createdByAdmin: true,
+          setPasswordUrl: json.setPasswordUrl || null,
+        }),
+      });
+      if (!mail.ok) {
+        alert(json.vytvoreny
+          ? 'Prístup bol vytvorený, ale e-mail sa nepodarilo odoslať. Zákazník môže použiť „Zabudli ste heslo?“ na prihlasovacej stránke.'
+          : 'E-mail sa nepodarilo odoslať. Zákazník môže použiť „Zabudli ste heslo?“ na prihlasovacej stránke.');
+      } else {
+        alert(json.vytvoreny
+          ? `Prístup do Garáže vytvorený. ${klient.customer_name} dostal e-mail s odkazom na nastavenie hesla.`
+          : `${klient.customer_name} už účet mal — poslali sme mu e-mail s odkazom na nastavenie nového hesla.`);
+      }
+      fetchKlienti();
+    } catch (err) {
+      alert('Chyba: ' + (err.message || err));
+    } finally {
+      setGarazLoading(false);
+    }
+  };
+
   const handleDeleteKlient = async (klient) => {
     if (confirmDeleteName !== klient.customer_name) { setConfirmDeleteName(klient.customer_name); return; }
     if (klient._customerId) {
@@ -588,6 +655,16 @@ export default function KlientiPage() {
                   )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => zariadPristupDoGaraze(kl)}
+                    disabled={garazLoading}
+                    title={kl.customer_email
+                      ? 'Založí prístup do Garáže (ak ho nemá) a pošle e-mail s odkazom na nastavenie hesla'
+                      : 'Klient nemá e-mail — bez neho sa prístup do Garáže nedá vytvoriť'}
+                    className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-white font-black px-6 py-3 rounded-2xl text-[10px] uppercase border border-zinc-700 shadow-lg"
+                  >
+                    {garazLoading ? 'Posielam…' : '🔑 Prístup do Garáže'}
+                  </button>
                   <button onClick={() => { setEditMode(false); setCarForm({id:'', plate_number: '', brand: '', model: '', vin_number: '', engine_volume: '', engine_power: '', year_produced: '', fuel_type: 'Diesel', mileage: '' }); setIsCarModalOpen(true); }} className="bg-zinc-800 hover:bg-zinc-700 text-white font-black px-6 py-3 rounded-2xl text-[10px] uppercase border border-zinc-700 shadow-lg">+ Pridať Vozidlo</button>
                   <button onClick={() => { setSelectedKlient(null); setVozidla([]); }} title="Zavrieť kartu a vrátiť sa na zoznam" className="bg-zinc-900 hover:bg-white hover:text-black text-zinc-400 font-black px-5 py-3 rounded-2xl text-[10px] uppercase border border-zinc-800 shadow-lg transition-all">✕ Zavrieť</button>
                 </div>
