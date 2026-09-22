@@ -1,7 +1,11 @@
 import { createMailTransport } from '@/app/lib/mailer';
 import { getCompanySettings } from '@/app/lib/companySettings';
+import { getClientIp, isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export async function POST(request) {
+  // Posiela e-mail na adresu z tela požiadavky — bez stropu by šlo posielať phishing z našej domény.
+  // 5 / 10 min / IP (jedna objednávka = jedno volanie).
+  if (isRateLimited('reservation-confirmation', getClientIp(request), 5, 10 * 60 * 1000)) return rateLimitResponse();
   try {
     // type: 'confirmed' (technik vytvoril termín) | 'received' (zákazník odoslal žiadosť z webu/garáže)
     const { email, customerName, plateNumber, date, startTime, issueDescription, type = 'confirmed' } = await request.json();

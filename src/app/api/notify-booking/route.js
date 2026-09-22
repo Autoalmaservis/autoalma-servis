@@ -1,7 +1,10 @@
 import { createMailTransport } from '@/app/lib/mailer';
 import { getCompanySettings } from '@/app/lib/companySettings';
+import { getClientIp, isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export async function POST(request) {
+  // Volá sa raz po verejnej objednávke — strop 5 / 10 min / IP (rovnako ako /api/public-booking)
+  if (isRateLimited('notify-booking', getClientIp(request), 5, 10 * 60 * 1000)) return rateLimitResponse();
   try {
     const { customerName, plateNumber, carModel, date, time, services, source, phone, email, customerNote } = await request.json();
 

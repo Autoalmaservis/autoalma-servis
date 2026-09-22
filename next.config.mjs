@@ -83,8 +83,29 @@ const redirects = async () => [
   { source: '/online-rezervacia', destination: '/objednavka', permanent: true },
 ];
 
+// Bezpečnostné hlavičky (audit 2026-09). Zámerne bez Content-Security-Policy —
+// tá by mohla zablokovať Google Analytics / fonty a treba ju ladiť osobitne.
+const securityHeaders = [
+  // Vynúti HTTPS na 1 rok aj pre subdomény (prehliadač si to zapamätá)
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  // Stránku nejde vložiť do <iframe> na cudzom webe (clickjacking)
+  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  // Prehliadač neháda typ súboru (MIME sniffing)
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  // Pri odchode na cudzí web sa neposiela celá URL (napr. /ponuka/<id>)
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  // Mikrofón (zápisník – hlasové poznámky) a kamera (fotky mechanika) iba pre vlastnú doménu;
+  // poloha a platby sa nepoužívajú vôbec
+  { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(), payment=()' },
+];
+
+const headers = async () => [
+  { source: '/(.*)', headers: securityHeaders },
+];
+
 const nextConfig = {
   redirects,
+  headers,
 };
 
 export default nextConfig;

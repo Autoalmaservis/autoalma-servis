@@ -1,7 +1,10 @@
 import { createMailTransport } from '@/app/lib/mailer';
 import { getCompanySettings } from '@/app/lib/companySettings';
+import { getClientIp, isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export async function POST(request) {
+  // Verejný formulár bez prihlásenia — strop 5 správ / 10 min / IP (ochrana SMTP pred spamom)
+  if (isRateLimited('contact', getClientIp(request), 5, 10 * 60 * 1000)) return rateLimitResponse();
   try {
     const { name, email, phone, plate, vehicle, year, message } = await request.json();
 

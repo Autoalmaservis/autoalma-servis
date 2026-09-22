@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { getClientIp, isRateLimited, rateLimitResponse } from '@/app/lib/rateLimit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -23,6 +24,9 @@ Záverečná diagnóza musí obsahovať tieto časti (použij markdown bold pre 
 **Odhadovaná náročnosť opravy** — jednoduchá (do 1h) / stredná (1–3h) / komplexná (3h+)`;
 
 export async function POST(request) {
+  // Verejné volanie Anthropic API — strop 30 / 10 min / IP (jedna diagnostika = ~5 volaní),
+  // aby nikto nepálil AI kredit skriptom.
+  if (isRateLimited('diagnostika', getClientIp(request), 30, 10 * 60 * 1000)) return rateLimitResponse();
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'Diagnostika nie je nakonfigurovaná' }, { status: 503 });
   }
