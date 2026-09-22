@@ -24,13 +24,16 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      // getSession() číta reláciu lokálne — na rozdiel od getUser() nerobí sieťové
+      // volanie, ktoré by pri výpadku spojenia omylom vyzeralo ako "neprihlásený".
+      const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
-      if (!user) { router.replace('/login'); return; }
-      const { data: profile } = await supabase.from('user_profiles').select('role').eq('id', user.id).maybeSingle();
-      if (cancelled) return;
+      if (!session?.user) { router.replace('/login'); return; }
+      const { data: profile, error } = await supabase
+        .from('user_profiles').select('role').eq('id', session.user.id).maybeSingle();
+      if (cancelled || error) return;   // chyba dopytu neznamená zlú rolu
       const role = profile?.role;
-      if (role === 'admin') return;
+      if (!role || role === 'admin') return;
       router.replace(role === 'zakaznik' ? '/garaz' : role === 'mechanik' ? '/mechanik' : '/unauthorized');
     })();
     return () => { cancelled = true; };
