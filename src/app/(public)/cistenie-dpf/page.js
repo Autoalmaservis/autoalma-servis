@@ -2,7 +2,6 @@ import Link from 'next/link';
 import SiteHeader from '@/app/components/SiteHeader';
 import StickyCta from '@/app/components/StickyCta';
 import LeadForm from '@/app/components/LeadForm';
-import FotoMiesto from '@/app/components/FotoMiesto';
 
 export const metadata = {
   title: 'Čistenie DPF filtra Bratislava — od 130 €',
@@ -334,40 +333,12 @@ export default function CistenieDpfPage() {
         </div>
       </section>
 
-      {/* FOTKY Z DIELNE */}
-      <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <p className="text-[10px] text-red-600 font-black uppercase tracking-[0.5em] mb-4">Naša práca</p>
-            <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter">Ako to u nás vyzerá</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <FotoMiesto
-              nazov="dpf-vymontovany"
-              popis="Vymontovaný zanesený filter položený na pracovnom stole"
-              alt="Vymontovaný zanesený DPF filter — AutoAlma Bratislava"
-            />
-            <FotoMiesto
-              nazov="dpf-cistenie"
-              popis="Filter v čistiacom zariadení počas prania"
-              alt="Čistenie DPF filtra v zariadení — AutoAlma Bratislava"
-            />
-            <FotoMiesto
-              nazov="dpf-po-cisteni"
-              popis="Ten istý filter po vyčistení a vysušení"
-              alt="DPF filter po vyčistení — AutoAlma Bratislava"
-            />
-          </div>
-          <div className="mt-5">
-            <FotoMiesto
-              nazov="dpf-meranie"
-              popis="Meranie priepustnosti filtra — displej prístroja s nameranou hodnotou"
-              alt="Meranie priepustnosti DPF filtra — AutoAlma Bratislava"
-              pomer="aspect-[21/9]"
-            />
-          </div>
-        </div>
-      </section>
+      {/* FOTKY Z DIELNE — sekcia dočasne odstránená 13. 9. 2026.
+          Zobrazovala štyri prázdne rámčeky s názvami súborov namiesto fotiek, čo na
+          stránke s platenou návštevnosťou z Google Ads pôsobí ako nedokončený web.
+          Pôvodný kód (komponent FotoMiesto + 4 miesta: dpf-vymontovany, dpf-cistenie,
+          dpf-po-cisteni, dpf-meranie) je v gite pred týmto commitom — vráť ho, keď
+          budú fotky v public/fotky/. */}
 
       {/* ČISTIŤ ALEBO VYMENIŤ */}
       <section className="py-20 px-6 border-t border-zinc-900 bg-zinc-950">
