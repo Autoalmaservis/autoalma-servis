@@ -66,18 +66,46 @@ function LoginFormContent() {
         .eq('id', data.user.id)
         .single();
 
-      if (profileError || !profile) {
-        // Diagnostika do konzoly - uvidíš ju po stlačení F12
+      if (profileError && profileError.code !== 'PGRST116') {
+        // Dopyt zlyhal (spojenie/oprávnenia) — rozlíšiť od naozaj chýbajúceho profilu
         console.error("Chyba profilu:", profileError);
-        console.log("Hľadané ID:", data.user.id);
-
         await supabase.auth.signOut();
-        // Rozlíšiť "profil naozaj chýba" od "dopyt zlyhal" — inak sa hľadá zle
-        if (profileError && profileError.code !== 'PGRST116') {
-          setError(`Nepodarilo sa načítať profil (${profileError.code || 'chyba spojenia'}): ${profileError.message}`);
-        } else {
-          setError(`Účet ${email.trim().toLowerCase()} nemá v systéme profil. Kontaktujte správcu.`);
+        setError(`Nepodarilo sa načítať profil (${profileError.code || 'chyba spojenia'}): ${profileError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      if (!profile) {
+        // Účet vznikol bez profilu (staršie účty z registrácie, ktorá sa nedokončila).
+        // Heslo je správne, takže zákazníka neodháňame — profil mu doplníme
+        // a pustíme ho do Garáže. Zamestnanca to netrpí: ten má záznam
+        // v employees a rolu dostane podľa neho.
+        const { data: emp } = await supabase
+          .from('employees').select('id').eq('id', data.user.id).maybeSingle();
+        if (emp) {
+          // Zamestnanec sa prihlasuje na vlastnej stránke, kde sa rola berie z employees
+          router.push('/mechanik');
+          setLoading(false);
+          return;
         }
+
+        // RLS dovolí vložiť iba vlastný riadok a iba rolu 'zakaznik' — presne toto
+        const { error: insertErr } = await supabase.from('user_profiles').insert([{
+          id: data.user.id,
+          email: data.user.email,
+          full_name: data.user.user_metadata?.full_name || null,
+          role: 'zakaznik',
+        }]);
+
+        if (insertErr) {
+          console.error("Nepodarilo sa doplniť profil:", insertErr);
+          await supabase.auth.signOut();
+          setError(`Účet ${email.trim().toLowerCase()} nie je úplne nastavený. Zavolajte nám prosím na 0940 449 449.`);
+          setLoading(false);
+          return;
+        }
+
+        router.push('/garaz');
         setLoading(false);
         return;
       }

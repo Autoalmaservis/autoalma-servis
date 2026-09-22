@@ -461,7 +461,9 @@ export default function KlientiPage() {
       } else {
         alert(json.vytvoreny
           ? `Prístup do Garáže vytvorený. ${klient.customer_name} dostal e-mail s odkazom na nastavenie hesla.`
-          : `${klient.customer_name} už účet mal — poslali sme mu e-mail s odkazom na nastavenie nového hesla.`);
+          : json.doplnenyProfil
+            ? `${klient.customer_name} mal účet rozrobený (chýbal profil, preto sa nevedel prihlásiť) — opravené. Poslali sme mu e-mail s odkazom na nastavenie hesla.`
+            : `${klient.customer_name} už účet mal — poslali sme mu e-mail s odkazom na nastavenie nového hesla.`);
       }
       fetchKlienti();
     } catch (err) {
