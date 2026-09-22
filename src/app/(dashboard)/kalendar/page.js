@@ -77,6 +77,25 @@ export default function KalendarPage() {
   const [vehicleLookupLoading, setVehicleLookupLoading] = useState(false);
   const [savingReservation, setSavingReservation] = useState(false);
 
+  // Závady sa zadávajú ako zoznam — každý riadok issue_description je jedna položka,
+  // ktorú /prijem prenesie ako samostatný úkon do zákazkového listu.
+  const issueInputRefs = useRef([]);
+  const issueLines = issueDescription === '' ? [''] : issueDescription.split('\n');
+  const setIssueLines = (lines) => setIssueDescription(lines.join('\n'));
+  const updateIssueLine = (i, val) => setIssueLines(issueLines.map((l, idx) => (idx === i ? val.replace(/\n/g, ' ') : l)));
+  const addIssueLine = (afterIdx = issueLines.length - 1) => {
+    const next = [...issueLines];
+    next.splice(afterIdx + 1, 0, '');
+    setIssueLines(next);
+    setTimeout(() => issueInputRefs.current[afterIdx + 1]?.focus(), 0);
+  };
+  const removeIssueLine = (i) => {
+    const next = issueLines.filter((_, idx) => idx !== i);
+    setIssueLines(next.length ? next : ['']);
+  };
+  // Bez prázdnych riadkov — do DB, do e-mailu aj do zákazkového listu
+  const issueDescriptionClean = issueLines.map(l => l.trim()).filter(Boolean).join('\n');
+
   // --- 1. NAČÍTANIE DÁT ---
   const fetchData = async () => {
     setLoading(true);
@@ -533,7 +552,7 @@ export default function KalendarPage() {
           body: JSON.stringify({
             email, name, createdByAdmin: true,
             setPasswordUrl: json.setPasswordUrl || null,
-            booking: { date: selectedDate, startTime, plateNumber: spz, issueDescription },
+            booking: { date: selectedDate, startTime, plateNumber: spz, issueDescription: issueDescriptionClean },
           }),
         }).catch(() => {});
         welcomeSent = true;
@@ -597,7 +616,7 @@ export default function KalendarPage() {
       employee_id: selectedEmployee || null,
       customer_name: isBlocking ? 'INTERNÉ' : (customer?.name || 'Neznámy'),
       plate_number: isBlocking ? 'BLOK' : plate.toUpperCase().replace(/\s/g, ''),
-      issue_description: isBlocking ? 'Blokovaný čas' : issueDescription,
+      issue_description: isBlocking ? 'Blokovaný čas' : issueDescriptionClean,
       planned_work: plannedWork,
       is_confirmed: true, // Zmeníme na true, čo spustí Realtime zvonček v garáži
       is_blocked: isBlocking,
@@ -636,7 +655,7 @@ export default function KalendarPage() {
           plateNumber: plate,
           date: selectedDate,
           startTime,
-          issueDescription,
+          issueDescription: issueDescriptionClean,
         });
       }
       const dateToRestore = selectedDate;
@@ -1374,12 +1393,35 @@ export default function KalendarPage() {
                     <div className="font-bold">
                       <label className="block text-[10px] font-bold text-zinc-500 mb-2 ml-1 tracking-widest uppercase font-bold">Popis / Dôvod</label>
                       <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Napr. Výmena oleja..." className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-2xl text-white font-bold outline-none focus:border-red-600 mb-3 uppercase italic font-bold text-sm" />
-                      {selectionMode === 'order' && <textarea value={issueDescription} onChange={(e) => setIssueDescription(e.target.value)} placeholder="Podrobnosti závady..." className="w-full bg-zinc-900 border border-zinc-800 p-3 md:p-5 rounded-xl md:rounded-3xl text-white text-sm outline-none focus:border-red-600 h-20 resize-none uppercase font-bold" />}
+                      {selectionMode === 'order' && (
+                        <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl md:rounded-3xl p-3 md:p-5 space-y-2">
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[10px] font-black text-zinc-500 tracking-widest uppercase">Závady / požadované úkony</label>
+                            <button type="button" onClick={() => addIssueLine()} className="bg-white text-black text-[9px] px-4 py-2 rounded-lg font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all">+ Závada</button>
+                          </div>
+                          {issueLines.map((line, i) => (
+                            <div key={i} className="flex gap-2">
+                              <div className="flex-none w-9 h-11 flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-600 font-black italic text-sm">{i + 1}</div>
+                              <input
+                                ref={el => { issueInputRefs.current[i] = el; }}
+                                type="text"
+                                value={line}
+                                onChange={e => updateIssueLine(i, e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addIssueLine(i); } }}
+                                placeholder="Popíšte závadu alebo úkon..."
+                                className="flex-grow bg-zinc-900 border border-zinc-800 px-3 rounded-xl text-white text-sm outline-none focus:border-red-600 uppercase font-bold"
+                              />
+                              <button type="button" onClick={() => removeIssueLine(i)} className="flex-none w-9 h-11 flex items-center justify-center rounded-xl bg-red-600/10 border border-red-600/20 text-red-500 hover:bg-red-600 hover:text-white transition-all text-xs">✕</button>
+                            </div>
+                          ))}
+                          <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest pt-1">Enter = ďalšia závada · každá položka sa prenesie ako samostatný úkon do zákazkového listu</p>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-4 pt-4 font-bold">
                       {selectionMode === 'order' && editingEventId && (
-                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescription } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] text-center shadow-lg transition-all italic font-bold block"> 📋 Otvoriť Zákazkový list </Link>
+                        <Link href={{ pathname: '/prijem', query: { meno: selectedClientName, spz: plate, popis: issueDescriptionClean } }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] text-center shadow-lg transition-all italic font-bold block"> 📋 Otvoriť Zákazkový list </Link>
                       )}
                       <button type="submit" disabled={savingReservation} className={`w-full ${selectionMode === 'block' ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-red-600 hover:bg-red-700'} disabled:opacity-50 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-3xl uppercase text-xs tracking-[0.2em] shadow-xl transition-all italic font-bold`}>
                         {savingReservation ? 'Ukladám…' : editingEventId ? 'Uložiť a Potvrdiť' : 'Zapísať do harmonogramu'}

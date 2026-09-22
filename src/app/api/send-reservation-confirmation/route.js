@@ -39,7 +39,7 @@ export async function POST(request) {
     const rows = [
       ['Dátum', `${dateFormatted}${startTime ? ` o ${startTime}` : ''}`],
       ['ŠPZ', plateNumber],
-      issueDescription ? ['Popis', issueDescription] : null,
+      issueDescription ? ['Popis', String(issueDescription).replace(/\n/g, '<br>')] : null,
     ].filter(Boolean);
 
     const tableRows = rows.map(([label, value]) => `

@@ -60,7 +60,7 @@ export async function POST(request) {
       const rows = [
         ['Dátum', `${dateFormatted}${booking.startTime ? ` o ${booking.startTime}` : ''}`],
         booking.plateNumber ? ['ŠPZ', booking.plateNumber] : null,
-        booking.issueDescription ? ['Popis', booking.issueDescription] : null,
+        booking.issueDescription ? ['Popis', String(booking.issueDescription).replace(/\n/g, '<br>')] : null,
       ].filter(Boolean).map(([label, value]) => `
         <tr>
           <td style="padding:8px 16px 8px 0;color:#71717a;font-size:11px;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;vertical-align:top">${label}</td>
