@@ -35,11 +35,17 @@ export default function FakturyDashboard() {
     }
   };
 
+  // Zoznam potrebuje len tieto stlpce. Tazke jsonb (items_json, company_details,
+  // supplier_details, payment_info) sa zamerne NEsahaju - pri 338 fakturach je to
+  // cez 450 kB navyse na kazde otvorenie stranky a rastie to s kazdou faktúrou.
+  // Plne riadky sa dotiahnu az pri exporte PDF, kde su naozaj potrebne.
+  const STLPCE_ZOZNAMU = 'id, invoice_number, customer_name, total_amount, is_official, is_paid, created_at, car_details';
+
   const fetchInvoices = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('invoices')
-      .select('*')
+      .select(STLPCE_ZOZNAMU)
       .order('invoice_number', { ascending: false });
 
     if (!error) setInvoices(data || []);
@@ -75,8 +81,24 @@ export default function FakturyDashboard() {
         import('jspdf-autotable'),
       ]);
 
+      // Zoznam drzi len lahke stlpce, PDF vsak potrebuje polozky aj udaje
+      // odberatela a dodavatela - dotiahneme plne riadky len pre exportovane faktury.
+      const ids = filteredInvoices.map(i => i.id);
+      const plne = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        const { data, error } = await supabase
+          .from('invoices')
+          .select('*')
+          .in('id', ids.slice(i, i + 100));
+        if (error) throw error;
+        plne.push(...(data || []));
+      }
+      // zachovat poradie zo zoznamu
+      const podlaId = new Map(plne.map(i => [i.id, i]));
+
       const zip = new JSZip();
-      for (const inv of filteredInvoices) {
+      for (const zaznam of filteredInvoices) {
+        const inv = podlaId.get(zaznam.id) || zaznam;
         const doc = buildInvoicePDF(jsPDF, autoTable, inv, myCompany);
         zip.file(`${inv.invoice_number}.pdf`, doc.output('arraybuffer'));
       }
