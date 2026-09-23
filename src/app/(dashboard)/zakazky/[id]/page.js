@@ -10,6 +10,7 @@ import JobTasks from './components/JobTasks';
 import DeleteModal from './components/DeleteModal';
 import InvoiceModal from './components/InvoiceModal';
 import ChangeCustomerModal from './components/ChangeCustomerModal';
+import EditBillingModal from './components/EditBillingModal';
 import WarehouseModal from './components/WarehouseModal';
 import MechanicSplits from './components/MechanicSplits';
 import JobFormManager from './components/JobFormManager';
@@ -53,6 +54,7 @@ export default function DetailZakazkyPage() {
 
   // Zmena odberateľa
   const [showChangeCustomer, setShowChangeCustomer] = useState(false);
+  const [showEditBilling, setShowEditBilling] = useState(false);
   const [discountType, setDiscountType] = useState('pct');
   const [discountValue, setDiscountValue] = useState('');
   const [editingComplaints, setEditingComplaints] = useState(false);
@@ -1137,7 +1139,8 @@ Inšpektor ${companyName}
           </div>
           
           <div className="text-right">
-            <div className="flex items-center justify-end mb-3">
+            <div className="flex items-center justify-end gap-2 mb-3">
+              <button onClick={() => setShowEditBilling(true)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest">🧾 Upraviť údaje</button>
               <button onClick={() => setShowChangeCustomer(true)} className="text-[9px] font-black uppercase text-zinc-500 hover:text-white border border-zinc-800 hover:border-zinc-600 px-3 py-1.5 rounded-lg transition-all tracking-widest">✏️ Zmeniť odberateľa</button>
             </div>
             <h4 className="text-blue-500 uppercase text-[10px] mb-3 font-black tracking-widest italic">Odberateľ</h4>
@@ -2247,6 +2250,16 @@ Inšpektor ${companyName}
         isOpen={showFormSelector}
         onClose={() => setShowFormSelector(false)}
       />
+
+      {showEditBilling && (
+        <EditBillingModal
+          zakazka={zakazka}
+          jobId={id}
+          ensureAuth={ensureAuth}
+          onComplete={fetchDetail}
+          onClose={() => setShowEditBilling(false)}
+        />
+      )}
 
       {showChangeCustomer && (
         <ChangeCustomerModal

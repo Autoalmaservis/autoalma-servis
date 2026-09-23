@@ -349,27 +349,84 @@ export default function KlientiPage() {
     setLoading(true);
     try {
       if (editMode) {
-        const updatePayload = {
-          full_name: clientForm.customer_name, company_name: clientForm.company_name,
-          phone: clientForm.customer_phone, email: clientForm.customer_email,
-          address: clientForm.address, city: clientForm.city, zip: clientForm.zip,
-          ico: clientForm.ico, dic: clientForm.dic, ic_dph: clientForm.ic_dph, role: 'zakaznik'
+        // Fakturačné údaje klienta na jednom mieste — rovnaký blok ide do karty
+        // klienta aj do jeho otvorených zákaziek.
+        const fakturacne = {
+          company_name: clientForm.company_name || null,
+          address: clientForm.address || null,
+          city: clientForm.city || null,
+          zip: clientForm.zip || null,
+          ico: clientForm.ico || null,
+          dic: clientForm.dic || null,
+          ic_dph: clientForm.ic_dph || null,
         };
-        let res = await supabase.from('user_profiles').update(updatePayload).eq('id', clientForm.id);
-        if (!res.error && res.count === 0) {
-          res = await supabase.from('user_profiles').update(updatePayload).eq('email', clientForm.customer_email);
+        const updatePayload = {
+          full_name: clientForm.customer_name,
+          phone: clientForm.customer_phone,
+          email: clientForm.customer_email,
+          role: 'zakaznik',
+          ...fakturacne,
+        };
+
+        // Klient môže byť v user_profiles (účet do Garáže) aj v customers
+        // (import / príjem auta). Zapisujeme do oboch, aby sa údaje nerozišli.
+        let zapisanyProfil = false;
+        {
+          let res = await supabase.from('user_profiles').update(updatePayload).eq('id', clientForm.id).select('id');
+          if (res.error) throw res.error;
+          zapisanyProfil = (res.data || []).length > 0;
+          if (!zapisanyProfil && clientForm.customer_email) {
+            res = await supabase.from('user_profiles').update(updatePayload).eq('email', clientForm.customer_email).select('id');
+            if (res.error) throw res.error;
+            zapisanyProfil = (res.data || []).length > 0;
+          }
         }
-        if (res.error) throw res.error;
-        // Sync telefónu do všetkých zákaziek tohto klienta
-        if (clientForm.customer_phone && clientForm.id) {
-          supabase.from('job_tickets').update({ customer_phone: clientForm.customer_phone }).eq('customer_id', clientForm.id).then(() => {});
+
+        let zapisanyCustomer = false;
+        {
+          const custPayload = { ...updatePayload, client_type: clientForm.client_type || (clientForm.ico ? 'Firma' : 'Osoba') };
+          delete custPayload.role;
+          const cieleneId = clientForm._customerId || clientForm.id;
+          let res = await supabase.from('customers').update(custPayload).eq('id', cieleneId).select('id');
+          if (!res.error) zapisanyCustomer = (res.data || []).length > 0;
+          if (!zapisanyCustomer && clientForm.customer_email) {
+            res = await supabase.from('customers').update(custPayload).eq('email', clientForm.customer_email).select('id');
+            if (!res.error) zapisanyCustomer = (res.data || []).length > 0;
+          }
         }
-        // Premenovanie klienta: nové meno prepíšeme aj do jeho zákaziek a vozidiel
-        // (párované cez ID, nie cez staré meno), aby história zostala pri klientovi.
+
+        if (!zapisanyProfil && !zapisanyCustomer) {
+          throw new Error('Klienta sa nepodarilo nájsť v databáze, údaje neboli uložené.');
+        }
+
+        // --- SYNC DO OTVORENÝCH ZÁKAZIEK ---
+        // Opravené údaje prepíšeme do zákaziek, ktoré ešte nie sú vyfakturované
+        // (status != 'Archivované'), aby sa na novej faktúre objavili správne.
+        // Archivované zákazky ani už vystavené faktúry sa NEMENIA — faktúra má
+        // vlastnú kópiu údajov v company_details, takže účtovníctvo zostáva sedieť.
         const noveMeno = clientForm.company_name || clientForm.customer_name;
-        if (clientForm.id && noveMeno && originalName && noveMeno !== originalName) {
-          supabase.from('job_tickets').update({ customer_name: noveMeno }).eq('customer_id', clientForm.id).then(() => {});
-          supabase.from('vehicles').update({ owner_name: noveMeno }).eq('owner_id', clientForm.id).then(() => {});
+        const premenovany = !!(noveMeno && originalName && noveMeno !== originalName);
+        const ticketPayload = {
+          ...fakturacne,
+          customer_phone: clientForm.customer_phone || null,
+          customer_email: clientForm.customer_email || null,
+          ...(premenovany ? { customer_name: noveMeno } : {}),
+        };
+        const klientIds = [...new Set([clientForm.id, clientForm._customerId].filter(Boolean))];
+        for (const kid of klientIds) {
+          await supabase.from('job_tickets').update(ticketPayload).eq('customer_id', kid).neq('status', 'Archivované');
+        }
+        // Staršie zákazky bez customer_id spárujeme cez e-mail.
+        if (clientForm.customer_email) {
+          await supabase.from('job_tickets').update(ticketPayload)
+            .is('customer_id', null)
+            .eq('customer_email', clientForm.customer_email)
+            .neq('status', 'Archivované');
+        }
+        if (premenovany) {
+          for (const kid of klientIds) {
+            await supabase.from('vehicles').update({ owner_name: noveMeno }).eq('owner_id', kid);
+          }
         }
       } else {
         // Nový klient — použij admin API, ktoré nevysiela Supabase confirm email (obchádza rate limit)
