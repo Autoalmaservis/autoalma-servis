@@ -26,7 +26,6 @@ export default function KalendarPage() {
   const [editingEventId, setEditingEventId] = useState(null);
   const [isConfirmed, setIsConfirmed] = useState(true);
 
-  const [allClients, setAllClients] = useState([]);
   const [selectedClientName, setSelectedClientName] = useState('');
 
   const [workStart, setWorkStart] = useState('07:00');
@@ -97,7 +96,18 @@ export default function KalendarPage() {
   const issueDescriptionClean = issueLines.map(l => l.trim()).filter(Boolean).join('\n');
 
   // --- 1. NAČÍTANIE DÁT ---
-  const fetchData = async () => {
+  // Predvolene nacitame -3 mesiace az +6 mesiacov od dneska. Ked sa pouzivatel
+  // v kalendari presunie mimo nacitaneho rozsahu, datesSet nizsie ho rozsiri.
+  const predvolenyRozsah = () => {
+    const t = new Date();
+    return {
+      od: new Date(t.getFullYear(), t.getMonth() - 3, 1).toISOString(),
+      do: new Date(t.getFullYear(), t.getMonth() + 7, 0, 23, 59, 59).toISOString(),
+    };
+  };
+  const rozsahRef = useRef(predvolenyRozsah());
+
+  const fetchData = async (rozsah) => {
     setLoading(true);
     const { data: settings } = await supabase.from('business_settings').select('*');
     if (settings) {
@@ -110,13 +120,23 @@ export default function KalendarPage() {
     const { data: empData } = await supabase.from('employees').select('*').eq('active', true);
     setEmployees(empData || []);
 
-    const { data: clientData } = await supabase.from('user_profiles').select('full_name, company_name');
-    if (clientData) {
-      const uniqueNames = [...new Set(clientData.map(c => c.company_name || c.full_name))];
-      setAllClients(uniqueNames.sort());
-    }
+    // Terminy citame len pre zobrazeny rozsah (+ rezerva), nie cele od zaciatku.
+    // Bez toho by kalendar casom tahal tisice riadkov na kazde otvorenie.
+    // Neschvalene ziadosti sa dotahuju zvlast bez obmedzenia datumu, aby
+    // ziadna nevypadla zo zoznamu v sidebari, aj keby bola stara.
+    const { od, do: doDatum } = rozsah || rozsahRef.current;
+    rozsahRef.current = { od, do: doDatum };
 
-    const { data: evData } = await supabase.from('calendar_events').select('*, employees(name, color)');
+    const [{ data: vRozsahu }, { data: neschvalene }] = await Promise.all([
+      supabase.from('calendar_events').select('*, employees(name, color)')
+        .gte('start_datetime', od).lte('start_datetime', doDatum),
+      supabase.from('calendar_events').select('*, employees(name, color)')
+        .eq('is_confirmed', false),
+    ]);
+
+    const podlaId = new Map((vRozsahu || []).map(e => [e.id, e]));
+    (neschvalene || []).forEach(e => podlaId.set(e.id, e));
+    const evData = [...podlaId.values()];
 
     const formattedEvents = (evData || []).map(ev => {
       const isOnlinePending = ev.is_confirmed === false;
@@ -159,6 +179,21 @@ export default function KalendarPage() {
   useEffect(() => { fetchData(); }, []);
 
   const pendingRequests = events.filter(ev => ev.extendedProps.isConfirmed === false);
+
+  // Ked sa pouzivatel v kalendari presunie mimo uz nacitaneho obdobia,
+  // rozsirime rozsah a dotiahneme chybajuce terminy. V ramci nacitaneho
+  // obdobia sa nerobi nic - listovanie po tyzdnoch teda negeneruje dopyty.
+  const handleDatesSet = (info) => {
+    const { od, do: doDatum } = rozsahRef.current;
+    if (info.start >= new Date(od) && info.end <= new Date(doDatum)) return;
+    const noveOd = info.start < new Date(od)
+      ? new Date(info.start.getFullYear(), info.start.getMonth() - 2, 1).toISOString()
+      : od;
+    const noveDo = info.end > new Date(doDatum)
+      ? new Date(info.end.getFullYear(), info.end.getMonth() + 3, 0, 23, 59, 59).toISOString()
+      : doDatum;
+    fetchData({ od: noveOd, do: noveDo });
+  };
 
   const loadCarDetails = async (spz) => {
     if (!spz || spz === 'BLOK' || spz === '') return;
@@ -1031,6 +1066,7 @@ export default function KalendarPage() {
             headerToolbar={{ left: 'prev,next today', center: 'title', right: 'timeGridDay,timeGridWeek' }}
             locale="sk"
             firstDay={1}
+            datesSet={handleDatesSet}
             events={events}
             editable={true}
             selectable={true}
