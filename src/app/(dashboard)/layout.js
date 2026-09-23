@@ -79,17 +79,35 @@ export default function DashboardLayout({ children }) {
   useEffect(() => {
     fetchPendingCount();
     pollJobStatuses();
+
+    // Realtime posiela udalost pri KAZDEJ zmene zakazky. Pri editovani poloziek
+    // na jednej zakazke to su desiatky udalosti za minutu a kazda by inak
+    // stiahla cely zoznam nearchivovanych zakaziek - v kazdom otvorenom tabe.
+    // Zhlukneme ich teda do jedneho dopytu po 1,5 s ticha.
+    const timers = {};
+    const odlozene = (kluc, fn, ms = 1500) => () => {
+      clearTimeout(timers[kluc]);
+      timers[kluc] = setTimeout(fn, ms);
+    };
+    const odlozenyPending = odlozene('pending', fetchPendingCount);
+    const odlozeneZakazky = odlozene('zakazky', pollJobStatuses);
+
     const channel = supabase.channel('dashboard-global-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, fetchPendingCount)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, fetchPendingCount)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, pollJobStatuses)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calendar_events' }, odlozenyPending)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calendar_events' }, odlozenyPending)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'job_tickets' }, odlozeneZakazky)
       .subscribe();
     // Poistka pre pripad, ze realtime kanal vypadne. Hlavny zdroj aktualizacii je
     // kanal 'dashboard-global-updates' vyssie, preto staci kontrola raz za 5 minut.
     // (Povodne 10 s / 30 s = desattisice dopytov denne na kazdy otvoreny tab.)
     const pendingInterval = setInterval(fetchPendingCount, 300000);
     const jobInterval = setInterval(pollJobStatuses, 300000);
-    return () => { supabase.removeChannel(channel); clearInterval(pendingInterval); clearInterval(jobInterval); };
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pendingInterval);
+      clearInterval(jobInterval);
+      Object.values(timers).forEach(clearTimeout);
+    };
   }, []);
 
   useEffect(() => {
