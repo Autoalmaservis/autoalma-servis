@@ -39,7 +39,7 @@ export default function FakturyDashboard() {
   // supplier_details, payment_info) sa zamerne NEsahaju - pri 338 fakturach je to
   // cez 450 kB navyse na kazde otvorenie stranky a rastie to s kazdou faktúrou.
   // Plne riadky sa dotiahnu az pri exporte PDF, kde su naozaj potrebne.
-  const STLPCE_ZOZNAMU = 'id, invoice_number, customer_name, total_amount, is_official, is_paid, created_at, car_details';
+  const STLPCE_ZOZNAMU = 'id, invoice_number, customer_name, total_amount, subtotal_amount, is_official, is_paid, created_at, car_details';
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -68,8 +68,17 @@ export default function FakturyDashboard() {
     );
   });
 
-  const totalOfficial = invoices.filter(i => i.is_official).reduce((acc, curr) => acc + curr.total_amount, 0);
-  const totalDrafts = invoices.filter(i => !i.is_official).reduce((acc, curr) => acc + curr.total_amount, 0);
+  const suma = (zoznam, pole) => zoznam.reduce((acc, curr) => acc + (Number(curr[pole]) || 0), 0);
+  const official = invoices.filter(i => i.is_official);
+  const drafts = invoices.filter(i => !i.is_official);
+  const totalOfficial = suma(official, 'total_amount');
+  const totalDrafts = suma(drafts, 'total_amount');
+  // Zaklad dane scitavame len z ulozenych hodnot. Dopocet total/1.23 by pri
+  // dokladoch v rezime bez DPH (payment_info.no_vat) dal nespravne cislo a
+  // payment_info sa do zoznamu zamerne netiahne.
+  const baseOfficial = suma(official, 'subtotal_amount');
+  const baseDrafts = suma(drafts, 'subtotal_amount');
+  const bezZakladu = invoices.filter(i => typeof i.subtotal_amount !== 'number').length;
 
   const exportPDFs = async () => {
     if (filteredInvoices.length === 0) return;
@@ -137,15 +146,28 @@ export default function FakturyDashboard() {
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2 italic">Správa dokladov a servisných záznamov</p>
         </div>
 
-        <div className="flex gap-4">
-          <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-end min-w-[160px] shadow-xl">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Spolu Faktúry</span>
-            <span className="text-2xl font-black text-green-500 tracking-tighter">{totalOfficial.toFixed(2)} €</span>
+        <div className="flex flex-col items-start md:items-end gap-2">
+          <div className="flex gap-4">
+            <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-end min-w-[160px] shadow-xl">
+              <span className="text-[8px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Spolu Faktúry</span>
+              <span className="text-2xl font-black text-green-500 tracking-tighter">{totalOfficial.toFixed(2)} €</span>
+              <span className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1 font-black">
+                Bez DPH: {baseOfficial.toFixed(2)} €{bezZakladu > 0 ? ' *' : ''}
+              </span>
+            </div>
+            <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-end min-w-[160px] shadow-xl">
+              <span className="text-[8px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Spolu Odložené</span>
+              <span className="text-2xl font-black text-zinc-300 tracking-tighter">{totalDrafts.toFixed(2)} €</span>
+              <span className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1 font-black">
+                Bez DPH: {baseDrafts.toFixed(2)} €{bezZakladu > 0 ? ' *' : ''}
+              </span>
+            </div>
           </div>
-          <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl flex flex-col items-end min-w-[160px] shadow-xl">
-            <span className="text-[8px] text-zinc-500 uppercase tracking-widest mb-1 font-black">Spolu Odložené</span>
-            <span className="text-2xl font-black text-zinc-300 tracking-tighter">{totalDrafts.toFixed(2)} €</span>
-          </div>
+          {bezZakladu > 0 && (
+            <p className="text-[8px] text-zinc-600 uppercase font-black tracking-widest italic">
+              * {bezZakladu} {bezZakladu === 1 ? 'doklad nemá' : 'dokladov nemá'} uložený základ dane — nie {bezZakladu === 1 ? 'je' : 'sú'} v súčte bez DPH
+            </p>
+          )}
         </div>
       </header>
 
@@ -237,6 +259,9 @@ export default function FakturyDashboard() {
                     <p className="text-[8px] text-zinc-600 uppercase font-black tracking-widest mb-1">Suma s DPH</p>
                     <p className="text-3xl font-black italic tracking-tighter leading-none text-white">
                       {inv.total_amount.toFixed(2)} <span className="text-red-600 text-sm font-bold">€</span>
+                    </p>
+                    <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mt-1.5">
+                      Bez DPH: {typeof inv.subtotal_amount === 'number' ? `${inv.subtotal_amount.toFixed(2)} €` : '—'}
                     </p>
                   </div>
                   <button
