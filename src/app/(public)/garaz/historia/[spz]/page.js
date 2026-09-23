@@ -35,15 +35,28 @@ export default function HistoriaVozidlaPage() {
 
     if (error) { console.error(error); setLoading(false); return; }
 
-    const formattedData = await Promise.all(data.map(async (t) => {
-      const { data: items } = await supabase.from('job_items').select('*').eq('job_id', t.id);
-      const { data: tasks } = await supabase.from('job_tasks').select('*').eq('job_id', t.id);
-      const subtotal = items?.reduce((acc, item) => acc + (Number(item.unit_price) * Number(item.quantity)), 0) || 0;
-      return { ...t, job_items: items || [], job_tasks: tasks || [], total_price: subtotal * 1.23 };
-    }));
+    // Polozky a ukony dotiahneme dvoma dopytmi pre vsetky zakazky naraz.
+    // (Predtym to boli 2 dopyty na kazdu zakazku - auto s 10 navstevami = 20 requestov.)
+    const jobIds = data.map(t => t.id);
+    const [{ data: vsetkyItems }, { data: vsetkyTasks }] = jobIds.length
+      ? await Promise.all([
+          supabase.from('job_items').select('*').in('job_id', jobIds),
+          supabase.from('job_tasks').select('*').in('job_id', jobIds),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+    const itemsPodlaJob = {};
+    (vsetkyItems || []).forEach(it => { (itemsPodlaJob[it.job_id] ||= []).push(it); });
+    const tasksPodlaJob = {};
+    (vsetkyTasks || []).forEach(tk => { (tasksPodlaJob[tk.job_id] ||= []).push(tk); });
+
+    const formattedData = data.map(t => {
+      const items = itemsPodlaJob[t.id] || [];
+      const subtotal = items.reduce((acc, item) => acc + (Number(item.unit_price) * Number(item.quantity)), 0);
+      return { ...t, job_items: items, job_tasks: tasksPodlaJob[t.id] || [], total_price: subtotal * 1.23 };
+    });
 
     // Batch: zisti ktoré zákazky majú oficiálnu / odloženú faktúru (2 queries, nie N+1)
-    const jobIds = formattedData.map(t => t.id);
     const [{ data: officialInvs }, { data: deferredInvs }] = await Promise.all([
       supabase.from('invoices').select('job_id, id').in('job_id', jobIds).eq('is_official', true),
       supabase.from('invoices').select('job_id').in('job_id', jobIds).eq('is_official', false),
