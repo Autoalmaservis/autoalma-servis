@@ -12,15 +12,33 @@ export default function ChangeCustomerModal({ zakazka, jobId, ensureAuth, onComp
 
   const fetchCustomersList = async () => {
     setLoadingCustomers(true);
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, company_name, email, phone, ico, dic, ic_dph, address, city, zip')
-      .or('role.eq.zakaznik,role.eq.klient')
-      .order('full_name', { ascending: true });
-    const mapped = (data || []).map(p => ({
+    const stlpce = 'id, full_name, company_name, email, phone, ico, dic, ic_dph, address, city, zip';
+    // Klient môže žiť v user_profiles (účet do Garáže) alebo len v customers
+    // (založený pri príjme auta / importe). Čítame obe tabuľky, inak by sa
+    // klient bez účtu v zozname vôbec neobjavil.
+    const [{ data: profiles }, { data: customers }] = await Promise.all([
+      supabase.from('user_profiles').select(stlpce).or('role.eq.zakaznik,role.eq.klient').order('full_name', { ascending: true }),
+      supabase.from('customers').select(stlpce).order('full_name', { ascending: true }),
+    ]);
+
+    const mapped = (profiles || []).map(p => ({
       ...p,
       name: p.company_name || p.full_name || p.email || 'Neznámy',
     }));
+
+    // Duplicity (rovnaký klient v oboch tabuľkách) filtrujeme cez e-mail, IČO a meno.
+    const maily = new Set(mapped.map(c => (c.email || '').toLowerCase()).filter(Boolean));
+    const ica = new Set(mapped.map(c => (c.ico || '').trim()).filter(Boolean));
+    const mena = new Set(mapped.map(c => nd(c.name)).filter(Boolean));
+    (customers || []).forEach(c => {
+      const name = c.company_name || c.full_name || c.email || 'Neznámy';
+      if (c.email && maily.has(c.email.toLowerCase())) return;
+      if (c.ico && ica.has(c.ico.trim())) return;
+      if (mena.has(nd(name))) return;
+      mapped.push({ ...c, name });
+    });
+
+    mapped.sort((a, b) => a.name.localeCompare(b.name, 'sk'));
     setCustomersList(mapped);
     setLoadingCustomers(false);
   };
